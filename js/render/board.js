@@ -73,6 +73,12 @@ export class BoardRenderer {
   animateMove({ path, piece, capturedPieces = [] }) {
     return new Promise((resolve) => {
       if (this.animSpeedMs <= 0) { resolve(); return; }
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
       this.animation = {
         path,
         piece,
@@ -80,8 +86,16 @@ export class BoardRenderer {
         segment: 0,
         start: performance.now(),
         duration: this.animSpeedMs,
-        resolve,
+        resolve: settle,
       };
+      // Filet de sécurité : si la boucle requestAnimationFrame est throttlée (onglet en
+      // arrière-plan) l'animation peut ne jamais avancer ; on force la résolution après un
+      // délai large pour ne jamais bloquer durablement les interactions.
+      const maxWait = (path.length - 1) * this.animSpeedMs + 1500;
+      setTimeout(() => {
+        if (this.animation && this.animation.resolve === settle) this.animation = null;
+        settle();
+      }, maxWait);
     });
   }
 

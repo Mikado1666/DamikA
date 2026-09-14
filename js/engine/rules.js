@@ -243,11 +243,10 @@ export function generateLegalMoves(board, color) {
 // Applique une séquence de capture (issue de generateLegalMoves) sur le board, retourne un nouveau board.
 export function applyCaptureSequence(board, piece, sequence) {
   const b = cloneBoard(board);
-  const originSquare = sequence[0].from;
-  b[originSquare] = null;
   let current = { ...piece };
   const capturedSquares = [];
   for (const step of sequence) {
+    b[step.from] = null; // vacate the square this jump departs from (intermediate landing included)
     capturedSquares.push(step.capturedThisStep);
     b[step.capturedThisStep] = null;
     if (step.promoted) current = { ...current, king: true };
