@@ -550,10 +550,17 @@ el.easterEgg.addEventListener('click', () => {
 });
 
 // --- Service Worker (offline) ---------------------------------------------------------
+// Désactivé tant que le chantier "liseuse PC" est en itération active : un Service Worker
+// qui sert une version en cache a fait perdre du temps de debug à plusieurs reprises (le
+// correctif était bien déployé côté serveur mais l'onglet continuait de charger l'ancien
+// bundle mis en cache). On désenregistre activement tout SW déjà installé chez un visiteur
+// précédent pour que ça se répare tout seul, sans manipulation DevTools de sa part.
+// À réactiver (remettre navigator.serviceWorker.register('sw.js')) une fois la liseuse PC
+// stabilisée et prête pour le support hors-ligne.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const reg of regs) reg.unregister();
+  }).catch(() => {});
 }
 
 refreshUI();
