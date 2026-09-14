@@ -288,52 +288,63 @@ body {
   flex: 1 1 560px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 320px;
+  min-height: 0;
+  justify-content: center;
+}
+
+/* ---------- Bande joueurs (rail gauche, façon toernooibase) ---------- */
+.players-rail {
+  flex: 0 0 216px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
   min-height: 0;
 }
 
-/* ---------- Player banners ---------- */
-.player-banner {
+.player-card {
   display: flex;
   align-items: center;
   gap: 12px;
   background: linear-gradient(180deg, var(--panel), #1b140e);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
-  padding: 8px 14px;
+  padding: 12px;
   box-shadow: var(--shadow-panel);
 }
 
-.player-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+.player-photo {
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 15px;
-  flex-shrink: 0;
+  font-size: 21px;
 }
-.player-avatar[data-side-avatar="white"] {
+.player-photo[data-side-avatar="white"] {
   background: radial-gradient(circle at 35% 30%, #fbf4e3, #ccb98c);
   color: #241a0d;
 }
-.player-avatar[data-side-avatar="black"] {
+.player-photo[data-side-avatar="black"] {
   background: radial-gradient(circle at 35% 30%, #3c352c, #0d0b09);
   color: var(--gold);
   border: 1px solid #4a3d29;
 }
 
-.player-info { flex: 1; min-width: 0; }
+.player-card-body { flex: 1; min-width: 0; }
 
 .player-name {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 700;
+  font-size: 14.5px;
   color: var(--text-0);
   outline: none;
-  padding: 2px 4px;
+  padding: 1px 3px;
   border-radius: 4px;
   cursor: text;
   white-space: nowrap;
@@ -342,39 +353,78 @@ body {
 }
 .player-name:hover, .player-name:focus { background: var(--gold-soft); }
 
-.player-meta {
+.player-card-meta {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   margin-top: 2px;
+  flex-wrap: wrap;
 }
 .meta-field {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-2);
   outline: none;
   padding: 1px 4px;
   border-radius: 4px;
   cursor: text;
+  white-space: nowrap;
 }
 .meta-field:hover, .meta-field:focus { background: var(--gold-soft); color: var(--gold); }
 
-.player-count {
-  text-align: center;
-  min-width: 54px;
+.player-card-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 7px;
 }
+.stat-block { text-align: left; }
+.stat-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+  outline: none;
+  cursor: text;
+  border-radius: 4px;
+  padding: 1px 2px;
+  margin: -1px -2px;
+}
+.stat-value:hover, .stat-value:focus { background: var(--gold-soft); }
 .count-value {
   display: block;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--gold);
   line-height: 1;
 }
-.count-label {
+.stat-label, .count-label {
   display: block;
-  font-size: 9.5px;
+  font-size: 9px;
   color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-top: 2px;
+  margin-top: 3px;
+}
+
+.players-rail-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+}
+.players-rail-divider::before, .players-rail-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+@media (max-width: 900px) {
+  .players-rail { flex-direction: row; flex: none; }
+  .players-rail-divider { display: none; }
+  .player-card { flex: 1; flex-direction: column; text-align: center; }
+  .player-card-meta, .player-card-stats { justify-content: center; }
 }
 
 /* ---------- Board ---------- */

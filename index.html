@@ -47,22 +47,53 @@
   </div>
 
   <main class="layout">
-    <section class="board-column">
-
-      <div class="player-banner" data-side="black">
-        <div class="player-avatar" data-side-avatar="black">N</div>
-        <div class="player-info">
+    <aside class="players-rail">
+      <div class="player-card" data-side="black">
+        <div class="player-photo" data-side-avatar="black">N</div>
+        <div class="player-card-body">
           <div class="player-name" data-field="Black" contenteditable="true" spellcheck="false">Joueur Noirs</div>
-          <div class="player-meta">
-            <span class="meta-field" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
+          <div class="player-card-meta">
             <span class="meta-field" data-field="BlackTitle" contenteditable="true" title="Titre">—</span>
+            <span class="meta-field" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
+          </div>
+          <div class="player-card-stats">
+            <div class="stat-block">
+              <span class="stat-value" data-field="BlackScore" contenteditable="true" title="Score">—</span>
+              <span class="stat-label">Score</span>
+            </div>
+            <div class="stat-block" id="count-black">
+              <span class="count-value">20</span>
+              <span class="count-label">Pions</span>
+            </div>
           </div>
         </div>
-        <div class="player-count" id="count-black">
-          <span class="count-value">20</span>
-          <span class="count-label">pions</span>
+      </div>
+
+      <div class="players-rail-divider"><span>VS</span></div>
+
+      <div class="player-card" data-side="white">
+        <div class="player-photo" data-side-avatar="white">B</div>
+        <div class="player-card-body">
+          <div class="player-name" data-field="White" contenteditable="true" spellcheck="false">Joueur Blancs</div>
+          <div class="player-card-meta">
+            <span class="meta-field" data-field="WhiteTitle" contenteditable="true" title="Titre">—</span>
+            <span class="meta-field" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
+          </div>
+          <div class="player-card-stats">
+            <div class="stat-block">
+              <span class="stat-value" data-field="WhiteScore" contenteditable="true" title="Score">—</span>
+              <span class="stat-label">Score</span>
+            </div>
+            <div class="stat-block" id="count-white">
+              <span class="count-value">20</span>
+              <span class="count-label">Pions</span>
+            </div>
+          </div>
         </div>
       </div>
+    </aside>
+
+    <section class="board-column">
 
       <div class="board-stage">
         <div class="board-wrap">
@@ -75,21 +106,6 @@
             <div class="tempo-bar-fill" id="tempo-bar-fill"></div>
           </div>
           <div class="tempo-caption" id="tempo-caption">Blancs et Noirs à égalité</div>
-        </div>
-      </div>
-
-      <div class="player-banner" data-side="white">
-        <div class="player-avatar" data-side-avatar="white">B</div>
-        <div class="player-info">
-          <div class="player-name" data-field="White" contenteditable="true" spellcheck="false">Joueur Blancs</div>
-          <div class="player-meta">
-            <span class="meta-field" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
-            <span class="meta-field" data-field="WhiteTitle" contenteditable="true" title="Titre">—</span>
-          </div>
-        </div>
-        <div class="player-count" id="count-white">
-          <span class="count-value">20</span>
-          <span class="count-label">pions</span>
         </div>
       </div>
 

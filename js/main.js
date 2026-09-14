@@ -355,9 +355,13 @@ function syncHeaderFieldsFromState() {
   const blackTitle = document.querySelector('.meta-field[data-field="BlackTitle"]');
   if (whiteTitle) whiteTitle.textContent = headers.WhiteTitle || '—';
   if (blackTitle) blackTitle.textContent = headers.BlackTitle || '—';
+  const whiteScore = document.querySelector('.stat-value[data-field="WhiteScore"]');
+  const blackScore = document.querySelector('.stat-value[data-field="BlackScore"]');
+  if (whiteScore) whiteScore.textContent = headers.WhiteScore || '—';
+  if (blackScore) blackScore.textContent = headers.BlackScore || '—';
 }
 
-document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .meta-field[data-field]').forEach((elm) => {
+document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .meta-field[data-field], .stat-value[data-field]').forEach((elm) => {
   elm.addEventListener('blur', () => {
     const key = elm.dataset.field;
     let val = elm.textContent.trim();
