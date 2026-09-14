@@ -88,6 +88,186 @@ body {
   border-color: var(--gold);
 }
 
+.action-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--bg-2);
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.action-btn:hover {
+  background: var(--gold-soft);
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.topbar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--panel-border);
+  margin: 0 4px;
+}
+
+.dropdown { position: relative; }
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+  min-width: 140px;
+  overflow: hidden;
+  z-index: 20;
+}
+.dropdown-menu[hidden] { display: none; }
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  color: var(--text-1);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.dropdown-item:hover { background: var(--gold-soft); color: var(--gold); }
+
+/* ---------- Bandeau meta de partie ---------- */
+.game-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 20px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--bg-1);
+  flex-wrap: wrap;
+}
+.meta-chip {
+  outline: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: text;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta-chip:hover, .meta-chip:focus { background: var(--gold-soft); color: var(--gold); }
+.meta-sep { opacity: 0.5; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text-0);
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  font-size: 13px;
+  max-width: 90vw;
+  z-index: 100;
+}
+.toast[hidden] { display: none; }
+.toast.toast-error { border-color: var(--danger); color: var(--danger); }
+.toast.toast-success { border-color: var(--success); color: var(--success); }
+
+/* ---------- Dropzone overlay ---------- */
+.dropzone-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 12, 9, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  border: 3px dashed var(--gold);
+}
+.dropzone-overlay[hidden] { display: none; }
+.dropzone-message {
+  font-size: 22px;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* ---------- Panel tabs / library ---------- */
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--panel-border);
+}
+.panel-tab {
+  flex: 1;
+  padding: 10px 8px;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.panel-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.panel-tab:hover:not(.active) { color: var(--text-0); }
+.tab-badge {
+  display: inline-block;
+  background: var(--gold);
+  color: #241a0d;
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  margin-left: 3px;
+}
+
+.panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.panel-body[hidden] { display: none; }
+
+.library-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+.library-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+.library-item:hover { background: var(--gold-soft); }
+.library-item.active { border-color: var(--gold); background: var(--gold-soft); }
+.library-item-title { font-size: 12.5px; color: var(--text-0); font-weight: 600; }
+.library-item-meta { font-size: 10.5px; color: var(--text-2); margin-top: 2px; }
+.library-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.library-empty[hidden] { display: none; }
+
 /* ---------- Layout ---------- */
 .layout {
   flex: 1;

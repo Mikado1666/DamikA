@@ -19,10 +19,32 @@
       <span class="brand-name">DAMICK</span>
     </div>
     <div class="topbar-actions">
+      <input type="file" id="pdn-file-input" accept=".pdn,.txt" multiple hidden />
+      <button id="btn-import" class="action-btn" title="Importer un fichier PDN">📂 Importer</button>
+      <button id="btn-paste" class="icon-btn" title="Coller une partie (presse-papier)">📋</button>
+      <button id="btn-copy" class="icon-btn" title="Copier la partie (presse-papier)">⧉</button>
+      <div class="dropdown" id="export-dropdown">
+        <button id="btn-export" class="action-btn" title="Exporter">⭳ Exporter</button>
+        <div class="dropdown-menu" id="export-menu" hidden>
+          <button id="btn-export-pdn" class="dropdown-item">Format PDN</button>
+          <button id="btn-export-txt" class="dropdown-item">Format TXT</button>
+        </div>
+      </div>
+      <div class="topbar-sep"></div>
       <button id="btn-flip" class="icon-btn" title="Retourner le plateau (F)">⇅</button>
       <button id="btn-fullscreen" class="icon-btn" title="Plein écran">⛶</button>
     </div>
   </header>
+
+  <div class="game-meta-bar" id="game-meta-bar">
+    <span class="meta-chip" data-field="Event" contenteditable="true" title="Événement">Partie libre</span>
+    <span class="meta-sep">·</span>
+    <span class="meta-chip" data-field="Site" contenteditable="true" title="Lieu">—</span>
+    <span class="meta-sep">·</span>
+    <span class="meta-chip" data-field="Date" contenteditable="true" title="Date">—</span>
+    <span class="meta-sep">·</span>
+    <span class="meta-chip" data-field="Round" contenteditable="true" title="Ronde">—</span>
+  </div>
 
   <main class="layout">
     <section class="board-column">
@@ -30,10 +52,10 @@
       <div class="player-banner" data-side="black">
         <div class="player-avatar" data-side-avatar="black">N</div>
         <div class="player-info">
-          <div class="player-name" contenteditable="true" spellcheck="false">Joueur Noirs</div>
+          <div class="player-name" data-field="Black" contenteditable="true" spellcheck="false">Joueur Noirs</div>
           <div class="player-meta">
-            <span class="meta-field" contenteditable="true" title="Elo">Elo —</span>
-            <span class="meta-field" contenteditable="true" title="Titre">—</span>
+            <span class="meta-field" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
+            <span class="meta-field" data-field="BlackTitle" contenteditable="true" title="Titre">—</span>
           </div>
         </div>
         <div class="player-count" id="count-black">
@@ -59,10 +81,10 @@
       <div class="player-banner" data-side="white">
         <div class="player-avatar" data-side-avatar="white">B</div>
         <div class="player-info">
-          <div class="player-name" contenteditable="true" spellcheck="false">Joueur Blancs</div>
+          <div class="player-name" data-field="White" contenteditable="true" spellcheck="false">Joueur Blancs</div>
           <div class="player-meta">
-            <span class="meta-field" contenteditable="true" title="Elo">Elo —</span>
-            <span class="meta-field" contenteditable="true" title="Titre">—</span>
+            <span class="meta-field" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
+            <span class="meta-field" data-field="WhiteTitle" contenteditable="true" title="Titre">—</span>
           </div>
         </div>
         <div class="player-count" id="count-white">
@@ -93,16 +115,30 @@
     </section>
 
     <aside class="side-panel">
-      <div class="panel-header">Coups joués</div>
-      <ol class="move-list" id="move-list"></ol>
-      <div class="panel-footer">
-        <button id="btn-undo" class="text-btn">↺ Annuler</button>
-        <button id="btn-redo" class="text-btn">↻ Rétablir</button>
+      <div class="panel-tabs">
+        <button class="panel-tab active" id="tab-moves" data-tab="moves">Coups joués</button>
+        <button class="panel-tab" id="tab-library" data-tab="library">Bibliothèque <span id="library-count" class="tab-badge" hidden>0</span></button>
+      </div>
+      <div class="panel-body" id="panel-moves">
+        <ol class="move-list" id="move-list"></ol>
+        <div class="panel-footer">
+          <button id="btn-undo" class="text-btn">↺ Annuler</button>
+          <button id="btn-redo" class="text-btn">↻ Rétablir</button>
+        </div>
+      </div>
+      <div class="panel-body" id="panel-library" hidden>
+        <ul class="library-list" id="library-list"></ul>
+        <div class="library-empty" id="library-empty">Aucune partie importée pour l'instant.</div>
       </div>
     </aside>
   </main>
 
   <footer class="footer-note">DAMICK — jeu de dames internationales 10×10 · <span id="easter-egg">FMJD</span></footer>
+
+  <div class="toast" id="toast" hidden></div>
+  <div class="dropzone-overlay" id="dropzone-overlay" hidden>
+    <div class="dropzone-message">Déposer le fichier PDN ici</div>
+  </div>
 </div>
 
 <script type="module" src="js/main.js"></script>

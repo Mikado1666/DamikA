@@ -1,4 +1,4 @@
-const CACHE_NAME = 'damick-v1';
+const CACHE_NAME = 'damick-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,9 @@ const ASSETS = [
   './js/main.js',
   './js/engine/rules.js',
   './js/render/board.js',
+  './js/pdn/parser.js',
+  './js/pdn/loader.js',
+  './js/pdn/serializer.js',
   './icons/icon-192.svg',
   './icons/icon-512.svg',
 ];
