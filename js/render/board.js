@@ -123,6 +123,15 @@ export class BoardRenderer {
     return rcToSquare(row, col);
   }
 
+  // Résout la case cliquée à partir d'une fraction (0..1) de la boîte du canvas telle que
+  // rendue à l'écran (ex: (clientX-rect.left)/rect.width). Insensible au devicePixelRatio,
+  // au zoom navigateur ou à tout arrondi entre canvas.width et la taille CSS réelle —
+  // seule la position relative dans la boîte visible compte.
+  squareAtFraction(xFrac, yFrac) {
+    const totalPx = this.size + LABEL_MARGIN * 2;
+    return this.squareAtPoint(xFrac * totalPx, yFrac * totalPx);
+  }
+
   _loopPulse() {
     this._pulsePhase = (Date.now() % 1400) / 1400;
     this.render();

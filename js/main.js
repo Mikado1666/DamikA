@@ -197,11 +197,10 @@ function updateNavButtons() {
 canvas.addEventListener('click', async (e) => {
   if (isAnimating || game.isGameOver()) return;
   const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left);
-  const y = (e.clientY - rect.top);
-  const scaleX = canvas.width / renderer.dpr / rect.width;
-  const scaleY = canvas.height / renderer.dpr / rect.height;
-  const sq = renderer.squareAtPoint(x * scaleX, y * scaleY);
+  if (rect.width === 0 || rect.height === 0) return;
+  const xFrac = (e.clientX - rect.left) / rect.width;
+  const yFrac = (e.clientY - rect.top) / rect.height;
+  const sq = renderer.squareAtFraction(xFrac, yFrac);
   if (sq == null) return;
 
   const { mustCapture, captures, simples } = game.legalMoves;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'damick-v2';
+const CACHE_NAME = 'damick-v3';
 const ASSETS = [
   './',
   './index.html',

@@ -35,9 +35,11 @@ body {
 }
 
 #app {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---------- Topbar ---------- */
@@ -271,22 +273,24 @@ body {
 /* ---------- Layout ---------- */
 .layout {
   flex: 1;
+  min-height: 0;
   display: flex;
   gap: 22px;
-  padding: 20px;
+  padding: 16px 20px;
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  align-items: stretch;
+  flex-wrap: nowrap;
 }
 
 .board-column {
   flex: 1 1 560px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 320px;
+  min-height: 0;
 }
 
 /* ---------- Player banners ---------- */
@@ -375,21 +379,26 @@ body {
 
 /* ---------- Board ---------- */
 .board-stage {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
 }
 
 .board-wrap {
-  flex: 1 1 auto;
-  width: 100%;
+  flex: 0 1 auto;
+  width: auto;
+  height: 100%;
   max-width: 620px;
+  max-height: 620px;
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
+  min-height: 0;
 }
 
 #board-canvas {
@@ -401,7 +410,6 @@ body {
 .tempo-panel {
   flex: 0 0 132px;
   width: 132px;
-  margin-top: 10px;
   background: linear-gradient(180deg, var(--panel), #1b140e);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
@@ -445,6 +453,7 @@ body {
 
 @media (max-width: 900px) {
   .board-stage { flex-direction: column; align-items: center; }
+  .board-wrap { height: auto; width: 100%; max-width: 620px; }
   .tempo-panel {
     width: auto;
     flex: none;
@@ -521,12 +530,11 @@ body {
   flex: 0 0 280px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
-  max-height: 78vh;
-  min-height: 320px;
 }
 .panel-header {
   padding: 12px 16px;
