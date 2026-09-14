@@ -194,20 +194,22 @@ function updateNavButtons() {
 }
 
 // --- interaction plateau : clic / sélection / coup unique ----------------------
-canvas.addEventListener('click', async (e) => {
-  console.log('[DAMICK click] fired', { clientX: e.clientX, clientY: e.clientY, isAnimating, gameOver: game.isGameOver() });
+// Écoute 'pointerdown' plutôt que 'click' : le clic natif du navigateur n'est synthétisé
+// que si mousedown et mouseup se résolvent sur le même élément sans le moindre aléa
+// (constaté en test : un clic pourtant net sur le canvas peut ne produire AUCUN évènement
+// 'click'). 'pointerdown' se déclenche dès l'appui, de façon fiable, souris comme tactile.
+canvas.addEventListener('pointerdown', async (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return; // ignorer clic droit/molette
   if (isAnimating || game.isGameOver()) return;
   const rect = canvas.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
   const xFrac = (e.clientX - rect.left) / rect.width;
   const yFrac = (e.clientY - rect.top) / rect.height;
   const sq = renderer.squareAtFraction(xFrac, yFrac);
-  console.log('[DAMICK click] resolved square', { sq, selectedSquare, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } });
   if (sq == null) return;
 
   const { mustCapture, captures, simples } = game.legalMoves;
   const piece = game.board[sq];
-  console.log('[DAMICK click] state', { piece, mustCapture, mandatorySquares: [...game.mandatorySquares], sideToMove: game.sideToMove });
 
   if (selectedSquare == null) {
     // "Coup unique" : si un seul coup légal amène sur la case cliquée, on le joue direct.
