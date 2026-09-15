@@ -84,6 +84,14 @@ function fullMoveList(g) {
   return [...g.history.map((h) => h.move), ...[...g.future].reverse().map((f) => f.move)];
 }
 
+// Case d'arrivée RÉELLE d'une séquence de capture : `seq[0].to` n'est que le landing du
+// PREMIER saut, pas la destination finale dès que la prise a plusieurs étapes (bug D2 —
+// RETOURS_SESSION_2026-09-16.md : clic sans effet sur la vraie case d'arrivée quand deux
+// séquences de même longueur partent de la même pièce vers des cases différentes).
+function captureFinalTo(seq) {
+  return seq[seq.length - 1].to;
+}
+
 // --- rendu global de l'UI ------------------------------------------------------
 function refreshUI() {
   const counts = countPieces(game.board);
@@ -128,7 +136,7 @@ function renderBoardState() {
   const mandatorySquares = mustCapture ? game.mandatorySquares : new Set();
   if (selectedSquare != null) {
     if (mustCapture) {
-      legalTargets = captures.filter(seq => seq[0].from === selectedSquare).map(seq => seq[0].to);
+      legalTargets = captures.filter(seq => seq[0].from === selectedSquare).map(captureFinalTo);
     } else {
       legalTargets = game.legalMoves.simples.filter(m => m.from === selectedSquare).map(m => m.to);
     }
@@ -246,7 +254,7 @@ canvas.addEventListener('pointerdown', async (e) => {
   if (selectedSquare == null) {
     // "Coup unique" : si un seul coup légal amène sur la case cliquée, on le joue direct.
     const movesToSquare = mustCapture
-      ? captures.filter(seq => seq[0].to === sq)
+      ? captures.filter(seq => captureFinalTo(seq) === sq)
       : simples.filter(m => m.to === sq);
     if (movesToSquare.length === 1 && !(piece && piece.color === game.sideToMove)) {
       await playMove(mustCapture ? { type: 'capture', seq: movesToSquare[0] } : { type: 'simple', move: movesToSquare[0] });
@@ -281,7 +289,7 @@ canvas.addEventListener('pointerdown', async (e) => {
   }
 
   if (mustCapture) {
-    const seq = captures.find(s => s[0].from === selectedSquare && s[0].to === sq);
+    const seq = captures.find(s => s[0].from === selectedSquare && captureFinalTo(s) === sq);
     if (seq) { await playMove({ type: 'capture', seq }); return; }
   } else {
     const mv = simples.find(m => m.from === selectedSquare && m.to === sq);
