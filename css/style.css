@@ -44,6 +44,13 @@ body {
 
 /* ---------- Topbar ---------- */
 .topbar {
+  position: relative;
+  /* z-index nécessaire : .players-rail est décalé vers le haut via `transform:
+     translateY()` dans alignLayout() (main.js, alignement vertical sur le damier) et son
+     rectangle transformé déborde visuellement par-dessus le header — sans z-index, ce
+     bloc (plus tardif dans le DOM que <header>) peint et intercepte les clics AU-DESSUS
+     du header, rendant le logo non cliquable à cet endroit (retour Mickaël). */
+  z-index: 5;
   border-bottom: 1px solid var(--panel-border);
   background: linear-gradient(180deg, #1c150e, #17110b);
 }
@@ -65,6 +72,13 @@ body {
   align-items: center;
   gap: 20px;
   font-size: 22px;
+  cursor: pointer;
+  /* Le wordmark est du texte normal, sélectionnable : un clic dont le mousedown/mouseup
+     bouge d'un poil (souris réelle ou automatisée) peut être interprété comme un début de
+     sélection de texte plutôt qu'un simple clic, et certains navigateurs n'émettent alors
+     pas l'évènement 'click' du tout — le logo semblait alors "pas cliquable" sur le texte
+     alors que l'icône (SVG, jamais sélectionnable) fonctionnait déjà (retour Mickaël). */
+  user-select: none;
 }
 
 .brand-icon {
@@ -252,6 +266,44 @@ body {
   color: var(--gold);
   font-weight: 700;
 }
+
+/* ---------- Confirmation modale (remplace window.confirm — cohérent avec le thème
+   sombre, et un dialogue natif bloque le fil JS/l'automatisation de test) ---------- */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 12, 9, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+.confirm-overlay[hidden] { display: none; }
+.confirm-box {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  padding: 24px;
+  max-width: 380px;
+  width: 90vw;
+}
+.confirm-message {
+  color: var(--text-0);
+  font-size: 16px;
+  line-height: 1.4;
+  margin-bottom: 18px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.confirm-ok-btn {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.confirm-ok-btn:hover { background: var(--danger); color: var(--accent-white); }
 
 /* ---------- Panel tabs / library ---------- */
 .panel-tabs {

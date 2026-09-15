@@ -41,7 +41,13 @@ const el = {
   speedValue: document.getElementById('speed-value'),
   btnToggleArrow: document.getElementById('btn-toggle-arrow'),
   easterEgg: document.getElementById('easter-egg'),
+  brand: document.querySelector('.brand'),
   fileInput: document.getElementById('pdn-file-input'),
+  btnNewGame: document.getElementById('btn-new-game'),
+  confirmOverlay: document.getElementById('confirm-overlay'),
+  confirmMessage: document.getElementById('confirm-message'),
+  confirmOk: document.getElementById('confirm-ok'),
+  confirmCancel: document.getElementById('confirm-cancel'),
   btnImport: document.getElementById('btn-import'),
   btnPaste: document.getElementById('btn-paste'),
   btnCopy: document.getElementById('btn-copy'),
@@ -417,6 +423,25 @@ function showToast(message, kind = 'info') {
   toastTimer = setTimeout(() => { el.toast.hidden = true; }, 4500);
 }
 
+// Modale de confirmation (remplace window.confirm — cf. .confirm-overlay dans index.html)
+// : Promise résolue à true/false selon le bouton cliqué.
+function confirmModal(message) {
+  return new Promise((resolve) => {
+    el.confirmMessage.textContent = message;
+    el.confirmOverlay.hidden = false;
+    const cleanup = (result) => {
+      el.confirmOverlay.hidden = true;
+      el.confirmOk.removeEventListener('click', onOk);
+      el.confirmCancel.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    el.confirmOk.addEventListener('click', onOk);
+    el.confirmCancel.addEventListener('click', onCancel);
+  });
+}
+
 // --- en-têtes de partie (bandeau meta + bandeaux joueurs) ----------------------------
 function syncHeaderFieldsFromState() {
   const chipDefaults = { Event: 'Partie libre', Site: '—', Date: '—', Round: '—' };
@@ -494,6 +519,29 @@ function switchTab(tab) {
 }
 el.tabMoves.addEventListener('click', () => switchTab('moves'));
 el.tabLibrary.addEventListener('click', () => switchTab('library'));
+
+// --- nouvelle partie (reset complet) ---------------------------------------------------
+// Repart d'un DraughtsGame frais (position de départ standard) et remet les métadonnées
+// à leur état de chargement initial — même logique que loadParsedGame() mais sans partie
+// à charger. Confirmation si des coups ont déjà été joués (history OU future, pour couvrir
+// le cas où on a navigué en arrière avant de cliquer) afin d'éviter une perte accidentelle.
+async function startNewGame() {
+  if (game.history.length > 0 || game.future.length > 0) {
+    const ok = await confirmModal('Démarrer une nouvelle partie ? Les coups joués seront perdus.');
+    if (!ok) return;
+  }
+  stopAutoplay();
+  game = new DraughtsGame();
+  headers = { Event: 'Partie libre' };
+  selectedSquare = null;
+  syncHeaderFieldsFromState();
+  refreshUI();
+}
+el.btnNewGame.addEventListener('click', startNewGame);
+// Sur tout le logo (icône + wordmark), pas seulement le wordmark #easter-egg — convention
+// UX "logo = retour à l'état initial". L'easter egg (5 clics sur le wordmark, plus bas)
+// reste un écouteur séparé sur #easter-egg, indépendant de celui-ci.
+el.brand.addEventListener('click', startNewGame);
 
 // --- chargement d'une partie parsée (PDN) ----------------------------------------------
 function loadParsedGame(parsedGame) {

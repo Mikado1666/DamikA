@@ -38,6 +38,7 @@
       </div>
       <div class="topbar-actions">
         <input type="file" id="pdn-file-input" accept=".pdn,.txt" multiple hidden />
+        <button id="btn-new-game" class="action-btn" title="Nouvelle partie">✚ Nouvelle partie</button>
         <button id="btn-import" class="action-btn" title="Importer un fichier PDN">📂 Importer</button>
         <button id="btn-paste" class="icon-btn" title="Coller une partie (presse-papier)">📋</button>
         <button id="btn-copy" class="icon-btn" title="Copier la partie (presse-papier)">⧉</button>
@@ -173,6 +174,15 @@
   <div class="toast" id="toast" hidden></div>
   <div class="dropzone-overlay" id="dropzone-overlay" hidden>
     <div class="dropzone-message">Déposer le fichier PDN ici</div>
+  </div>
+  <div class="confirm-overlay" id="confirm-overlay" hidden>
+    <div class="confirm-box">
+      <div class="confirm-message" id="confirm-message"></div>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" class="text-btn">Annuler</button>
+        <button id="confirm-ok" class="action-btn confirm-ok-btn">Nouvelle partie</button>
+      </div>
+    </div>
   </div>
 </div>
 
