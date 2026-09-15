@@ -67,7 +67,9 @@ renderer.animSpeedMs = Number(el.speedSelect.value);
 // --- notation d'un coup --------------------------------------------------------
 function moveNotation(moveInfo) {
   if (moveInfo.type === 'simple') return `${moveInfo.from}-${moveInfo.to}`;
-  return [moveInfo.from, ...moveInfo.path].join('x');
+  // Notation FMJD : seules les cases de départ et d'arrivée sont notées pour une rafle,
+  // pas les étapes intermédiaires (ex. 30x19x28 s'écrit 30x28).
+  return `${moveInfo.from}x${moveInfo.to}`;
 }
 
 // Liste complète des coups de la partie (déjà joués + à venir via redo), dans l'ordre
