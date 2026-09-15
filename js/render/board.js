@@ -19,7 +19,7 @@ export class BoardRenderer {
     this.selectedSquare = null;
     this.legalTargets = []; // squares où la pièce sélectionnée peut aller
     this.mandatorySquares = new Set();
-    this.lastMove = null; // { from, to } ou { path: [...] }
+    this.lastMove = null; // { squares: [depart, ...étapes..., arrivée] }
     this.showArrow = true;
     this.showCoords = true;
     this.theme = 'walnut';
@@ -284,14 +284,13 @@ export class BoardRenderer {
   }
 
   _drawLastMoveArrow() {
-    const ctx = this.ctx;
-    const { from, to } = this.lastMove;
-    if (from == null || to == null) return;
-    const [fr, fc] = squareToRC(from);
-    const [tr, tc] = squareToRC(to);
-    const [x1, y1] = this._cellCenter(fr, fc);
-    const [x2, y2] = this._cellCenter(tr, tc);
-    drawArrow(ctx, x1, y1, x2, y2, this.cell * 0.14, 'rgba(255,235,150,0.85)');
+    const squares = this.lastMove.squares;
+    if (!squares || squares.length < 2) return;
+    const points = squares.map((sq) => {
+      const [row, col] = squareToRC(sq);
+      return this._cellCenter(row, col);
+    });
+    drawMovePath(this.ctx, points, this.cell);
   }
 
   _drawPieces() {
@@ -356,28 +355,87 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawArrow(ctx, x1, y1, x2, y2, headSize, color) {
-  const angle = Math.atan2(y2 - y1, x2 - x1);
-  const shorten = headSize * 1.4;
-  const ex = x2 - Math.cos(angle) * shorten;
-  const ey = y2 - Math.sin(angle) * shorten;
+// Dessine le tracé du dernier coup : un simple segment pour un déplacement, ou une
+// polyligne passant par chaque case d'atterrissage pour une prise multiple, avec une
+// seule pointe de flèche à l'arrivée et un petit jalon à chaque étape intermédiaire.
+function drawMovePath(ctx, points, cell) {
+  const headLen = cell * 0.24;
+  const headWidth = cell * 0.15;
+  const lineWidth = cell * 0.075;
+  const outlineWidth = lineWidth + cell * 0.055;
+
+  const last = points[points.length - 1];
+  const beforeLast = points[points.length - 2];
+  const endAngle = Math.atan2(last[1] - beforeLast[1], last[0] - beforeLast[0]);
+  const shorten = headLen * 0.92;
+  const tipStopX = last[0] - Math.cos(endAngle) * shorten;
+  const tipStopY = last[1] - Math.sin(endAngle) * shorten;
+
+  const pathPoints = points.slice(0, -1).concat([[tipStopX, tipStopY]]);
 
   ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = headSize * 0.55;
+
+  // Ombre douce sous tout le tracé, pour le détacher des cases claires comme sombres.
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = cell * 0.06;
+  ctx.shadowOffsetY = cell * 0.02;
+
+  // Liseré sombre (contour) pour la lisibilité sur toutes les couleurs de case.
+  ctx.strokeStyle = 'rgba(35,22,10,0.75)';
+  ctx.lineWidth = outlineWidth;
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(ex, ey);
+  pathPoints.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
   ctx.stroke();
 
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Corps du trait : dégradé doré, du départ vers l'arrivée.
+  const grad = ctx.createLinearGradient(points[0][0], points[0][1], last[0], last[1]);
+  grad.addColorStop(0, '#ffe9ad');
+  grad.addColorStop(1, '#e8ab3c');
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = lineWidth;
   ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(ex - headSize * Math.cos(angle - Math.PI / 6), ey - headSize * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(ex - headSize * Math.cos(angle + Math.PI / 6), ey - headSize * Math.sin(angle + Math.PI / 6));
+  pathPoints.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+  ctx.stroke();
+
+  // Jalons discrets sur chaque case de prise intermédiaire (ni départ ni arrivée).
+  for (let i = 1; i < points.length - 1; i++) {
+    const [x, y] = points[i];
+    ctx.beginPath();
+    ctx.arc(x, y, cell * 0.05, 0, Math.PI * 2);
+    ctx.fillStyle = '#231609';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, cell * 0.035, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffe9ad';
+    ctx.fill();
+  }
+
+  // Pointe de flèche à l'arrivée.
+  const hx = last[0] - Math.cos(endAngle) * headLen;
+  const hy = last[1] - Math.sin(endAngle) * headLen;
+  const leftX = hx - Math.sin(endAngle) * headWidth;
+  const leftY = hy + Math.cos(endAngle) * headWidth;
+  const rightX = hx + Math.sin(endAngle) * headWidth;
+  const rightY = hy - Math.cos(endAngle) * headWidth;
+
+  ctx.beginPath();
+  ctx.moveTo(last[0], last[1]);
+  ctx.lineTo(leftX, leftY);
+  ctx.lineTo(rightX, rightY);
   ctx.closePath();
+  ctx.strokeStyle = 'rgba(35,22,10,0.75)';
+  ctx.lineWidth = cell * 0.03;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.fillStyle = '#f4c766';
   ctx.fill();
+
   ctx.restore();
 }
 

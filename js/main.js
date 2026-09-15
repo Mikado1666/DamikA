@@ -126,7 +126,9 @@ function renderBoardState() {
     }
   }
   const lastEntry = game.history[game.history.length - 1];
-  const lastMove = lastEntry ? { from: lastEntry.move.from, to: lastEntry.move.to } : null;
+  const lastMove = lastEntry
+    ? { squares: lastEntry.move.type === 'capture' ? [lastEntry.move.from, ...lastEntry.move.path] : [lastEntry.move.from, lastEntry.move.to] }
+    : null;
 
   renderer.setState({
     board: game.board,
