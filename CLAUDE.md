@@ -4,6 +4,32 @@ PWA de dames internationales 10x10 (FMJD), vanilla JS (ES modules natifs, pas de
 build step, pas de framework), rendu plateau en Canvas 2D. Voir `CAHIER_DES_CHARGES.md`
 pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
+## État du projet (dernière mise à jour : 2026-09-15)
+
+- **Chantier visuel post-refonte (blocs A et D de `RETOURS_SESSION_2026-09-16.md`)
+  : terminé et validé par Mickaël.** Styles de pions (Classique/Relief/Bois gravé),
+  bloc "Coups joués" compact, footer retiré (easter egg déplacé sur "DAMICK"),
+  curseur de vitesse ×¼→×8, toggle flèche, compteur de temps intégré au rail
+  joueurs, bannière méta repositionnée, alignement précis de la mise en page
+  (rail gauche / damier / rail droit), et les 2 bugs D1 (import PDN)/D2 (clic
+  case d'arrivée prise multiple) — tous committés (voir `git log`, du commit
+  `fe77c87` à `a05db2d`).
+  - Exception : le 4e style de pion **"Toernooibase" (A2bis) reste non conforme**
+    aux images de référence (`reference-pion-toernooibase-1.png`/`-2.png`) et a
+    été **retiré du sélecteur** (`PIECE_STYLES` dans `js/render/board.js`) —
+    la fonction `drawPieceToernooibase` existe toujours dans le fichier mais
+    n'est plus branchée, en attendant une reprise.
+- **Prochain chantier (pas commencé) : logo + typographie "DAMICK"** (bloc C de
+  `RETOURS_SESSION_2026-09-16.md`), mis de côté par Mickaël pour une exploration
+  visuelle dédiée. Chantier Mobile et IA également en bloc C, pas commencés,
+  phases à part.
+- **Backlog fonctionnel restant** : voir bloc B de `RETOURS_SESSION_2026-09-16.md`
+  (14 points — annotations de coups, exports image/PDF, partage lien/QR,
+  fichiers récents, favoris, aide clavier, recherche bibliothèque, photos
+  joueurs, sons, réglage durée flèche, mode clair). Pas urgent, à planifier.
+  Le `CAHIER_DES_CHARGES.md` est noté comme partiellement obsolète sur ce
+  point (thèmes/styles de pions) — à mettre à jour un jour.
+
 ## Lancer le projet en local
 
 Les modules ES ne fonctionnent pas en `file://` — il faut un serveur HTTP :
