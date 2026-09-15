@@ -55,18 +55,34 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  font-size: 19px;
+  gap: 20px;
+  font-size: 22px;
 }
 
-.brand-mark {
-  color: var(--gold);
-  font-size: 17px;
+.brand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
 }
 
-.brand-name { color: var(--text-0); }
+.brand-icon-cutout { fill: var(--bg-1); }
+
+.brand-name {
+  display: inline-block;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 0.72;
+  letter-spacing: normal;
+  background-image: linear-gradient(180deg, #ffe9c2 0%, #e0ab5c 35%, #8a5a24 55%, #f0c887 62%, #4a2f10 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  cursor: pointer;
+}
 
 .topbar-actions { display: flex; gap: 10px; }
 
