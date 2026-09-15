@@ -347,14 +347,12 @@ function scheduleAutoplayStep() {
 }
 
 // --- vitesse d'animation (curseur continu ×¼ → ×8, retour Mickaël A6) -----------------
-// v=10 reste un cas spécial "Instantané" (anime.speedMs=0 saute l'animation entièrement,
-// comportement distinct d'une simple animation très rapide — cf. CAHIER_DES_CHARGES.md,
-// gardé pour ne pas perdre cette capacité en remplaçant le <select>).
+// 6 paliers sur l'échelle 1-10 (palier ×½ ajouté entre ×¼ et ×1 après le premier test —
+// retour Mickaël A6, 2e passe).
 const SPEED_BASELINE_MS = 260; // durée à ×1, reprend l'ancien défaut "Rapide"
 function speedFromSlider(v) {
-  if (v >= 10) return { ms: 0, label: 'Instant' };
-  const multiplier = v <= 2 ? 0.25 : v <= 4 ? 1 : v <= 6 ? 2 : v <= 8 ? 4 : 8;
-  const label = v <= 2 ? '×¼' : v <= 4 ? '×1' : v <= 6 ? '×2' : v <= 8 ? '×4' : '×8';
+  const multiplier = v <= 1 ? 0.25 : v <= 3 ? 0.5 : v <= 5 ? 1 : v <= 7 ? 2 : v <= 9 ? 4 : 8;
+  const label = v <= 1 ? '×¼' : v <= 3 ? '×½' : v <= 5 ? '×1' : v <= 7 ? '×2' : v <= 9 ? '×4' : '×8';
   return { ms: Math.round(SPEED_BASELINE_MS / multiplier), label };
 }
 function applySpeedSlider() {
@@ -387,7 +385,10 @@ el.btnFullscreen.addEventListener('click', () => {
 
 // --- raccourcis clavier -------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
-  if (e.target && (e.target.isContentEditable || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT')) return;
+  // TEXTAREA manquait à cette liste : l'Espace (play/pause) était intercepté avant
+  // d'atteindre #move-comment, rendant impossible d'y taper des espaces (retour
+  // Mickaël A3, bug constaté après l'ajout de la zone de commentaire).
+  if (e.target && (e.target.isContentEditable || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
   switch (e.key) {
     case 'ArrowLeft': e.preventDefault(); stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); break;
     case 'ArrowRight': e.preventDefault(); stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); break;
@@ -410,9 +411,16 @@ function showToast(message, kind = 'info') {
 // --- en-têtes de partie (bandeau meta + bandeaux joueurs) ----------------------------
 function syncHeaderFieldsFromState() {
   const chipDefaults = { Event: 'Partie libre', Site: '—', Date: '—', Round: '—' };
+  // Libellés de secours pour le `title` : les champs s'enroulent maintenant au lieu
+  // d'être tronqués (retour Mickaël A9), mais un très long texte (ex. une URL de Site)
+  // profite quand même d'un `title` — le texte complet une fois rempli, sinon le nom
+  // du champ.
+  const chipLabels = { Event: 'Événement', Site: 'Lieu', Date: 'Date', Round: 'Ronde' };
   document.querySelectorAll('.meta-chip[data-field]').forEach((elm) => {
     const key = elm.dataset.field;
-    elm.textContent = headers[key] || chipDefaults[key] || '—';
+    const val = headers[key] || chipDefaults[key] || '—';
+    elm.textContent = val;
+    elm.title = val !== '—' ? val : chipLabels[key];
   });
   const whiteName = document.querySelector('.player-name[data-field="White"]');
   const blackName = document.querySelector('.player-name[data-field="Black"]');

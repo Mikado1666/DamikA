@@ -21,6 +21,7 @@ export const PIECE_STYLES = {
   classique: { label: 'Classique', render: drawPieceClassique },
   relief: { label: 'Relief', render: drawPieceRelief },
   boisGrave: { label: 'Bois gravé', render: drawPieceWood },
+  toernooibase: { label: 'Toernooibase', render: drawPieceToernooibase },
 };
 const DEFAULT_PIECE_STYLE = 'classique';
 
@@ -62,8 +63,13 @@ export class BoardRenderer {
   resize() {
     const parent = this.canvas.parentElement;
     const available = Math.min(parent.clientWidth, parent.clientHeight || parent.clientWidth);
-    this.size = Math.max(280, Math.floor(available));
-    const px = this.size + LABEL_MARGIN * 2;
+    // px = taille CSS totale du canvas (damier + marge des numéros de case), c'est CE
+    // total qui doit tenir dans l'espace disponible — auparavant `size` (damier seul)
+    // était calé sur `available` puis la marge s'ajoutait PAR-DESSUS, ce qui faisait
+    // déborder le canvas de 2×LABEL_MARGIN au-delà de son conteneur et chevaucher le
+    // bandeau de contrôles en dessous (retour Mickaël A10).
+    const px = Math.max(280, Math.floor(available));
+    this.size = Math.max(1, px - LABEL_MARGIN * 2);
     this.dpr = window.devicePixelRatio || 1;
     this.canvas.width = px * this.dpr;
     this.canvas.height = px * this.dpr;
@@ -71,6 +77,11 @@ export class BoardRenderer {
     this.canvas.style.height = px + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.cell = this.size / 10;
+    // Le bandeau de contrôles et la ligne de statut se calent sur cette largeur via la
+    // variable CSS --board-px (retour Mickaël A10 : alignement gauche/droite avec le
+    // damier), plutôt que d'étirer sur toute la largeur de la colonne.
+    const boardColumn = this.canvas.closest('.board-column');
+    if (boardColumn) boardColumn.style.setProperty('--board-px', `${px}px`);
     this.render();
   }
 
@@ -593,6 +604,69 @@ function drawPieceWood(ctx, cx, cy, r, piece, opts = {}) {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = isWhite ? '#6a3a00' : '#d4af69';
     ctx.fillText('♛', cx, cy + radius * 0.03);
+  }
+
+  ctx.restore();
+}
+
+// Style "Toernooibase" — 4e style de pion (retour Mickaël A2bis), motif "cible"/médaille
+// à anneaux concentriques plats et réguliers, sans dégradé 3D ni gravure bois. Dessiné
+// d'après `reference-pion-toernooibase-1.png` (pion) et `reference-pion-toernooibase-2.png`
+// (dame — anneau central dédoublé) : pas de code source fourni pour ce style, contrairement
+// aux 3 autres, donc pas de portage, une interprétation directe des deux images.
+function drawPieceToernooibase(ctx, cx, cy, r, piece, opts = {}) {
+  const { alpha = 1, scale = 1 } = opts;
+  const radius = r * scale;
+  const isWhite = piece.color === 'w';
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ombre portée légère (médaille plate posée sur le plateau, pas de relief 3D)
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + radius * 0.18, radius * 0.88, radius * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fill();
+
+  const base = isWhite ? '#d9a839' : '#1c1c1c';
+  const ringDark = isWhite ? '#a9760f' : '#000000';
+  const ringLight = isWhite ? '#eccb70' : '#3c3c3c';
+  const rim = isWhite ? '#7a5a0c' : '#000000';
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = base;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, radius * 0.07);
+  ctx.strokeStyle = rim;
+  ctx.stroke();
+
+  // Anneaux concentriques plats, alternance claire/foncée (motif cible)
+  [0.82, 0.62, 0.42].forEach((f, i) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * f, 0, Math.PI * 2);
+    ctx.strokeStyle = i % 2 === 0 ? ringDark : ringLight;
+    ctx.lineWidth = Math.max(1, radius * 0.06);
+    ctx.stroke();
+  });
+
+  if (piece.king) {
+    // Anneau central dédoublé (référence image 2) au lieu du glyphe couronne habituel.
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.24, 0, Math.PI * 2);
+    ctx.strokeStyle = ringLight;
+    ctx.lineWidth = Math.max(1, radius * 0.05);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.13, 0, Math.PI * 2);
+    ctx.strokeStyle = ringDark;
+    ctx.lineWidth = Math.max(1, radius * 0.05);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = ringDark;
+    ctx.fill();
   }
 
   ctx.restore();

@@ -178,10 +178,14 @@ body {
   padding: 2px 5px;
   border-radius: 5px;
   cursor: text;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Retour à la ligne plutôt que troncature "…" (retour Mickaël A9) : la colonne
+     de gauche reste étroite volontairement (au profit du damier), donc les champs
+     longs (Événement, URL de Site) s'enroulent au lieu d'être coupés. Le `title`
+     dynamique (voir syncHeaderFieldsFromState dans main.js) sert de filet pour
+     consulter le texte complet au survol si besoin. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .meta-chip:hover, .meta-chip:focus { background: var(--gold-soft); color: var(--gold); }
 .meta-sep { opacity: 0.5; }
@@ -306,6 +310,7 @@ body {
   flex: 1 1 660px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 12px;
   min-width: 360px;
   min-height: 0;
@@ -493,6 +498,10 @@ body {
 }
 
 /* ---------- Controls ---------- */
+/* Largeur calée exactement sur celle du damier (--board-px, posée par BoardRenderer.resize()
+   dans board.js) et centrée dans la colonne : auparavant `.board-column` étirait ce bandeau
+   sur toute sa largeur, indépendamment de la largeur réelle du damier affiché, d'où un
+   désalignement des bords gauche/droit (retour Mickaël A10). */
 .controls-bar {
   display: flex;
   align-items: center;
@@ -502,6 +511,9 @@ body {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
   padding: 10px;
+  width: var(--board-px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .ctrl-btn {
   width: 45px;
@@ -559,6 +571,9 @@ body {
   font-size: 15.5px;
   color: var(--text-2);
   letter-spacing: 0.02em;
+  width: var(--board-px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ---------- Side panel ---------- */
