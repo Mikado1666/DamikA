@@ -507,12 +507,14 @@ body {
 }
 
 /* ---------- Controls ---------- */
-/* Largeur calée exactement sur celle du damier (--board-px, posée par BoardRenderer.resize()
-   dans board.js) et centrée dans la colonne (`margin:0 auto` — `.board-column` ne centre
-   plus ses enfants via `align-items`, ça empêchait `.board-wrap` de se voir allouer sa
-   vraie largeur disponible, cf. commentaire sur `.board-wrap`) : auparavant `.board-column`
-   étirait ce bandeau sur toute sa largeur, indépendamment de la largeur réelle du damier
-   affiché, d'où un désalignement des bords gauche/droit (retour Mickaël A10). */
+/* Largeur calée exactement sur celle du damier LUI-MÊME — --cells-px, posée par
+   BoardRenderer.resize() dans board.js à `this.size` (le carré de cases, PAS `px` le
+   canvas entier qui inclut la marge de numérotation) — et centrée dans la colonne
+   (`margin:0 auto` — `.board-column` ne centre plus ses enfants via `align-items`, ça
+   empêchait `.board-wrap` de se voir allouer sa vraie largeur disponible, cf. commentaire
+   sur `.board-wrap`) : damier et bandeau étant centrés sur le même axe horizontal, cette
+   largeur plus étroite que le canvas fait tomber les bords de 2b exactement sur les bords
+   des CASES (retour Mickaël A10, exigence 1 — bloc 2b = largeur exacte du bloc 2a). */
 .controls-bar {
   display: flex;
   align-items: center;
@@ -522,7 +524,7 @@ body {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
   padding: 10px;
-  width: var(--board-px, 100%);
+  width: var(--cells-px, 100%);
   max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -583,7 +585,7 @@ body {
   font-size: 15.5px;
   color: var(--text-2);
   letter-spacing: 0.02em;
-  width: var(--board-px, 100%);
+  width: var(--cells-px, 100%);
   max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -614,13 +616,8 @@ body {
   padding: 7px;
   overflow-y: auto;
   flex: 1;
-  min-height: 0;
   display: grid;
   grid-template-columns: 1fr;
-  /* align-content: normal se comporte comme stretch dans une grille — avec peu de coups
-     joués ça écartait les lignes sur toute la hauteur du panneau au lieu de les garder
-     compactes en haut (retour Mickaël A3). */
-  align-content: start;
   gap: 1px;
 }
 .move-row {
@@ -633,7 +630,6 @@ body {
 }
 .move-num { color: var(--text-2); }
 .move-ply {
-  position: relative;
   padding: 3px 7px;
   border-radius: 5px;
   cursor: pointer;
@@ -642,34 +638,6 @@ body {
 .move-ply:hover { background: var(--gold-soft); }
 .move-ply.current { background: var(--gold); color: #241a0d; font-weight: 700; }
 .move-ply.empty { visibility: hidden; }
-.move-ply.has-comment::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--gold);
-}
-.move-ply.current.has-comment::after { background: #241a0d; }
-
-.move-comment {
-  flex-shrink: 0;
-  height: 72px;
-  margin: 0 7px 7px;
-  resize: none;
-  background: var(--bg-2);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-1);
-  font-family: inherit;
-  font-size: 13px;
-  padding: 8px 10px;
-  transition: border-color 0.15s, background 0.15s;
-}
-.move-comment:focus { outline: none; border-color: var(--gold); background: var(--bg-1); }
-.move-comment:disabled { opacity: 0.5; cursor: default; }
 
 .panel-footer {
   display: flex;

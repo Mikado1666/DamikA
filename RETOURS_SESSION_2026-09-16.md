@@ -43,75 +43,14 @@ images de référence — à revoir. Comparer directement côte à côte avec
 `reference-pion-toernooibase-1.png`/`-2.png` (déjà dans le dossier) avant de
 proposer un nouveau rendu, plutôt que d'itérer à l'aveugle.
 
-### A3. Bloc "Coups joués" + commentaire — reprendre le style artefact
-La liste actuelle s'étire avec `space-between` sur toute la hauteur du
-panneau (visible dès 2-3 coups joués, très space). Remplacer par un simple
-empilement compact, comme l'artefact. CSS de référence (à adapter aux
-classes/IDs réels de Damick) :
-
-```css
-#side {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 220px;
-  flex-shrink: 0;
-  height: 100%;
-  overflow: hidden;
-}
-#moveList {
-  background: #1a1a1a;
-  border: 1px solid #3a3a3a;
-  border-radius: 5px;
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 5px 3px;
-  font-size: 14px;
-  font-family: 'Courier New', monospace;
-  min-height: 0;
-}
-#moveComment {
-  flex-shrink: 0;
-  height: 72px;
-  resize: none;
-  background: #1a1a1a;
-  border: 1px solid #3a3a3a;
-  border-radius: 5px;
-  color: #cfcfcf;
-  font-size: 13px;
-  font-family: inherit;
-  padding: 7px 8px;
-  transition: border-color .15s, background .15s;
-}
-.mrow { display: flex; align-items: center; padding: 2px 3px; border-radius: 3px; }
-.mrow:hover { background: #252525; }
-.mnum  { color: #666; width: 32px; text-align: right; margin-right: 4px; font-size: 12px; flex-shrink:0; }
-.mcell {
-  position: relative; flex: 1; min-width: 0; text-align: center;
-  padding: 3px 4px; border-radius: 3px; cursor: pointer;
-  transition: background 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.mcell:hover { background: #2a3a2a; }
-.mcell.wm { color: #e8e8d0; }
-.mcell.bm { color: #8090c8; }
-.mcell.active { background: #1a4a2a; color: #fff; font-weight: bold; }
-.mcell.has-comment::after {
-  content: ''; position: absolute; top: 2px; right: 2px;
-  width: 5px; height: 5px; border-radius: 50%; background: #e8c878;
-}
-```
-
-Zone de commentaire directement sous la liste, pastille dorée (`.has-comment`)
-sur les coups déjà annotés. **L'onglet "Bibliothèque" reste inchangé à côté**
-— on ne touche qu'au contenu de l'onglet "Coups joués".
-
-**Bug constaté après implémentation** : impossible de taper des espaces dans
-la zone de commentaire. Cause probable : le raccourci clavier global Espace
-(play/pause lecture auto) intercepte la touche avant qu'elle n'atteigne le
-textarea, même quand celui-ci a le focus — vérifier que l'écouteur `keydown`
-global exclut bien les éléments `TEXTAREA`/`INPUT` du déclenchement des
-raccourcis (`e.target.tagName`), en particulier pour `#moveComment`.
+### A3. ANNULÉ — revenir à l'état d'avant cette passe
+Le style repris de l'artefact pour le bloc "Coups joués" + commentaire ne
+convient pas à Mickaël. **Ne pas chercher à corriger** : retirer entièrement
+ce qui a été ajouté pour A3 (CSS `#moveList`/`#moveComment`/`.mrow`/`.mcell`
+et le bug fix associé) et revenir à l'état du bloc "Coups joués" tel qu'il
+était avant cette passe A1-A9. L'onglet "Bibliothèque" n'est pas concerné,
+il n'a jamais été touché. Ce point sera retravaillé plus tard séparément,
+pas dans cette itération.
 
 ### A4. Supprimer le footer
 "DAMICK — jeu de dames internationales 10×10 · FMJD" en bas de page : aucune
@@ -192,29 +131,45 @@ automatique (`white-space: normal`, `word-break: break-word` au besoin) au
 lieu de la troncature, + un attribut `title` avec le texte complet en
 fallback au survol pour les cas où ça reste long (ex. l'URL Site).
 
-### A10. Bandeau de contrôles (bas) : chevauchement + alignement largeur
-Constaté après validation d'A9 (le damier a gagné en hauteur/largeur suite à
-la libération d'espace) :
-1. Le bandeau du bas (lecture/vitesse/flèche) chevauche les numéros de case
-   de la dernière ligne du damier (cf. capture — les numéros du bas sont
-   à moitié masqués par le bandeau).
-2. La largeur du bandeau du bas doit correspondre exactement à celle du
-   damier, et être parfaitement alignée avec lui (bords gauche/droit
-   confondus) — actuellement décalée/désalignée.
+### A10. Alignement général de la mise en page — PRIORITÉ DU JOUR
+Sujet important pour Mickaël, à traiter avec le plus grand soin : la mise en
+page doit être **parfaitement** alignée, propre et professionnelle. Pas
+d'à-peu-près.
 
-Probable cause commune : le recalcul de taille du plateau (`resize()` dans
-`board.js`, cf. `ResizeObserver`) n'a pas été resynchronisé avec la largeur
-réelle du bandeau de contrôles après les changements de mise en page d'A9 —
-vérifier la marge réservée aux numéros de case (`LABEL_MARGIN`) par rapport
-à la position du bandeau, et le calcul de largeur du conteneur des contrôles
-par rapport à `boardcol`/au canvas.
+**Découpage de référence, à utiliser pour cette spec :**
+- **Bloc 1** = rail de gauche (bannière méta + cartes joueurs)
+- **Bloc 2** = colonne centrale, qui contient deux sous-blocs empilés :
+  - **Bloc 2a** = le damier (le canvas lui-même, le carré de jeu)
+  - **Bloc 2b** = le bandeau de contrôles de lecture (lecture/vitesse/flèche), sous 2a
+- **Bloc 3** = rail de droite (onglets Coups joués / Bibliothèque)
 
-**Retour après test (toujours pas bon)** : le chevauchement avec les
-numéros de case est corrigé, mais l'alignement de largeur ne l'est pas —
-le bandeau dépasse encore légèrement des bords du damier (gauche et/ou
-droite). À revérifier avec les valeurs réellement rendues (`getBoundingClientRect()`
-du canvas vs du conteneur du bandeau), pas seulement les valeurs calculées
-en amont, qui peuvent diverger du rendu final après arrondis/`ResizeObserver`.
+**3 exigences précises, constatées non respectées sur la dernière version testée :**
+
+1. **Largeur de 2b = largeur de 2a exactement.** La largeur de référence est
+   celle du damier **lui-même** (le carré de cases), pas la zone qui inclut
+   la numérotation des cases sur les bords. Les bords gauche et droit de 2b
+   doivent tomber exactement sur les bords gauche et droit du damier.
+
+2. **Haut du Bloc 2 aligné avec le haut du Bloc 3.** Le haut du damier (donc
+   le haut de 2a) doit être à la même hauteur exacte que le haut du Bloc 3
+   (le haut des onglets Coups joués/Bibliothèque). Ce n'est pas le cas sur
+   la version actuelle.
+
+3. **Bloc 1 centré verticalement sur le damier.** Le Bloc 1 doit être
+   repositionné verticalement pour que le **milieu de l'écart entre les deux
+   cartes joueurs** (Noirs et Blancs) tombe exactement au niveau du **centre
+   vertical du damier**. Concrètement : le point médian entre la carte
+   "Joueur Noirs" et la carte "Joueur Blancs" doit être à la même hauteur
+   que le centre du damier (pas le centre de la page, le centre du damier
+   précisément).
+
+**Méthode recommandée** : ne pas ajuster des valeurs au pif par itérations
+successives (ça a déjà été tenté sans succès sur ce point). Calculer ces
+trois alignements à partir des dimensions réellement rendues
+(`getBoundingClientRect()` sur le canvas du damier, sur 2b, et sur les deux
+cartes joueurs), pas à partir de valeurs supposées ou codées en dur, et
+vérifier visuellement à plusieurs tailles de fenêtre (le plafond 775px et
+une fenêtre plus étroite/plus basse) avant de considérer ce point réglé.
 
 ---
 

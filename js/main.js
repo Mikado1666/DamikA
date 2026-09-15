@@ -20,9 +20,6 @@ let isPlaying = false;
 let headers = { Event: 'Partie libre' };
 let library = []; // parties parsées disponibles (import multi-parties)
 let libraryActiveIndex = -1;
-// Commentaires de coup : locaux à la session, pas encore persistés en PDN (voir
-// CAHIER_DES_CHARGES.md / backlog annotations — hors périmètre de cette passe).
-let moveComments = new Map(); // index de coup (dans l'historique) -> texte
 
 // --- éléments DOM -------------------------------------------------------------
 const el = {
@@ -31,7 +28,6 @@ const el = {
   tempoDelta: document.getElementById('tempo-delta'),
   statusLine: document.getElementById('status-line'),
   moveList: document.getElementById('move-list'),
-  moveComment: document.getElementById('move-comment'),
   btnFirst: document.getElementById('btn-first'),
   btnPrev: document.getElementById('btn-prev'),
   btnPlay: document.getElementById('btn-play'),
@@ -68,6 +64,11 @@ const el = {
   themeMenu: document.getElementById('theme-menu'),
   boardThemeOptions: document.getElementById('board-theme-options'),
   pieceStyleOptions: document.getElementById('piece-style-options'),
+  boardWrap: document.querySelector('.board-wrap'),
+  playersRail: document.querySelector('.players-rail'),
+  panelTabs: document.querySelector('.panel-tabs'),
+  blackCard: document.querySelector('.player-card[data-side="black"]'),
+  whiteCard: document.querySelector('.player-card[data-side="white"]'),
 };
 
 // --- notation d'un coup --------------------------------------------------------
@@ -125,7 +126,6 @@ function refreshUI() {
   }
 
   renderMoveList();
-  syncMoveComment();
   updateNavButtons();
   renderBoardState();
 }
@@ -175,28 +175,11 @@ function renderMoveList() {
   if (current) current.scrollIntoView({ block: 'nearest' });
 }
 
-function syncMoveComment() {
-  const idx = game.history.length - 1;
-  el.moveComment.disabled = idx < 0;
-  el.moveComment.placeholder = idx < 0 ? 'Aucun coup joué' : 'Commentaire sur ce coup…';
-  el.moveComment.value = idx < 0 ? '' : (moveComments.get(idx) || '');
-}
-el.moveComment.addEventListener('input', () => {
-  const idx = game.history.length - 1;
-  if (idx < 0) return;
-  const val = el.moveComment.value;
-  if (val.trim()) moveComments.set(idx, val);
-  else moveComments.delete(idx);
-  const currentPly = el.moveList.querySelector('.move-ply.current');
-  if (currentPly) currentPly.classList.toggle('has-comment', !!val.trim());
-});
-
 function makePlySpan(moveInfo, idx, currentIdx) {
   const span = document.createElement('span');
   span.className = 'move-ply';
   span.textContent = moveNotation(moveInfo);
   if (idx === currentIdx) span.classList.add('current');
-  if (moveComments.get(idx)) span.classList.add('has-comment');
   span.addEventListener('click', () => jumpToPly(idx));
   return span;
 }
@@ -414,10 +397,7 @@ el.btnFullscreen.addEventListener('click', () => {
 
 // --- raccourcis clavier -------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
-  // TEXTAREA manquait à cette liste : l'Espace (play/pause) était intercepté avant
-  // d'atteindre #move-comment, rendant impossible d'y taper des espaces (retour
-  // Mickaël A3, bug constaté après l'ajout de la zone de commentaire).
-  if (e.target && (e.target.isContentEditable || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (e.target && (e.target.isContentEditable || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT')) return;
   switch (e.key) {
     case 'ArrowLeft': e.preventDefault(); stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); break;
     case 'ArrowRight': e.preventDefault(); stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); break;
@@ -667,6 +647,58 @@ el.btnTheme.addEventListener('click', () => { el.themeMenu.hidden = !el.themeMen
 window.addEventListener('click', (e) => {
   if (!el.themeDropdown.contains(e.target)) el.themeMenu.hidden = true;
 });
+
+// --- alignement précis de la mise en page (retour Mickaël A10, priorité du jour) -------
+// 3 exigences, calculées à partir des dimensions RÉELLEMENT RENDUES (getBoundingClientRect)
+// plutôt que du CSS flexbox seul : le bloc 2a (damier) vit dans `.board-stage`, qui grandit
+// (flex-grow) pour occuper tout l'espace vertical restant dans `.board-column`, et centre
+// le canvas EN SON SEIN — la position du canvas dépend donc de tout l'espace que
+// `.board-stage` a fini par occuper, pas seulement de sa propre taille. Un correctif CSS
+// pur (justify-content, align-items…) sur ces conteneurs flex-grow entrerait en boucle de
+// rétroaction avec le calcul de leur propre taille. On applique donc les 2 corrections
+// verticales via `transform: translateY(...)`, qui ne participe pas au calcul de mise en
+// page flex — aucune boucle, correction purement visuelle appliquée après coup.
+function resetLayoutTransforms() {
+  el.boardWrap.style.transform = '';
+  el.playersRail.style.transform = '';
+}
+
+function alignLayout() {
+  // On repart d'une position neutre avant de mesurer, sinon une correction précédente
+  // fausserait la mesure suivante (dérive cumulative).
+  resetLayoutTransforms();
+
+  const canvasRect = canvas.getBoundingClientRect();
+  const panelTabsRect = el.panelTabs.getBoundingClientRect();
+  // Exigence 2 : le haut du damier (bloc 2a, le canvas lui-même) doit tomber exactement
+  // sur le haut du bloc 3 (haut des onglets Coups joués/Bibliothèque).
+  const deltaTop = panelTabsRect.top - canvasRect.top;
+  el.boardWrap.style.transform = `translateY(${deltaTop}px)`;
+
+  // Exigence 3 : le milieu de l'écart entre les cartes Noirs/Blancs (bloc 1) doit tomber
+  // exactement sur le centre vertical du damier. On remesure le canvas APRÈS avoir appliqué
+  // la correction de l'exigence 2 ci-dessus, pour viser sa position finale réelle.
+  const canvasRectAligned = canvas.getBoundingClientRect();
+  const boardCenterY = canvasRectAligned.top + canvasRectAligned.height / 2;
+  const blackRect = el.blackCard.getBoundingClientRect();
+  const whiteRect = el.whiteCard.getBoundingClientRect();
+  const gapMidY = (blackRect.bottom + whiteRect.top) / 2;
+  const deltaRail = boardCenterY - gapMidY;
+  el.playersRail.style.transform = `translateY(${deltaRail}px)`;
+}
+
+// Recalculé à chaque changement de taille du damier (redimensionnement de fenêtre) — même
+// signal que celui qui pilote déjà `--cells-px` dans board.js — ainsi qu'à chaque
+// changement de hauteur des cartes joueurs ou du bandeau d'onglets (ex. un nom de joueur
+// qui passe sur 2 lignes).
+const layoutResizeObserver = new ResizeObserver(() => alignLayout());
+[canvas, el.blackCard, el.whiteCard, el.panelTabs].forEach((elm) => layoutResizeObserver.observe(elm));
+// Filet de sécurité : le premier appel du ResizeObserver n'est pas garanti immédiat (et un
+// simple redimensionnement de fenêtre n'implique pas toujours un changement de taille des
+// éléments observés au pixel près) — un appel direct au chargement plus un écouteur sur
+// l'évènement natif 'resize' couvrent les cas que le ResizeObserver seul pourrait manquer.
+alignLayout();
+window.addEventListener('resize', alignLayout);
 
 syncHeaderFieldsFromState();
 

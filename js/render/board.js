@@ -77,11 +77,17 @@ export class BoardRenderer {
     this.canvas.style.height = px + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.cell = this.size / 10;
-    // Le bandeau de contrôles et la ligne de statut se calent sur cette largeur via la
-    // variable CSS --board-px (retour Mickaël A10 : alignement gauche/droite avec le
-    // damier), plutôt que d'étirer sur toute la largeur de la colonne.
+    // Le bandeau de contrôles et la ligne de statut se calent sur --cells-px (retour
+    // Mickaël A10, exigence 1) : la largeur de RÉFÉRENCE est celle du damier lui-même
+    // (le carré de cases, `this.size`), PAS `px` (le canvas entier, qui inclut la marge
+    // réservée à la numérotation de chaque côté) — sans quoi le bandeau matchait la
+    // largeur du canvas complet, débordant de LABEL_MARGIN de chaque côté au-delà des
+    // cases visibles. Damier (canvas, centré) et bandeau (centré via margin:auto) étant
+    // centrés sur le même axe horizontal dans `.board-column`, utiliser une largeur plus
+    // étroite (this.size < px) pour le bandeau le fait automatiquement s'aligner
+    // exactement sur les bords des CASES, pas sur les bords du canvas.
     const boardColumn = this.canvas.closest('.board-column');
-    if (boardColumn) boardColumn.style.setProperty('--board-px', `${px}px`);
+    if (boardColumn) boardColumn.style.setProperty('--cells-px', `${this.size}px`);
     this.render();
   }
 
