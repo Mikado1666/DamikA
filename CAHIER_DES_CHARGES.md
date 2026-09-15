@@ -1,4 +1,4 @@
-# DAMICK — Cahier des charges (Appli Jeu de Dames, PC + Mobile)
+# DAMIKA — Cahier des charges (Appli Jeu de Dames, PC + Mobile)
 
 > Dernière mise à jour : 2026-09-15, après la session de développement initiale
 > (setup, moteur de règles, liseuse PC, import/export PDN, refonte visuelle,
@@ -63,7 +63,7 @@ Légende : ✅ fait · 🟡 partiel · ⬜ pas commencé
 - ⬜ Packs de sons personnalisés
 - ✅ Animation de capture stylée (fondu + réduction d'échelle, pas une disparition sèche)
 - ⬜ Partage de position par QR code
-- ✅ Easter egg "Damick" caché (cliquer 5 fois sur "FMJD" dans le pied de page)
+- ✅ Easter egg "Damika" caché (cliquer 5 fois sur "FMJD" dans le pied de page)
 - ⬜ Personnalisation du damier (thèmes de couleurs multiples) — un seul thème "bois" (walnut) pour l'instant, mais le code est structuré pour en ajouter d'autres
 - ⬜ Personnalisation des pions (styles, taille)
 - ✅ Numérotation des cases (notation FMJD 1-50) affichée sur les bords, hors des cases
@@ -100,7 +100,7 @@ La flèche visuelle, elle, trace toujours le chemin complet quelle que soit la n
 Flux : cahier des charges (Claude/Cowork) → code + design (Claude Code) → retour vers Claude/Cowork pour trancher les points de blocage fonctionnels.
 
 ## 9. Statut global
-- [x] Nom du projet validé : DAMICK
+- [x] Nom du projet validé : DAMIKA
 - [x] Objectif et plateforme validés (PWA, Canvas, PC d'abord)
 - [x] Règles du jeu validées et implémentées (FMJD 10x10)
 - [x] Setup repo + moteur de règles 10x10

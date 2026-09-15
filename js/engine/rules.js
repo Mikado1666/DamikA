@@ -1,4 +1,4 @@
-// DAMICK — Moteur de règles Dames Internationales 10x10 (FMJD)
+// DAMIKA — Moteur de règles Dames Internationales 10x10 (FMJD)
 // Plateau: cases jouables numérotées 1..50 (notation FMJD), rangée 1 en haut.
 // Couleurs: 'w' = Blancs (bas, jouent en premier, avancent vers rangée 1)
 //           'b' = Noirs (haut, avancent vers rangée 10)

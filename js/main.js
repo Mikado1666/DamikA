@@ -709,7 +709,7 @@ window.addEventListener('resize', alignLayout);
 
 syncHeaderFieldsFromState();
 
-// --- easter egg discret (déplacé du footer vers le nom "DAMICK" du bandeau, A4) ------
+// --- easter egg discret (déplacé du footer vers le nom "DAMIKA" du bandeau, A4) ------
 let eggClicks = 0;
 el.easterEgg.addEventListener('click', () => {
   eggClicks += 1;

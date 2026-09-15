@@ -1,4 +1,4 @@
-// DAMICK — Sérialisation d'une partie en PDN ou TXT.
+// DAMIKA — Sérialisation d'une partie en PDN ou TXT.
 
 export function moveInfoToNotation(moveInfo) {
   if (moveInfo.type === 'simple') return `${moveInfo.from}-${moveInfo.to}`;

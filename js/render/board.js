@@ -1,4 +1,4 @@
-// DAMICK — Rendu Canvas du plateau (damier à thèmes, pièces "classiques" plates, flèche cyan)
+// DAMIKA — Rendu Canvas du plateau (damier à thèmes, pièces "classiques" plates, flèche cyan)
 import { squareToRC, rcToSquare } from '../engine/rules.js';
 
 const LABEL_MARGIN = 26; // espace réservé aux numéros de case (hors damier)
@@ -475,7 +475,7 @@ function drawMovePath(ctx, points, cell) {
 // Style "Classique" (plat) — repris de l'artefact de référence (voir
 // ARTEFACT_REFERENCE_DESIGN.md §2.2) : disque uni avec ombre portée, liseré fin,
 // couronne en glyphe unicode pour les dames. `piece` est { color: 'w'|'b', king: bool }
-// (l'artefact utilisait un entier ; on garde le format objet déjà en place dans Damick).
+// (l'artefact utilisait un entier ; on garde le format objet déjà en place dans Damika).
 function drawPieceClassique(ctx, cx, cy, r, piece, opts = {}) {
   const { alpha = 1, scale = 1 } = opts;
   const radius = r * scale;
@@ -512,7 +512,7 @@ function drawPieceClassique(ctx, cx, cy, r, piece, opts = {}) {
   ctx.restore();
 }
 
-// Style "Relief" — le rendu biseauté d'origine de Damick (gradient radial, anneau
+// Style "Relief" — le rendu biseauté d'origine de Damika (gradient radial, anneau
 // intérieur, ombre ellipsoïdale), conservé comme option plutôt que remplacé (retour
 // Mickaël A1 : voir RETOURS_SESSION_2026-09-16.md).
 function drawPieceRelief(ctx, cx, cy, r, piece, opts = {}) {

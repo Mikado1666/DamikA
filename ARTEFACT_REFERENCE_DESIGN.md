@@ -2,7 +2,7 @@
 
 Ce fichier documente ce que Mickaël veut reprendre de l'artefact Claude
 "Dames Internationales 10×10" (https://claude.ai/artifact/CkCD4zvaJTbefEhCSW9HEP,
-fichier source monolithique HTML/Canvas) pour l'intégrer dans Damick.
+fichier source monolithique HTML/Canvas) pour l'intégrer dans Damika.
 
 **Périmètre demandé — uniquement ça, rien d'autre :**
 - design des pièces (style "classique" / flat)
@@ -11,7 +11,7 @@ fichier source monolithique HTML/Canvas) pour l'intégrer dans Damick.
 - flèches (tracé du dernier coup)
 
 Tout le reste de l'artefact (barre joueurs, PDN, IA, mode saisie, export PDF…)
-est hors sujet — Damick a déjà sa propre logique pour ça.
+est hors sujet — Damika a déjà sa propre logique pour ça.
 
 **Règle de travail rappelée dans CLAUDE.md/CAHIER_DES_CHARGES.md** : ne rien
 régénérer/republier sans confirmation préalable de Mickaël. Ce document est une
@@ -20,7 +20,7 @@ appliquée à `js/render/board.js`.
 
 ---
 
-## 1. État actuel de Damick (pour contexte)
+## 1. État actuel de Damika (pour contexte)
 
 `js/render/board.js` contient déjà une classe `BoardRenderer` (ES module) avec :
 - un thème "noyer" (gradients marron/beige, cadre en bois dégradé)
@@ -98,7 +98,7 @@ Simple, net, lisible à toutes les tailles — pas de dégradé radial ni d'anne
 intérieur. La couronne de dame est le glyphe unicode `♛`, colorée en contraste
 avec le disque (gris foncé sur blanc, gris clair sur noir).
 
-Dans Damick, `piece` est un objet `{color:'w'|'b', king:bool}` (pas un entier
+Dans Damika, `piece` est un objet `{color:'w'|'b', king:bool}` (pas un entier
 comme dans l'artefact) — remplacer `isWhite(type)`/`isKing(type)` par
 `piece.color==='w'` / `piece.king` en conservant sinon le rendu à l'identique.
 
@@ -108,7 +108,7 @@ dispo dans `PIECE_RENDERERS` de l'artefact si Mickaël veut un sélecteur de sty
 
 ### 2.3 Flèche du dernier coup
 
-Tracé cyan semi-transparent, plus discret que le doré épais actuel de Damick,
+Tracé cyan semi-transparent, plus discret que le doré épais actuel de Damika,
 avec des petits points pleins aux étapes intermédiaires (prise multiple) et une
 pointe de flèche simple à l'arrivée :
 
@@ -148,12 +148,12 @@ function drawArrow(ctx, path, SQ, sqCenter) {
 }
 ```
 
-Remplace `_drawLastMoveArrow`/`drawMovePath` dans Damick — même principe
+Remplace `_drawLastMoveArrow`/`drawMovePath` dans Damika — même principe
 (polyligne + pointe), esthétique différente (cyan fin vs doré épais à liseré).
 
 ### 2.4 Mouvements — animation d'un coup
 
-Logique de l'artefact (globale, à adapter à la classe `BoardRenderer` de Damick,
+Logique de l'artefact (globale, à adapter à la classe `BoardRenderer` de Damika,
 qui a déjà une structure `animateMove` par `Promise` — ne garder que le *timing*
 et l'*easing*, pas le style procédural) :
 
@@ -171,12 +171,12 @@ const segDur = captures.length > 0
 // au moment où la pièce "sauteuse" atteint la case suivante)
 ```
 
-Différence avec l'animation actuelle de Damick : easing quadratique in-out
+Différence avec l'animation actuelle de Damika : easing quadratique in-out
 (`easeIO`) plutôt que cubique ease-out, et disparition nette des pièces
 capturées au moment du saut plutôt qu'un fondu étalé sur tout le coup. Le
 séquençage par étapes (une étape = un segment du chemin, `path[i] → path[i+1]`,
 avec retrait de la pièce capturée entre les deux) reste le même principe que
-ce que fait déjà `_advanceAnimation`/`_drawPieces` dans Damick — donc surtout
+ce que fait déjà `_advanceAnimation`/`_drawPieces` dans Damika — donc surtout
 un réglage d'easing/timing à ajuster, pas une réécriture.
 
 ## 3. Ce qui ne doit PAS changer

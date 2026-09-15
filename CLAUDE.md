@@ -1,4 +1,4 @@
-# DAMICK — Contexte technique
+# DAMIKA — Contexte technique
 
 PWA de dames internationales 10x10 (FMJD), vanilla JS (ES modules natifs, pas de
 build step, pas de framework), rendu plateau en Canvas 2D. Voir `CAHIER_DES_CHARGES.md`
@@ -8,7 +8,7 @@ pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
 - **Chantier visuel post-refonte (blocs A et D de `RETOURS_SESSION_2026-09-16.md`)
   : terminé et validé par Mickaël.** Styles de pions (Classique/Relief/Bois gravé),
-  bloc "Coups joués" compact, footer retiré (easter egg déplacé sur "DAMICK"),
+  bloc "Coups joués" compact, footer retiré (easter egg déplacé sur "DAMIKA"),
   curseur de vitesse ×¼→×8, toggle flèche, compteur de temps intégré au rail
   joueurs, bannière méta repositionnée, alignement précis de la mise en page
   (rail gauche / damier / rail droit), et les 2 bugs D1 (import PDN)/D2 (clic
@@ -19,7 +19,7 @@ pour la spec fonctionnelle complète et l'état d'avancement détaillé.
     été **retiré du sélecteur** (`PIECE_STYLES` dans `js/render/board.js`) —
     la fonction `drawPieceToernooibase` existe toujours dans le fichier mais
     n'est plus branchée, en attendant une reprise.
-- **Prochain chantier (pas commencé) : logo + typographie "DAMICK"** (bloc C de
+- **Prochain chantier (pas commencé) : logo + typographie "DAMIKA"** (bloc C de
   `RETOURS_SESSION_2026-09-16.md`), mis de côté par Mickaël pour une exploration
   visuelle dédiée. Chantier Mobile et IA également en bloc C, pas commencés,
   phases à part.
@@ -144,7 +144,7 @@ le patron utilisé pendant cette session — à ajouter **temporairement** en ba
 `main.js`, puis à retirer avant de commit :
 
 ```js
-window.addEventListener('damick:setBoard', (e) => {
+window.addEventListener('damika:setBoard', (e) => {
   game.board = new Array(51).fill(null);
   for (const [sq, color, king] of e.detail.pieces) game.board[sq] = { color, king: !!king };
   game.sideToMove = e.detail.sideToMove || WHITE;
@@ -158,13 +158,13 @@ window.addEventListener('damick:setBoard', (e) => {
 puis depuis la console ou un outil d'automatisation :
 
 ```js
-window.dispatchEvent(new CustomEvent('damick:setBoard', {
+window.dispatchEvent(new CustomEvent('damika:setBoard', {
   detail: { pieces: [[27, 'w', false], [22, 'b', false]], sideToMove: 'w' },
 }));
 ```
 
-Utile aussi pour du debug ad hoc : un second listener `damick:dump` qui répond via
-`damick:dumpResult` avec l'état interne (`selectedSquare`, `game.legalMoves`, etc.)
+Utile aussi pour du debug ad hoc : un second listener `damika:dump` qui répond via
+`damika:dumpResult` avec l'état interne (`selectedSquare`, `game.legalMoves`, etc.)
 permet d'inspecter l'état sans passer par le DOM. Toujours nettoyer ces écouteurs de
 debug avant de committer — ils n'ont rien à faire en production.
 

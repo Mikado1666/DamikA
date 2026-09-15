@@ -14,7 +14,7 @@ préalable de Mickaël. Montrer le diff avant de committer.
 
 ### A1. Style de pion "Relief" (option, pas un remplacement)
 Le nouveau style flat plaît, mais Mickaël regrette le rendu biseauté d'origine
-de Damick (gradient radial, anneau intérieur, ombre). Ne pas le supprimer :
+de Damika (gradient radial, anneau intérieur, ombre). Ne pas le supprimer :
 l'ajouter comme 2e option dans le sélecteur Pions, à côté de "Classique".
 Le rendu biseauté existant dans `board.js` (fonction `drawPiece` actuelle
 avant cette session, ou l'historique git) sert de base pour ce style.
@@ -53,7 +53,7 @@ il n'a jamais été touché. Ce point sera retravaillé plus tard séparément,
 pas dans cette itération.
 
 ### A4. Supprimer le footer
-"DAMICK — jeu de dames internationales 10×10 · FMJD" en bas de page : aucune
+"DAMIKA — jeu de dames internationales 10×10 · FMJD" en bas de page : aucune
 info utile, à retirer pour gagner de la hauteur.
 
 **Attention** : le cahier des charges mentionne un easter egg "cliquer 5 fois
@@ -76,7 +76,7 @@ curseur continu ×¼ → ×8, repris à l'identique de l'artefact :
 ```js
 document.getElementById('spSlider').addEventListener('input', function () {
   const v = parseInt(this.value);
-  animSpeedMs = Math.round(2300 - v * 210); // à adapter au nom de la variable de vitesse dans Damick
+  animSpeedMs = Math.round(2300 - v * 210); // à adapter au nom de la variable de vitesse dans Damika
   const lbl = v <= 2 ? '×¼' : v <= 4 ? '×1' : v <= 6 ? '×2' : v <= 8 ? '×4' : '×8';
   document.getElementById('speedLabel').textContent = lbl;
 });
@@ -206,7 +206,7 @@ fois les retours visuels de cette session intégrés.
 
 ## C. En attente, pas dans cette passe
 
-- **Logo + typographie "DAMICK"** : mis de côté par Mickaël pour être
+- **Logo + typographie "DAMIKA"** : mis de côté par Mickaël pour être
   retravaillé séparément (probablement via exploration visuelle dédiée),
   ne pas y toucher dans cette passe.
 - **Chantier Mobile** : phase à part, pas commencée au-delà de quelques
@@ -218,7 +218,7 @@ fois les retours visuels de cette session intégrés.
 ## D. Bugs — signalés pendant les tests, hors périmètre A/B/C
 
 ### D1. Faux message d'erreur à l'import PDN sur le tag de résultat
-En important une partie complète (ex. `Championnat DCL`), Damick affiche un
+En important une partie complète (ex. `Championnat DCL`), Damika affiche un
 toast rouge "Import partiel : 122/123 coups chargés — Coup 123 (0-2) illégal
 ou introuvable — import arrêté à ce coup." alors que la partie s'est en
 réalité importée intégralement et correctement (vérifié en rejouant jusqu'au

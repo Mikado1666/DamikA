@@ -1,4 +1,4 @@
-// DAMICK — Rejoue une partie parsée depuis un PDN sur un DraughtsGame frais,
+// DAMIKA — Rejoue une partie parsée depuis un PDN sur un DraughtsGame frais,
 // en validant chaque coup contre le moteur de règles (source de vérité unique).
 import { DraughtsGame } from '../engine/rules.js';
 

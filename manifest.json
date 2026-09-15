@@ -1,6 +1,6 @@
 {
-  "name": "DAMICK — Dames Internationales",
-  "short_name": "DAMICK",
+  "name": "DAMIKA — Dames Internationales",
+  "short_name": "DAMIKA",
   "description": "Application de jeu de dames internationales 10x10 (FMJD)",
   "start_url": "./index.html",
   "scope": "./",
