@@ -14,10 +14,13 @@ export const BOARD_THEMES = {
 };
 const DEFAULT_BOARD_THEME = 'bois';
 
-// Styles de pièces — un seul disponible pour l'instant ("Classique", voir §2.2), la carte
-// existe pour que le sélecteur et d'éventuels styles futurs s'y branchent sans y retoucher.
+// Styles de pièces — chaque entrée référence sa fonction de rendu (déclarations `function`
+// plus bas dans ce fichier ; le hoisting les rend disponibles ici). "Classique" reste le
+// style par défaut.
 export const PIECE_STYLES = {
-  classique: { label: 'Classique' },
+  classique: { label: 'Classique', render: drawPieceClassique },
+  relief: { label: 'Relief', render: drawPieceRelief },
+  boisGrave: { label: 'Bois gravé', render: drawPieceWood },
 };
 const DEFAULT_PIECE_STYLE = 'classique';
 
@@ -330,6 +333,7 @@ export class BoardRenderer {
     const ctx = this.ctx;
     const c = this.cell;
     const anim = this.animation;
+    const renderPiece = (PIECE_STYLES[this.pieceStyle] || PIECE_STYLES[DEFAULT_PIECE_STYLE]).render;
     const skip = new Set();
     if (anim) {
       skip.add(anim.path[0]);
@@ -342,7 +346,7 @@ export class BoardRenderer {
       if (!piece) continue;
       const [row, col] = squareToRC(sq);
       const [cx, cy] = this._cellCenter(row, col);
-      drawPiece(ctx, cx, cy, c * 0.4, piece);
+      renderPiece(ctx, cx, cy, c * 0.4, piece);
     }
 
     if (anim) {
@@ -363,7 +367,7 @@ export class BoardRenderer {
         else if (idx === segmentsDone) alpha = eased < 0.5 ? 1 : 0;
         else alpha = 1;
         if (alpha <= 0.01) return;
-        drawPiece(ctx, cx, cy, c * 0.4, capturedPiece, { alpha });
+        renderPiece(ctx, cx, cy, c * 0.4, capturedPiece, { alpha });
       });
 
       const fromSq = anim.path[anim.segment];
@@ -375,7 +379,7 @@ export class BoardRenderer {
       const x = x1 + (x2 - x1) * eased;
       const y = y1 + (y2 - y1) * eased;
       const bounce = 1 + Math.sin(eased * Math.PI) * 0.08;
-      drawPiece(ctx, x, y, c * 0.4 * bounce, anim.piece);
+      renderPiece(ctx, x, y, c * 0.4 * bounce, anim.piece);
     }
   }
 }
@@ -448,7 +452,7 @@ function drawMovePath(ctx, points, cell) {
 // ARTEFACT_REFERENCE_DESIGN.md §2.2) : disque uni avec ombre portée, liseré fin,
 // couronne en glyphe unicode pour les dames. `piece` est { color: 'w'|'b', king: bool }
 // (l'artefact utilisait un entier ; on garde le format objet déjà en place dans Damick).
-export function drawPiece(ctx, cx, cy, r, piece, opts = {}) {
+function drawPieceClassique(ctx, cx, cy, r, piece, opts = {}) {
   const { alpha = 1, scale = 1 } = opts;
   const radius = r * scale;
   const isWhite = piece.color === 'w';
@@ -478,6 +482,116 @@ export function drawPiece(ctx, cx, cy, r, piece, opts = {}) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = isWhite ? '#333333' : '#cccccc';
+    ctx.fillText('♛', cx, cy + radius * 0.03);
+  }
+
+  ctx.restore();
+}
+
+// Style "Relief" — le rendu biseauté d'origine de Damick (gradient radial, anneau
+// intérieur, ombre ellipsoïdale), conservé comme option plutôt que remplacé (retour
+// Mickaël A1 : voir RETOURS_SESSION_2026-09-16.md).
+function drawPieceRelief(ctx, cx, cy, r, piece, opts = {}) {
+  const { alpha = 1, scale = 1 } = opts;
+  const radius = r * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ombre portée
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + radius * 0.22, radius * 0.92, radius * 0.55, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fill();
+
+  const isWhite = piece.color === 'w';
+  const base = isWhite
+    ? ['#faf3e2', '#ddc79a']
+    : ['#3a3430', '#131110'];
+  const rim = isWhite ? '#8a7550' : '#000000';
+
+  const grad = ctx.createRadialGradient(cx - radius * 0.35, cy - radius * 0.4, radius * 0.1, cx, cy, radius);
+  grad.addColorStop(0, base[0]);
+  grad.addColorStop(1, base[1]);
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.lineWidth = radius * 0.09;
+  ctx.strokeStyle = rim;
+  ctx.globalAlpha = alpha * 0.7;
+  ctx.stroke();
+  ctx.globalAlpha = alpha;
+
+  // Anneau intérieur (relief)
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
+  ctx.strokeStyle = isWhite ? 'rgba(140,115,75,0.55)' : 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = radius * 0.06;
+  ctx.stroke();
+
+  if (piece.king) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.42, 0, Math.PI * 2);
+    const kg = ctx.createRadialGradient(cx, cy - radius * 0.15, radius * 0.05, cx, cy, radius * 0.42);
+    kg.addColorStop(0, '#ffe9a8');
+    kg.addColorStop(1, '#c9962e');
+    ctx.fillStyle = kg;
+    ctx.fill();
+    ctx.lineWidth = radius * 0.05;
+    ctx.strokeStyle = '#8a6412';
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// Style "Bois gravé" — pièces dorées/noires avec anneaux concentriques gravés (retour
+// Mickaël A2). Palette et rayons d'anneaux repris de sa description (RETOURS_SESSION_
+// 2026-09-16.md §A2) ; le code de l'artefact source n'étant pas disponible ici, ce rendu
+// est une réimplémentation d'après cette description, pas un portage littéral.
+function drawPieceWood(ctx, cx, cy, r, piece, opts = {}) {
+  const { alpha = 1, scale = 1 } = opts;
+  const radius = r * scale;
+  const isWhite = piece.color === 'w';
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ombre portée
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + radius * 0.2, radius * 0.9, radius * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fill();
+
+  const stops = isWhite
+    ? ['#ffffff', '#fefaea', '#f5e090', '#c89030', '#6a3a00']
+    : ['#4a4a4a', '#333333', '#202020', '#101010', '#000000'];
+  const grad = ctx.createRadialGradient(cx - radius * 0.3, cy - radius * 0.35, radius * 0.05, cx, cy, radius);
+  stops.forEach((color, i) => grad.addColorStop(i / (stops.length - 1), color));
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, radius * 0.06);
+  ctx.strokeStyle = isWhite ? '#6a3a00' : '#000000';
+  ctx.stroke();
+
+  // Anneaux gravés concentriques
+  [0.83, 0.65, 0.47, 0.28].forEach((f) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * f, 0, Math.PI * 2);
+    ctx.strokeStyle = isWhite ? 'rgba(106,58,0,0.35)' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = Math.max(0.75, radius * 0.02);
+    ctx.stroke();
+  });
+
+  if (piece.king) {
+    ctx.font = `bold ${Math.round(radius * 0.9)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = isWhite ? '#6a3a00' : '#d4af69';
     ctx.fillText('♛', cx, cy + radius * 0.03);
   }
 

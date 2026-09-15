@@ -20,17 +20,18 @@ let isPlaying = false;
 let headers = { Event: 'Partie libre' };
 let library = []; // parties parsées disponibles (import multi-parties)
 let libraryActiveIndex = -1;
+// Commentaires de coup : locaux à la session, pas encore persistés en PDN (voir
+// CAHIER_DES_CHARGES.md / backlog annotations — hors périmètre de cette passe).
+let moveComments = new Map(); // index de coup (dans l'historique) -> texte
 
 // --- éléments DOM -------------------------------------------------------------
 const el = {
   countWhite: document.querySelector('#count-white .count-value'),
   countBlack: document.querySelector('#count-black .count-value'),
-  tempoPanel: document.getElementById('tempo-panel'),
-  tempoValue: document.getElementById('tempo-value'),
-  tempoBarFill: document.getElementById('tempo-bar-fill'),
-  tempoCaption: document.getElementById('tempo-caption'),
+  tempoDelta: document.getElementById('tempo-delta'),
   statusLine: document.getElementById('status-line'),
   moveList: document.getElementById('move-list'),
+  moveComment: document.getElementById('move-comment'),
   btnFirst: document.getElementById('btn-first'),
   btnPrev: document.getElementById('btn-prev'),
   btnPlay: document.getElementById('btn-play'),
@@ -40,7 +41,9 @@ const el = {
   btnRedo: document.getElementById('btn-redo'),
   btnFlip: document.getElementById('btn-flip'),
   btnFullscreen: document.getElementById('btn-fullscreen'),
-  speedSelect: document.getElementById('speed-select'),
+  speedSlider: document.getElementById('speed-slider'),
+  speedValue: document.getElementById('speed-value'),
+  btnToggleArrow: document.getElementById('btn-toggle-arrow'),
   easterEgg: document.getElementById('easter-egg'),
   fileInput: document.getElementById('pdn-file-input'),
   btnImport: document.getElementById('btn-import'),
@@ -67,8 +70,6 @@ const el = {
   pieceStyleOptions: document.getElementById('piece-style-options'),
 };
 
-renderer.animSpeedMs = Number(el.speedSelect.value);
-
 // --- notation d'un coup --------------------------------------------------------
 function moveNotation(moveInfo) {
   if (moveInfo.type === 'simple') return `${moveInfo.from}-${moveInfo.to}`;
@@ -89,22 +90,20 @@ function refreshUI() {
   el.countWhite.textContent = String(counts.white);
   el.countBlack.textContent = String(counts.black);
 
+  // Compteur de temps (théorie des finales) : ligne compacte dans le rail joueurs,
+  // juste +N/−N coloré, sans préfixe "Blancs"/"Noirs" (retour Mickaël A8).
   const kingPresent = hasAnyKing(game.board);
+  el.tempoDelta.classList.remove('positive', 'negative', 'disabled');
   if (kingPresent) {
-    el.tempoPanel.classList.add('disabled');
-    el.tempoValue.textContent = '—';
-    el.tempoCaption.textContent = 'Désactivé (dame présente)';
+    el.tempoDelta.textContent = '—';
+    el.tempoDelta.classList.add('disabled');
+    el.tempoDelta.title = 'Compteur de temps désactivé (dame présente)';
   } else {
-    el.tempoPanel.classList.remove('disabled');
     const diff = computeTempoDifferential(game.board, game.sideToMove);
-    el.tempoValue.textContent = diff > 0 ? `+${diff}` : String(diff);
-    const pct = Math.max(0, Math.min(100, 50 + diff * 4));
-    el.tempoBarFill.style.width = `${pct}%`;
-    el.tempoCaption.textContent = diff === 0
-      ? 'Blancs et Noirs à égalité'
-      : diff > 0
-        ? `Blancs : +${diff} temps d'avance`
-        : `Noirs : +${-diff} temps d'avance`;
+    el.tempoDelta.textContent = diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : '0';
+    if (diff > 0) el.tempoDelta.classList.add('positive');
+    else if (diff < 0) el.tempoDelta.classList.add('negative');
+    el.tempoDelta.title = 'Compteur de temps (théorie des finales)';
   }
 
   const gameOver = game.isGameOver();
@@ -112,11 +111,13 @@ function refreshUI() {
     const w = game.winner();
     el.statusLine.textContent = w === WHITE ? 'Les Blancs gagnent — plus aucun coup possible pour les Noirs' : 'Les Noirs gagnent — plus aucun coup possible pour les Blancs';
   } else {
-    const { mustCapture } = game.legalMoves;
-    el.statusLine.textContent = `Trait aux ${game.sideToMove === WHITE ? 'Blancs' : 'Noirs'}${mustCapture ? ' — prise obligatoire' : ''}`;
+    // Le halo pulsant sur les pièces concernées suffit déjà à signaler la prise
+    // obligatoire (retour Mickaël A5) — plus besoin de le répéter dans le texte d'état.
+    el.statusLine.textContent = `Trait aux ${game.sideToMove === WHITE ? 'Blancs' : 'Noirs'}`;
   }
 
   renderMoveList();
+  syncMoveComment();
   updateNavButtons();
   renderBoardState();
 }
@@ -166,11 +167,28 @@ function renderMoveList() {
   if (current) current.scrollIntoView({ block: 'nearest' });
 }
 
+function syncMoveComment() {
+  const idx = game.history.length - 1;
+  el.moveComment.disabled = idx < 0;
+  el.moveComment.placeholder = idx < 0 ? 'Aucun coup joué' : 'Commentaire sur ce coup…';
+  el.moveComment.value = idx < 0 ? '' : (moveComments.get(idx) || '');
+}
+el.moveComment.addEventListener('input', () => {
+  const idx = game.history.length - 1;
+  if (idx < 0) return;
+  const val = el.moveComment.value;
+  if (val.trim()) moveComments.set(idx, val);
+  else moveComments.delete(idx);
+  const currentPly = el.moveList.querySelector('.move-ply.current');
+  if (currentPly) currentPly.classList.toggle('has-comment', !!val.trim());
+});
+
 function makePlySpan(moveInfo, idx, currentIdx) {
   const span = document.createElement('span');
   span.className = 'move-ply';
   span.textContent = moveNotation(moveInfo);
   if (idx === currentIdx) span.classList.add('current');
+  if (moveComments.get(idx)) span.classList.add('has-comment');
   span.addEventListener('click', () => jumpToPly(idx));
   return span;
 }
@@ -328,10 +346,32 @@ function scheduleAutoplayStep() {
   }, Math.max(220, renderer.animSpeedMs + 260));
 }
 
-// --- vitesse d'animation ---------------------------------------------------------
-el.speedSelect.addEventListener('change', () => {
-  renderer.animSpeedMs = Number(el.speedSelect.value);
+// --- vitesse d'animation (curseur continu ×¼ → ×8, retour Mickaël A6) -----------------
+// v=10 reste un cas spécial "Instantané" (anime.speedMs=0 saute l'animation entièrement,
+// comportement distinct d'une simple animation très rapide — cf. CAHIER_DES_CHARGES.md,
+// gardé pour ne pas perdre cette capacité en remplaçant le <select>).
+const SPEED_BASELINE_MS = 260; // durée à ×1, reprend l'ancien défaut "Rapide"
+function speedFromSlider(v) {
+  if (v >= 10) return { ms: 0, label: 'Instant' };
+  const multiplier = v <= 2 ? 0.25 : v <= 4 ? 1 : v <= 6 ? 2 : v <= 8 ? 4 : 8;
+  const label = v <= 2 ? '×¼' : v <= 4 ? '×1' : v <= 6 ? '×2' : v <= 8 ? '×4' : '×8';
+  return { ms: Math.round(SPEED_BASELINE_MS / multiplier), label };
+}
+function applySpeedSlider() {
+  const { ms, label } = speedFromSlider(Number(el.speedSlider.value));
+  renderer.animSpeedMs = ms;
+  el.speedValue.textContent = label;
+}
+el.speedSlider.addEventListener('input', applySpeedSlider);
+applySpeedSlider();
+
+// --- flèche du dernier coup (bouton toggle, retour Mickaël A7) -----------------------
+el.btnToggleArrow.addEventListener('click', () => {
+  renderer.showArrow = !renderer.showArrow;
+  el.btnToggleArrow.classList.toggle('active', renderer.showArrow);
+  renderer.render();
 });
+el.btnToggleArrow.classList.toggle('active', renderer.showArrow);
 
 // --- flip / plein écran -----------------------------------------------------------
 let flipped = false;
@@ -593,7 +633,7 @@ window.addEventListener('click', (e) => {
 
 syncHeaderFieldsFromState();
 
-// --- easter egg discret -------------------------------------------------------------
+// --- easter egg discret (déplacé du footer vers le nom "DAMICK" du bandeau, A4) ------
 let eggClicks = 0;
 el.easterEgg.addEventListener('click', () => {
   eggClicks += 1;

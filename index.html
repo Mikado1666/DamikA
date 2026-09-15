@@ -16,7 +16,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">◆</span>
-      <span class="brand-name">DAMICK</span>
+      <span class="brand-name" id="easter-egg">DAMICK</span>
     </div>
     <div class="topbar-actions">
       <input type="file" id="pdn-file-input" accept=".pdn,.txt" multiple hidden />
@@ -45,18 +45,19 @@
     </div>
   </header>
 
-  <div class="game-meta-bar" id="game-meta-bar">
-    <span class="meta-chip" data-field="Event" contenteditable="true" title="Événement">Partie libre</span>
-    <span class="meta-sep">·</span>
-    <span class="meta-chip" data-field="Site" contenteditable="true" title="Lieu">—</span>
-    <span class="meta-sep">·</span>
-    <span class="meta-chip" data-field="Date" contenteditable="true" title="Date">—</span>
-    <span class="meta-sep">·</span>
-    <span class="meta-chip" data-field="Round" contenteditable="true" title="Ronde">—</span>
-  </div>
-
   <main class="layout">
     <aside class="players-rail">
+      <div class="game-meta-card" id="game-meta-bar">
+        <span class="meta-chip meta-chip-event" data-field="Event" contenteditable="true" title="Événement">Partie libre</span>
+        <div class="meta-chip-row">
+          <span class="meta-chip" data-field="Site" contenteditable="true" title="Lieu">—</span>
+          <span class="meta-sep">·</span>
+          <span class="meta-chip" data-field="Date" contenteditable="true" title="Date">—</span>
+          <span class="meta-sep">·</span>
+          <span class="meta-chip" data-field="Round" contenteditable="true" title="Ronde">—</span>
+        </div>
+      </div>
+
       <div class="player-card" data-side="black">
         <div class="player-photo" data-side-avatar="black">N</div>
         <div class="player-card-body">
@@ -78,7 +79,9 @@
         </div>
       </div>
 
-      <div class="players-rail-divider"><span>VS</span></div>
+      <div class="players-rail-divider">
+        <span class="tempo-delta" id="tempo-delta" title="Compteur de temps (théorie des finales)">0</span>
+      </div>
 
       <div class="player-card" data-side="white">
         <div class="player-photo" data-side-avatar="white">B</div>
@@ -108,14 +111,6 @@
         <div class="board-wrap">
           <canvas id="board-canvas"></canvas>
         </div>
-        <div class="tempo-panel" id="tempo-panel">
-          <div class="tempo-title">Compteur de temps</div>
-          <div class="tempo-value" id="tempo-value">0</div>
-          <div class="tempo-bar">
-            <div class="tempo-bar-fill" id="tempo-bar-fill"></div>
-          </div>
-          <div class="tempo-caption" id="tempo-caption">Blancs et Noirs à égalité</div>
-        </div>
       </div>
 
       <div class="controls-bar">
@@ -125,15 +120,13 @@
         <button id="btn-next" class="ctrl-btn" title="Coup suivant (→)">▶</button>
         <button id="btn-last" class="ctrl-btn" title="Fin">⏭</button>
         <div class="ctrl-sep"></div>
-        <label class="ctrl-select-label">
+        <label class="ctrl-speed-label">
           Vitesse
-          <select id="speed-select" class="ctrl-select">
-            <option value="600">Normale</option>
-            <option value="260" selected>Rapide</option>
-            <option value="90">Ultra-rapide</option>
-            <option value="0">Instantanée</option>
-          </select>
+          <input type="range" id="speed-slider" min="1" max="10" value="4" step="1" />
+          <span id="speed-value">×1</span>
         </label>
+        <div class="ctrl-sep"></div>
+        <button id="btn-toggle-arrow" class="ctrl-btn" title="Afficher/masquer la flèche du dernier coup">➜</button>
       </div>
 
       <div class="status-line" id="status-line">Trait aux Blancs</div>
@@ -146,6 +139,7 @@
       </div>
       <div class="panel-body" id="panel-moves">
         <ol class="move-list" id="move-list"></ol>
+        <textarea id="move-comment" class="move-comment" rows="3" placeholder="Aucun coup joué" disabled></textarea>
         <div class="panel-footer">
           <button id="btn-undo" class="text-btn">↺ Annuler</button>
           <button id="btn-redo" class="text-btn">↻ Rétablir</button>
@@ -157,8 +151,6 @@
       </div>
     </aside>
   </main>
-
-  <footer class="footer-note">DAMICK — jeu de dames internationales 10×10 · <span id="easter-egg">FMJD</span></footer>
 
   <div class="toast" id="toast" hidden></div>
   <div class="dropzone-overlay" id="dropzone-overlay" hidden>
