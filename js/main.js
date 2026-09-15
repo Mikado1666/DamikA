@@ -1,7 +1,7 @@
 import {
   DraughtsGame, WHITE, BLACK, countPieces, computeTempoDifferential, hasAnyKing,
 } from './engine/rules.js';
-import { BoardRenderer } from './render/board.js';
+import { BoardRenderer, BOARD_THEMES, PIECE_STYLES } from './render/board.js';
 import { parsePdn } from './pdn/parser.js';
 import { loadGameFromPdn } from './pdn/loader.js';
 import { serializeToPdn, serializeToTxt } from './pdn/serializer.js';
@@ -60,6 +60,11 @@ const el = {
   libraryCount: document.getElementById('library-count'),
   toast: document.getElementById('toast'),
   dropzoneOverlay: document.getElementById('dropzone-overlay'),
+  themeDropdown: document.getElementById('theme-dropdown'),
+  btnTheme: document.getElementById('btn-theme'),
+  themeMenu: document.getElementById('theme-menu'),
+  boardThemeOptions: document.getElementById('board-theme-options'),
+  pieceStyleOptions: document.getElementById('piece-style-options'),
 };
 
 renderer.animSpeedMs = Number(el.speedSelect.value);
@@ -560,6 +565,30 @@ el.btnExportTxt.addEventListener('click', () => {
   downloadText(`${safeFilename()}.txt`, serializeToTxt(currentGamePayload()), 'text/plain');
   el.exportMenu.hidden = true;
   showToast('Export TXT téléchargé.', 'success');
+});
+
+// --- thème du damier / style des pions ------------------------------------------------
+function renderThemeOptions(container, entries, activeId, onPick) {
+  container.innerHTML = '';
+  Object.entries(entries).forEach(([id, def]) => {
+    const btn = document.createElement('button');
+    btn.className = `dropdown-item${id === activeId ? ' active' : ''}`;
+    btn.textContent = def.label;
+    btn.addEventListener('click', () => {
+      onPick(id);
+      el.themeMenu.hidden = true;
+      renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => renderer.setBoardTheme(v));
+      renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => renderer.setPieceStyle(v));
+    });
+    container.appendChild(btn);
+  });
+}
+renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => renderer.setBoardTheme(v));
+renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => renderer.setPieceStyle(v));
+
+el.btnTheme.addEventListener('click', () => { el.themeMenu.hidden = !el.themeMenu.hidden; });
+window.addEventListener('click', (e) => {
+  if (!el.themeDropdown.contains(e.target)) el.themeMenu.hidden = true;
 });
 
 syncHeaderFieldsFromState();

@@ -1,7 +1,25 @@
-// DAMICK — Rendu Canvas du plateau (thème "bois", pièces avec relief, flèches, surbrillances)
+// DAMICK — Rendu Canvas du plateau (damier à thèmes, pièces "classiques" plates, flèche cyan)
 import { squareToRC, rcToSquare } from '../engine/rules.js';
 
 const LABEL_MARGIN = 26; // espace réservé aux numéros de case (hors damier)
+
+// Thèmes de damier — cases en aplat (pas de gradient), 3e couleur pour la case sombre
+// en surbrillance (cases du dernier coup joué). Repris de l'artefact de référence
+// (voir ARTEFACT_REFERENCE_DESIGN.md §2.1).
+export const BOARD_THEMES = {
+  bois: { label: 'Bois', light: '#d4bc8a', dark: '#8B5E1A', darkHL: '#b07820' },
+  ardoise: { label: 'Ardoise', light: '#9aa0b8', dark: '#6a7090', darkHL: '#8090b0' },
+  vert: { label: 'Vert', light: '#7a9a78', dark: '#4a6a48', darkHL: '#5a8a58' },
+  beige: { label: 'Beige', light: '#e8d0a8', dark: '#b07848', darkHL: '#c89050' },
+};
+const DEFAULT_BOARD_THEME = 'bois';
+
+// Styles de pièces — un seul disponible pour l'instant ("Classique", voir §2.2), la carte
+// existe pour que le sélecteur et d'éventuels styles futurs s'y branchent sans y retoucher.
+export const PIECE_STYLES = {
+  classique: { label: 'Classique' },
+};
+const DEFAULT_PIECE_STYLE = 'classique';
 
 export class BoardRenderer {
   constructor(canvas) {
@@ -22,7 +40,8 @@ export class BoardRenderer {
     this.lastMove = null; // { squares: [depart, ...étapes..., arrivée] }
     this.showArrow = true;
     this.showCoords = true;
-    this.theme = 'walnut';
+    this.boardTheme = DEFAULT_BOARD_THEME;
+    this.pieceStyle = DEFAULT_PIECE_STYLE;
     this.animation = null; // { from, to, piece, capturedSquares, start, duration, resolve }
     this.animSpeedMs = 260;
 
@@ -66,10 +85,23 @@ export class BoardRenderer {
     this.render();
   }
 
-  // Anime le déplacement d'une pièce (et la disparition en fondu des pièces capturées).
+  setBoardTheme(name) {
+    if (!BOARD_THEMES[name]) return;
+    this.boardTheme = name;
+    this.render();
+  }
+
+  setPieceStyle(name) {
+    if (!PIECE_STYLES[name]) return;
+    this.pieceStyle = name;
+    this.render();
+  }
+
+  // Anime le déplacement d'une pièce (et la disparition nette des pièces capturées, au
+  // moment où le tracé passe par leur case).
   // path: liste de squares intermédiaires pour une capture multiple (from -> ...-> to)
   // capturedPieces: [{ square, piece }] — la pièce capturée au format {color,king}, nécessaire
-  // pour le dessin en fondu car elle n'existe plus dans this.board au moment de l'animation.
+  // pour le dessin car elle n'existe plus dans this.board au moment de l'animation.
   animateMove({ path, piece, capturedPieces = [] }) {
     return new Promise((resolve) => {
       if (this.animSpeedMs <= 0) { resolve(); return; }
@@ -79,19 +111,23 @@ export class BoardRenderer {
         settled = true;
         resolve();
       };
+      // Rythme plus vif sur une prise (voir ARTEFACT_REFERENCE_DESIGN.md §2.4).
+      const duration = capturedPieces.length > 0
+        ? Math.max(140, this.animSpeedMs * 0.7)
+        : this.animSpeedMs;
       this.animation = {
         path,
         piece,
         capturedPieces,
         segment: 0,
         start: performance.now(),
-        duration: this.animSpeedMs,
+        duration,
         resolve: settle,
       };
       // Filet de sécurité : si la boucle requestAnimationFrame est throttlée (onglet en
       // arrière-plan) l'animation peut ne jamais avancer ; on force la résolution après un
       // délai large pour ne jamais bloquer durablement les interactions.
-      const maxWait = (path.length - 1) * this.animSpeedMs + 1500;
+      const maxWait = (path.length - 1) * duration + 1500;
       setTimeout(() => {
         if (this.animation && this.animation.resolve === settle) this.animation = null;
         settle();
@@ -189,6 +225,8 @@ export class BoardRenderer {
   _drawSquares() {
     const ctx = this.ctx;
     const c = this.cell;
+    const theme = BOARD_THEMES[this.boardTheme] || BOARD_THEMES[DEFAULT_BOARD_THEME];
+    const lastSquares = this.lastMove?.squares ? new Set(this.lastMove.squares) : null;
     for (let row = 0; row < 10; row++) {
       for (let col = 0; col < 10; col++) {
         const dark = (row + col) % 2 === 1;
@@ -196,15 +234,10 @@ export class BoardRenderer {
         const x = LABEL_MARGIN + sc * c;
         const y = LABEL_MARGIN + sr * c;
         if (dark) {
-          const g = ctx.createLinearGradient(x, y, x + c, y + c);
-          g.addColorStop(0, '#7a4a28');
-          g.addColorStop(1, '#5c3419');
-          ctx.fillStyle = g;
+          const sq = rcToSquare(row, col);
+          ctx.fillStyle = lastSquares && lastSquares.has(sq) ? theme.darkHL : theme.dark;
         } else {
-          const g = ctx.createLinearGradient(x, y, x + c, y + c);
-          g.addColorStop(0, '#f1dfb8');
-          g.addColorStop(1, '#e3caa0');
-          ctx.fillStyle = g;
+          ctx.fillStyle = theme.light;
         }
         ctx.fillRect(x, y, c, c);
       }
@@ -315,20 +348,22 @@ export class BoardRenderer {
     if (anim) {
       const now = performance.now();
       const t = Math.min(1, (now - anim.start) / anim.duration);
-      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      // Easing quadratique in-out (ARTEFACT_REFERENCE_DESIGN.md §2.4), à la place de
+      // l'ease-out cubique précédent.
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 
-      // Pièces capturées : fondu progressif au fil des segments déjà franchis
+      // Pièces capturées : disparition nette au moment où le tracé passe par leur case
+      // (pas de fondu progressif étalé sur tout le coup).
       const segmentsDone = anim.segment;
       anim.capturedPieces.forEach(({ square, piece: capturedPiece }, idx) => {
         const [row, col] = squareToRC(square);
         const [cx, cy] = this._cellCenter(row, col);
         let alpha;
         if (idx < segmentsDone) alpha = 0;
-        else if (idx === segmentsDone) alpha = 1 - eased;
+        else if (idx === segmentsDone) alpha = eased < 0.5 ? 1 : 0;
         else alpha = 1;
         if (alpha <= 0.01) return;
-        const scale = 1 - 0.35 * (idx <= segmentsDone ? eased : 0);
-        drawPiece(ctx, cx, cy, c * 0.4, capturedPiece, { alpha, scale });
+        drawPiece(ctx, cx, cy, c * 0.4, capturedPiece, { alpha });
       });
 
       const fromSq = anim.path[anim.segment];
@@ -357,144 +392,93 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // Dessine le tracé du dernier coup : un simple segment pour un déplacement, ou une
 // polyligne passant par chaque case d'atterrissage pour une prise multiple, avec une
-// seule pointe de flèche à l'arrivée et un petit jalon à chaque étape intermédiaire.
+// seule pointe de flèche à l'arrivée et un point plein à chaque étape intermédiaire.
+// Style repris de l'artefact de référence (ARTEFACT_REFERENCE_DESIGN.md §2.3) : trait
+// cyan fin et semi-transparent plutôt que le doré épais à liseré précédent.
 function drawMovePath(ctx, points, cell) {
-  const headLen = cell * 0.2;
-  const headWidth = cell * 0.13;
-  const lineWidth = cell * 0.075;
-  const outlineWidth = lineWidth + cell * 0.055;
-  // La pièce a un rayon de cell*0.4 : la pointe doit venir affleurer son bord (visible,
-  // tout le triangle bien formé) sans jamais le dépasser vers l'extérieur.
+  if (!points || points.length < 2) return;
+  const headLen = cell * 0.28;
+  const lineWidth = cell * 0.1;
+  // La pointe doit affleurer le bord du pion (rayon cell*0.4) sans jamais le dépasser :
+  // contrainte gardée de l'implémentation précédente, l'artefact d'origine ne la gérait
+  // pas (sa pointe visait le centre exact de la case, ce qui la faisait dépasser du pion).
   const pieceRadius = cell * 0.4;
   const tipInset = pieceRadius * 0.92;
 
   const last = points[points.length - 1];
   const beforeLast = points[points.length - 2];
-  const endAngle = Math.atan2(last[1] - beforeLast[1], last[0] - beforeLast[0]);
-  const tipX = last[0] - Math.cos(endAngle) * tipInset;
-  const tipY = last[1] - Math.sin(endAngle) * tipInset;
-  const shorten = headLen;
-  const tipStopX = tipX - Math.cos(endAngle) * shorten;
-  const tipStopY = tipY - Math.sin(endAngle) * shorten;
-
-  const pathPoints = points.slice(0, -1).concat([[tipStopX, tipStopY]]);
+  const angle = Math.atan2(last[1] - beforeLast[1], last[0] - beforeLast[0]);
+  const tipX = last[0] - Math.cos(angle) * tipInset;
+  const tipY = last[1] - Math.sin(angle) * tipInset;
+  const shorten = headLen * 0.6;
+  const ex = tipX - Math.cos(angle) * shorten;
+  const ey = tipY - Math.sin(angle) * shorten;
 
   ctx.save();
-
-  // Ombre douce sous tout le tracé, pour le détacher des cases claires comme sombres.
-  ctx.shadowColor = 'rgba(0,0,0,0.45)';
-  ctx.shadowBlur = cell * 0.06;
-  ctx.shadowOffsetY = cell * 0.02;
-
-  // Liseré sombre (contour) pour la lisibilité sur toutes les couleurs de case.
-  ctx.strokeStyle = 'rgba(35,22,10,0.75)';
-  ctx.lineWidth = outlineWidth;
+  ctx.globalAlpha = 0.72;
+  ctx.strokeStyle = '#5bc8ff';
+  ctx.fillStyle = '#5bc8ff';
+  ctx.lineWidth = lineWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+
   ctx.beginPath();
-  pathPoints.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length - 1; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.lineTo(ex, ey);
   ctx.stroke();
 
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-
-  // Corps du trait : dégradé doré, du départ vers l'arrivée.
-  const grad = ctx.createLinearGradient(points[0][0], points[0][1], last[0], last[1]);
-  grad.addColorStop(0, '#ffe9ad');
-  grad.addColorStop(1, '#e8ab3c');
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = lineWidth;
-  ctx.beginPath();
-  pathPoints.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
-  ctx.stroke();
-
-  // Jalons discrets sur chaque case de prise intermédiaire (ni départ ni arrivée).
   for (let i = 1; i < points.length - 1; i++) {
-    const [x, y] = points[i];
     ctx.beginPath();
-    ctx.arc(x, y, cell * 0.05, 0, Math.PI * 2);
-    ctx.fillStyle = '#231609';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, cell * 0.035, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffe9ad';
+    ctx.arc(points[i][0], points[i][1], cell * 0.06, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Pointe de flèche à l'arrivée (tirée en retrait via tipX/tipY, jamais au centre exact).
-  const hx = tipX - Math.cos(endAngle) * headLen;
-  const hy = tipY - Math.sin(endAngle) * headLen;
-  const leftX = hx - Math.sin(endAngle) * headWidth;
-  const leftY = hy + Math.cos(endAngle) * headWidth;
-  const rightX = hx + Math.sin(endAngle) * headWidth;
-  const rightY = hy - Math.cos(endAngle) * headWidth;
-
   ctx.beginPath();
   ctx.moveTo(tipX, tipY);
-  ctx.lineTo(leftX, leftY);
-  ctx.lineTo(rightX, rightY);
+  ctx.lineTo(tipX - headLen * Math.cos(angle - 0.42), tipY - headLen * Math.sin(angle - 0.42));
+  ctx.lineTo(tipX - headLen * Math.cos(angle + 0.42), tipY - headLen * Math.sin(angle + 0.42));
   ctx.closePath();
-  ctx.strokeStyle = 'rgba(35,22,10,0.75)';
-  ctx.lineWidth = cell * 0.03;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-  ctx.fillStyle = '#f4c766';
   ctx.fill();
 
   ctx.restore();
 }
 
+// Style "Classique" (plat) — repris de l'artefact de référence (voir
+// ARTEFACT_REFERENCE_DESIGN.md §2.2) : disque uni avec ombre portée, liseré fin,
+// couronne en glyphe unicode pour les dames. `piece` est { color: 'w'|'b', king: bool }
+// (l'artefact utilisait un entier ; on garde le format objet déjà en place dans Damick).
 export function drawPiece(ctx, cx, cy, r, piece, opts = {}) {
   const { alpha = 1, scale = 1 } = opts;
   const radius = r * scale;
+  const isWhite = piece.color === 'w';
+
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  // Ombre portée
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + radius * 0.22, radius * 0.92, radius * 0.55, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fill();
-
-  const isWhite = piece.color === 'w';
-  const base = isWhite
-    ? ['#faf3e2', '#ddc79a']
-    : ['#3a3430', '#131110'];
-  const rim = isWhite ? '#8a7550' : '#000000';
-
-  const grad = ctx.createRadialGradient(cx - radius * 0.35, cy - radius * 0.4, radius * 0.1, cx, cy, radius);
-  grad.addColorStop(0, base[0]);
-  grad.addColorStop(1, base[1]);
-
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = radius * 0.2;
+  ctx.shadowOffsetX = radius * 0.1;
+  ctx.shadowOffsetY = radius * 0.1;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
+  ctx.fillStyle = isWhite ? '#ffffff' : '#111111';
   ctx.fill();
-  ctx.lineWidth = radius * 0.09;
-  ctx.strokeStyle = rim;
-  ctx.globalAlpha = alpha * 0.7;
-  ctx.stroke();
-  ctx.globalAlpha = alpha;
 
-  // Anneau intérieur (relief)
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
-  ctx.strokeStyle = isWhite ? 'rgba(140,115,75,0.55)' : 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = radius * 0.06;
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = isWhite ? '#999999' : '#444444';
+  ctx.lineWidth = Math.max(1, radius * 0.075);
   ctx.stroke();
 
   if (piece.king) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.42, 0, Math.PI * 2);
-    const kg = ctx.createRadialGradient(cx, cy - radius * 0.15, radius * 0.05, cx, cy, radius * 0.42);
-    kg.addColorStop(0, '#ffe9a8');
-    kg.addColorStop(1, '#c9962e');
-    ctx.fillStyle = kg;
-    ctx.fill();
-    ctx.lineWidth = radius * 0.05;
-    ctx.strokeStyle = '#8a6412';
-    ctx.stroke();
+    ctx.font = `bold ${Math.round(radius)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = isWhite ? '#333333' : '#cccccc';
+    ctx.fillText('♛', cx, cy + radius * 0.03);
   }
 
   ctx.restore();

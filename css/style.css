@@ -141,6 +141,15 @@ body {
   cursor: pointer;
 }
 .dropdown-item:hover { background: var(--gold-soft); color: var(--gold); }
+.dropdown-item.active { color: var(--gold); font-weight: 700; }
+.dropdown-item.active::after { content: ' ✓'; }
+.dropdown-section-label {
+  padding: 9px 15px 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+}
 
 /* ---------- Bandeau meta de partie ---------- */
 .game-meta-bar {
