@@ -187,7 +187,7 @@ body {
 }
 .meta-chip-event {
   display: block;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text-0);
 }
@@ -198,6 +198,7 @@ body {
   margin-top: 4px;
 }
 .meta-chip {
+  font-size: 15px;
   outline: none;
   padding: 2px 5px;
   border-radius: 5px;
@@ -408,7 +409,7 @@ body {
 
 .player-name {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 20px;
   color: var(--text-0);
   outline: none;
   padding: 1px 4px;
@@ -427,7 +428,7 @@ body {
   flex-wrap: wrap;
 }
 .meta-field {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-2);
   outline: none;
   padding: 1px 5px;
@@ -445,7 +446,7 @@ body {
 .stat-block { text-align: left; }
 .stat-value {
   display: block;
-  font-size: 20px;
+  font-size: 23px;
   font-weight: 700;
   color: var(--gold);
   line-height: 1;
@@ -458,14 +459,14 @@ body {
 .stat-value:hover, .stat-value:focus { background: var(--gold-soft); }
 .count-value {
   display: block;
-  font-size: 20px;
+  font-size: 23px;
   font-weight: 700;
   color: var(--gold);
   line-height: 1;
 }
 .stat-label, .count-label {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -490,7 +491,7 @@ body {
    qu'un pavé encadré séparé (retour Mickaël A8). Doré = avantage Blancs, bleu = avantage
    Noirs, sans préfixe "Blancs"/"Noirs" (redondant avec la couleur). */
 .tempo-delta {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
   color: var(--text-2);
