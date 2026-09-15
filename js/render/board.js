@@ -363,10 +363,10 @@ function drawMovePath(ctx, points, cell) {
   const headWidth = cell * 0.13;
   const lineWidth = cell * 0.075;
   const outlineWidth = lineWidth + cell * 0.055;
-  // La pièce a un rayon de cell*0.4 ; on fait pointer la flèche bien à l'intérieur de ce
-  // disque pour que la pointe reste toujours masquée sous le pion, jamais visible devant.
+  // La pièce a un rayon de cell*0.4 : la pointe doit venir affleurer son bord (visible,
+  // tout le triangle bien formé) sans jamais le dépasser vers l'extérieur.
   const pieceRadius = cell * 0.4;
-  const tipInset = pieceRadius * 0.45;
+  const tipInset = pieceRadius * 0.92;
 
   const last = points[points.length - 1];
   const beforeLast = points[points.length - 2];
