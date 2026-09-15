@@ -3,7 +3,12 @@
 // commentaires { ... } et ; jusqu'à fin de ligne, variations ( ... ) ignorées,
 // annotations de coup (!, ?, !!, ??, etc.) et NAG ($n).
 
-const RESULT_TOKENS = new Set(['1-0', '0-1', '1/2-1/2', '*']);
+// Tags de résultat chess-style (1-0/0-1/1/2-1/2) + score FMJD dames (2 points par partie :
+// victoire 2-0, défaite 0-2, nulle 1-1). Sans ces derniers, un tag comme "0-2" en fin de
+// partie retombe dans la branche "move" (il matche le motif digit-hyphen-digit d'un coup
+// simple) et Damick tente de le jouer comme un coup illégal — d'où un faux message d'erreur
+// d'import malgré un chargement en réalité complet (bug D1, RETOURS_SESSION_2026-09-16.md).
+const RESULT_TOKENS = new Set(['1-0', '0-1', '1/2-1/2', '*', '2-0', '0-2', '1-1']);
 const MOVE_ANNOTATION_SUFFIX = /^([0-9x\-]+)([!?]*)$/;
 
 // --- Étape 1 : découpage du texte brut en blocs de parties -------------------
