@@ -44,12 +44,18 @@ body {
 
 /* ---------- Topbar ---------- */
 .topbar {
+  border-bottom: 1px solid var(--panel-border);
+  background: linear-gradient(180deg, #1c150e, #17110b);
+}
+
+.topbar-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 25px;
-  border-bottom: 1px solid var(--panel-border);
-  background: linear-gradient(180deg, #1c150e, #17110b);
+  padding: 12px 24px;
+  max-width: 1560px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .brand {
@@ -329,7 +335,7 @@ body {
   gap: 12px;
   min-width: 360px;
   min-height: 0;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 /* ---------- Bande joueurs (rail gauche, façon toernooibase) ---------- */
