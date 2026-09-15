@@ -211,6 +211,11 @@ canvas.addEventListener('pointerdown', async (e) => {
   const { mustCapture, captures, simples } = game.legalMoves;
   const piece = game.board[sq];
 
+  // Coups légaux partant de la case cliquée (pour le "coup unique" au clic sur la pièce).
+  const movesFromSquare = () => (mustCapture
+    ? captures.filter(seq => seq[0].from === sq)
+    : simples.filter(m => m.from === sq));
+
   if (selectedSquare == null) {
     // "Coup unique" : si un seul coup légal amène sur la case cliquée, on le joue direct.
     const movesToSquare = mustCapture
@@ -222,6 +227,13 @@ canvas.addEventListener('pointerdown', async (e) => {
     }
     if (piece && piece.color === game.sideToMove) {
       if (mustCapture && !game.mandatorySquares.has(sq)) return; // pièce sans prise possible
+      // "Coup unique" côté départ : si cette pièce n'a qu'un seul coup possible, on le joue
+      // directement au lieu d'exiger un second clic sur la destination.
+      const ownMoves = movesFromSquare();
+      if (ownMoves.length === 1) {
+        await playMove(mustCapture ? { type: 'capture', seq: ownMoves[0] } : { type: 'simple', move: ownMoves[0] });
+        return;
+      }
       selectedSquare = sq;
       renderBoardState();
     }
@@ -231,6 +243,11 @@ canvas.addEventListener('pointerdown', async (e) => {
   // Une pièce est déjà sélectionnée
   if (piece && piece.color === game.sideToMove) {
     if (mustCapture && !game.mandatorySquares.has(sq)) { selectedSquare = null; renderBoardState(); return; }
+    const ownMoves = movesFromSquare();
+    if (ownMoves.length === 1) {
+      await playMove(mustCapture ? { type: 'capture', seq: ownMoves[0] } : { type: 'simple', move: ownMoves[0] });
+      return;
+    }
     selectedSquare = sq;
     renderBoardState();
     return;
