@@ -327,7 +327,13 @@ export class BoardRenderer {
     const ctx = this.ctx;
     const c = this.cell;
     ctx.fillStyle = 'rgba(230,210,175,0.75)';
-    ctx.font = `${Math.max(9, c * 0.22)}px 'Segoe UI', sans-serif`;
+    // Taille de police plafonnée à 12px (Math.min ajouté) : sans ce plafond, la police
+    // grossissait proportionnellement à la taille de case (`c * 0.22`, illimité) — sur les
+    // grands damiers désormais atteignables (plafond .board-wrap remonté à 950px cette
+    // session), les chiffres à 2 rangs (ex. "46") devenaient assez larges/hauts pour
+    // mordre sur le cadre décoratif, la marge de 26px (LABEL_MARGIN) n'étant plus
+    // suffisante à cette taille de police (retour Mickaël, capture à l'appui).
+    ctx.font = `${Math.min(12, Math.max(9, c * 0.22))}px 'Segoe UI', sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let row = 0; row < 10; row++) {
@@ -336,13 +342,21 @@ export class BoardRenderer {
         const sq = rcToSquare(row, col);
         if (col === (this.flipped ? 9 : 0)) {
           const [sr] = this._screenRC(row, col);
-          ctx.textAlign = 'left';
-          ctx.fillText(String(sq), 6, LABEL_MARGIN + sr * c + c / 2);
+          // Ancré à droite (vers le cadre) plutôt qu'à gauche (vers le bord du canvas) :
+          // avec un textAlign:'left' à x=6 fixe, un nombre à 2 chiffres s'étendait VERS le
+          // cadre (à x=18, LABEL_MARGIN-8) et pouvait le chevaucher selon la police. En
+          // ancrant à droite à x=14 (4px de marge avant le cadre), le texte s'étend à
+          // l'inverse vers le bord du canvas, jamais vers le cadre.
+          ctx.textAlign = 'right';
+          ctx.fillText(String(sq), 14, LABEL_MARGIN + sr * c + c / 2);
         }
         if (row === (this.flipped ? 0 : 9)) {
           const [, sc] = this._screenRC(row, col);
           ctx.textAlign = 'center';
-          ctx.fillText(String(sq), LABEL_MARGIN + sc * c + c / 2, LABEL_MARGIN + this.size + 14);
+          // +17 (au lieu de +14) : centre le label dans la marge basse disponible (le bas
+          // du cadre est à +8, le bord du canvas à +26 — +14 ne laissait que 6px avant le
+          // cadre contre 12px avant le bord, trop proche du cadre à police plus grande).
+          ctx.fillText(String(sq), LABEL_MARGIN + sc * c + c / 2, LABEL_MARGIN + this.size + 17);
         }
       }
     }
