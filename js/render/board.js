@@ -54,6 +54,13 @@ export class BoardRenderer {
 
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(canvas.parentElement);
+    // Filet de sécurité pour le zoom navigateur (Ctrl+molette / Ctrl+0) : le zoom modifie
+    // les dimensions CSS effectives de la fenêtre et redéclenche normalement le
+    // ResizeObserver ci-dessus, mais on écoute aussi l'évènement natif 'resize' en plus
+    // (même filet que `alignLayout` dans main.js) pour ne dépendre que d'un seul chemin
+    // de notification.
+    this._onWindowResize = () => this.resize();
+    window.addEventListener('resize', this._onWindowResize);
     this.resize();
     this._loopPulse();
   }
@@ -61,11 +68,44 @@ export class BoardRenderer {
   destroy() {
     if (this._animFrame) cancelAnimationFrame(this._animFrame);
     this._resizeObserver.disconnect();
+    window.removeEventListener('resize', this._onWindowResize);
   }
 
   resize() {
     const parent = this.canvas.parentElement;
-    const available = Math.min(parent.clientWidth, parent.clientHeight || parent.clientWidth);
+    // Largeur disponible : PAS `parent.clientWidth` (= .board-wrap) — sa largeur est
+    // elle-même bornée par .board-column, dont la largeur CSS dépend de --board-px, la
+    // variable qu'on est justement en train de recalculer ici. Boucle de dépendance : une
+    // fois --board-px figé sur une petite valeur (ex. après un cycle de zoom navigateur
+    // qui rétrécit puis regrossit la fenêtre), .board-wrap ne peut plus jamais mesurer
+    // plus grand que cette valeur, et rien ne redéclenche une remesure honnête — le damier
+    // restait bloqué en petit même de retour à 100% de zoom (retour Mickaël). On calcule
+    // donc la largeur disponible depuis une référence extérieure à ce cycle : #app
+    // (toujours = la fenêtre, jamais affecté par --board-px) moins les largeurs FIXES du
+    // rail et du panneau latéral (elles ne dépendent pas non plus de --board-px).
+    const app = document.getElementById('app');
+    const boardColumn = this.canvas.closest('.board-column');
+    const layoutEl = boardColumn ? boardColumn.parentElement : null;
+    let availableWidth = parent.clientWidth;
+    if (app && layoutEl) {
+      const rail = layoutEl.querySelector('.players-rail');
+      const panel = layoutEl.querySelector('.side-panel');
+      const cs = getComputedStyle(layoutEl);
+      const gap = parseFloat(cs.columnGap) || 0;
+      const paddingX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      const railW = rail ? rail.getBoundingClientRect().width : 0;
+      const panelW = panel ? panel.getBoundingClientRect().width : 0;
+      availableWidth = app.clientWidth - railW - panelW - gap * 2 - paddingX;
+      // Cette largeur contourne .board-wrap donc aussi son `max-width` CSS (950px) —
+      // on le relit directement pour ne pas dupliquer ce plafond en constante JS.
+      const parentMaxWidth = parseFloat(getComputedStyle(parent).maxWidth);
+      if (Number.isFinite(parentMaxWidth)) availableWidth = Math.min(availableWidth, parentMaxWidth);
+    }
+    // Hauteur : `parent.clientHeight` (.board-wrap) reste fiable — sa hauteur vient du
+    // stretch vertical de .layout (align-items:stretch), un axe totalement indépendant
+    // de --board-px (qui ne contraint que la largeur de .board-column), donc hors du
+    // cycle décrit ci-dessus.
+    const available = Math.min(availableWidth, parent.clientHeight || availableWidth);
     // px = taille CSS totale du canvas (damier + marge des numéros de case), c'est CE
     // total qui doit tenir dans l'espace disponible — auparavant `size` (damier seul)
     // était calé sur `available` puis la marge s'ajoutait PAR-DESSUS, ce qui faisait
@@ -90,8 +130,20 @@ export class BoardRenderer {
     // des cases, inséré de LABEL_MARGIN-8 par rapport au bord du canvas. --frame-inset
     // (même valeur) permet à main.js de retrouver ce même décalage pour l'alignement
     // vertical (exigence 2), sans dupliquer la constante LABEL_MARGIN ailleurs.
-    const boardColumn = this.canvas.closest('.board-column');
     if (boardColumn) {
+      // --board-px = taille totale du canvas (px, damier + marge des numéros) : sert à
+      // dimensionner .board-column elle-même (voir CSS) pour qu'elle épouse la taille
+      // RÉELLE du damier rendu au lieu de remplir tout l'espace flex disponible — sans
+      // ça, quand la hauteur d'écran est le facteur limitant (canvas plus petit que la
+      // largeur allouée), .board-column restait large et un espace mort apparaissait
+      // entre le damier et les rails 1/3 de chaque côté (retour Mickaël). Posée sur
+      // `:root` (pas seulement .board-column) car .topbar-inner et .layout en ont
+      // aussi besoin pour synchroniser leur propre max-width sur la même valeur — ce
+      // ne sont pas des descendants de .board-column, une variable locale à cet
+      // élément ne leur serait pas visible. --frame-px (plus étroit de 36px, cadre
+      // décoratif seul) continue de ne servir qu'au bandeau de contrôles / ligne de
+      // statut, inchangé, local à .board-column.
+      document.documentElement.style.setProperty('--board-px', `${px}px`);
       boardColumn.style.setProperty('--frame-px', `${this.size + 16}px`);
       boardColumn.style.setProperty('--frame-inset', `${LABEL_MARGIN - 8}px`);
     }
