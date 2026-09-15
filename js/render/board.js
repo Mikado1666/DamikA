@@ -359,17 +359,23 @@ function roundRect(ctx, x, y, w, h, r) {
 // polyligne passant par chaque case d'atterrissage pour une prise multiple, avec une
 // seule pointe de flèche à l'arrivée et un petit jalon à chaque étape intermédiaire.
 function drawMovePath(ctx, points, cell) {
-  const headLen = cell * 0.24;
-  const headWidth = cell * 0.15;
+  const headLen = cell * 0.2;
+  const headWidth = cell * 0.13;
   const lineWidth = cell * 0.075;
   const outlineWidth = lineWidth + cell * 0.055;
+  // La pièce a un rayon de cell*0.4 ; on fait pointer la flèche bien à l'intérieur de ce
+  // disque pour que la pointe reste toujours masquée sous le pion, jamais visible devant.
+  const pieceRadius = cell * 0.4;
+  const tipInset = pieceRadius * 0.45;
 
   const last = points[points.length - 1];
   const beforeLast = points[points.length - 2];
   const endAngle = Math.atan2(last[1] - beforeLast[1], last[0] - beforeLast[0]);
-  const shorten = headLen * 0.92;
-  const tipStopX = last[0] - Math.cos(endAngle) * shorten;
-  const tipStopY = last[1] - Math.sin(endAngle) * shorten;
+  const tipX = last[0] - Math.cos(endAngle) * tipInset;
+  const tipY = last[1] - Math.sin(endAngle) * tipInset;
+  const shorten = headLen;
+  const tipStopX = tipX - Math.cos(endAngle) * shorten;
+  const tipStopY = tipY - Math.sin(endAngle) * shorten;
 
   const pathPoints = points.slice(0, -1).concat([[tipStopX, tipStopY]]);
 
@@ -416,16 +422,16 @@ function drawMovePath(ctx, points, cell) {
     ctx.fill();
   }
 
-  // Pointe de flèche à l'arrivée.
-  const hx = last[0] - Math.cos(endAngle) * headLen;
-  const hy = last[1] - Math.sin(endAngle) * headLen;
+  // Pointe de flèche à l'arrivée (tirée en retrait via tipX/tipY, jamais au centre exact).
+  const hx = tipX - Math.cos(endAngle) * headLen;
+  const hy = tipY - Math.sin(endAngle) * headLen;
   const leftX = hx - Math.sin(endAngle) * headWidth;
   const leftY = hy + Math.cos(endAngle) * headWidth;
   const rightX = hx + Math.sin(endAngle) * headWidth;
   const rightY = hy - Math.cos(endAngle) * headWidth;
 
   ctx.beginPath();
-  ctx.moveTo(last[0], last[1]);
+  ctx.moveTo(tipX, tipY);
   ctx.lineTo(leftX, leftY);
   ctx.lineTo(rightX, rightY);
   ctx.closePath();
