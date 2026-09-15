@@ -2,7 +2,10 @@
 
 > Dernière mise à jour : 2026-09-15, après la session de développement initiale
 > (setup, moteur de règles, liseuse PC, import/export PDN, refonte visuelle,
-> corrections d'interaction plateau).
+> corrections d'interaction plateau), suivie d'une 2e session le même jour
+> (renommage DAMICK→Damika, logo/identité visuelle, refonte du dimensionnement
+> responsive du damier/layout, fonctionnalité "Nouvelle partie" — voir
+> `CLAUDE.md` section "Session logo/branding" pour le détail technique).
 
 ## 1. Objectif
 Appli de jeu de dames internationales (10x10), gratuite, fluide et rapide, jouable sur PC et mobile.
@@ -63,7 +66,12 @@ Légende : ✅ fait · 🟡 partiel · ⬜ pas commencé
 - ⬜ Packs de sons personnalisés
 - ✅ Animation de capture stylée (fondu + réduction d'échelle, pas une disparition sèche)
 - ⬜ Partage de position par QR code
-- ✅ Easter egg "Damika" caché (cliquer 5 fois sur "FMJD" dans le pied de page)
+- ✅ Easter egg "Damika" caché (cliquer 5 fois sur le wordmark "DamikA" du header —
+  déplacé du pied de page, retiré, vers le header lors d'une session précédente)
+- ✅ Logo/identité visuelle : losange bronze + wordmark "DamikA" en dégradé (header,
+  favicon, icônes PWA)
+- ✅ Bouton "Nouvelle partie" + logo cliquable, reset complet avec confirmation si
+  coups en cours
 - ⬜ Personnalisation du damier (thèmes de couleurs multiples) — un seul thème "bois" (walnut) pour l'instant, mais le code est structuré pour en ajouter d'autres
 - ⬜ Personnalisation des pions (styles, taille)
 - ✅ Numérotation des cases (notation FMJD 1-50) affichée sur les bords, hors des cases
@@ -108,6 +116,9 @@ Flux : cahier des charges (Claude/Cowork) → code + design (Claude Code) → re
 - [x] Import/export/replay PDN (mono et multi-parties)
 - [x] Compteur de temps implémenté
 - [x] Bandeau joueurs (nom, Elo, titre, score) éditable, refondu en rail latéral
+- [x] Logo + identité visuelle "Damika" (losange bronze, wordmark, header aligné,
+  favicon/icônes PWA)
+- [x] Fonctionnalité "Nouvelle partie" (bouton + logo cliquable, confirmation)
 - [ ] Liseuse PC finalisée à 100% (sons, thèmes, aide clavier, annotations éditables, fichiers récents/favoris, photo joueurs, export image/PDF, partage lien/QR code restent à faire)
 - [ ] Chantier Mobile
 - [ ] IA (étape finale)

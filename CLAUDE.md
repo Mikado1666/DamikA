@@ -6,29 +6,133 @@ pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
 ## État du projet (dernière mise à jour : 2026-09-15)
 
+- **Chantier logo + identité visuelle "Damika" : terminé et validé par Mickaël**
+  (bloc C de `RETOURS_SESSION_2026-09-16.md`, commits `b6ebdbe` → `9d6e931`).
+  Résumé complet dans la section "Session logo/branding" plus bas — renommage
+  DAMICK→Damika, logo (losange bronze + wordmark), refonte du dimensionnement
+  du damier/layout, fonctionnalité "Nouvelle partie".
 - **Chantier visuel post-refonte (blocs A et D de `RETOURS_SESSION_2026-09-16.md`)
   : terminé et validé par Mickaël.** Styles de pions (Classique/Relief/Bois gravé),
-  bloc "Coups joués" compact, footer retiré (easter egg déplacé sur "DAMIKA"),
-  curseur de vitesse ×¼→×8, toggle flèche, compteur de temps intégré au rail
-  joueurs, bannière méta repositionnée, alignement précis de la mise en page
-  (rail gauche / damier / rail droit), et les 2 bugs D1 (import PDN)/D2 (clic
-  case d'arrivée prise multiple) — tous committés (voir `git log`, du commit
-  `fe77c87` à `a05db2d`).
+  bloc "Coups joués" compact, footer retiré (easter egg déplacé sur le wordmark
+  du header, "Nouvelle partie" cette session lui a ajouté un 2e comportement au
+  clic — voir plus bas), curseur de vitesse ×¼→×8, toggle flèche, compteur de
+  temps intégré au rail joueurs, bannière méta repositionnée, alignement précis
+  de la mise en page (rail gauche / damier / rail droit), et les 2 bugs D1
+  (import PDN)/D2 (clic case d'arrivée prise multiple) — tous committés (voir
+  `git log`, du commit `fe77c87` à `a05db2d`).
   - Exception : le 4e style de pion **"Toernooibase" (A2bis) reste non conforme**
     aux images de référence (`reference-pion-toernooibase-1.png`/`-2.png`) et a
     été **retiré du sélecteur** (`PIECE_STYLES` dans `js/render/board.js`) —
     la fonction `drawPieceToernooibase` existe toujours dans le fichier mais
     n'est plus branchée, en attendant une reprise.
-- **Prochain chantier (pas commencé) : logo + typographie "DAMIKA"** (bloc C de
-  `RETOURS_SESSION_2026-09-16.md`), mis de côté par Mickaël pour une exploration
-  visuelle dédiée. Chantier Mobile et IA également en bloc C, pas commencés,
-  phases à part.
+- **Prochain chantier (pas commencé)** : Mobile et IA (bloc C de
+  `RETOURS_SESSION_2026-09-16.md`), phases à part, volontairement pas commencées.
 - **Backlog fonctionnel restant** : voir bloc B de `RETOURS_SESSION_2026-09-16.md`
   (14 points — annotations de coups, exports image/PDF, partage lien/QR,
   fichiers récents, favoris, aide clavier, recherche bibliothèque, photos
   joueurs, sons, réglage durée flèche, mode clair). Pas urgent, à planifier.
   Le `CAHIER_DES_CHARGES.md` est noté comme partiellement obsolète sur ce
   point (thèmes/styles de pions) — à mettre à jour un jour.
+
+## Session logo/branding + dimensionnement du damier (2026-09-15)
+
+Session dédiée au chantier "logo + typographie" laissé en attente, qui a fini
+par couvrir le renommage complet du projet, l'identité visuelle, une refonte
+du dimensionnement responsive du damier/layout, et une nouvelle fonctionnalité.
+Commits `b6ebdbe` → `9d6e931` (9 commits, tous montrés en diff et validés par
+Mickaël avant commit, comme d'habitude).
+
+**Renommage DAMICK → Damika** (`b6ebdbe`) — toutes les occurrences dans le code,
+la doc, le manifest PWA renommées. Vérifié qu'aucune clé `localStorage`
+n'existait avant renommage (rien à migrer).
+
+**Logo et identité visuelle** (`f6d88cb`) — losange bronze évidé (SVG, dégradé
+`linear-gradient(180deg, #ffe9c2 0%, #e0ab5c 35%, #8a5a24 55%, #f0c887 62%,
+#4a2f10 100%)`, polygone extérieur + polygone intérieur plus petit rempli dans
+la couleur de fond) + wordmark "DamikA" en Inter 800, même dégradé appliqué en
+`background-clip:text`. Piège rencontré : le dégradé du texte paraissait "plat"
+tant que `line-height` restait sur sa valeur `normal` (boîte de ligne bien plus
+haute que les glyphes, donc le dégradé 0-100% ne se voyait que dilué sur une
+tranche centrale) — resserré à `line-height:0.72` pour que le dégradé porte sur
+l'encre réelle du texte. Une variante alternative du logo ("Duel", deux pions
+qui se chevauchent) a été prototypée, comparée en side-by-side via un toggle
+temporaire, puis écartée par Mickaël au profit du losange — code du toggle et
+de la variante retirés, ne reste que le losange. Favicon/icônes PWA
+(`icons/icon-192.svg`, `icons/icon-512.svg`) alignés sur le même design.
+
+**Header aligné sur le contenu** (`5110487`) — `.topbar` a été scindé en un
+conteneur externe pleine largeur (fond/bordure) et un `.topbar-inner` calé sur
+le même `max-width`/padding que `.layout`, pour que la gauche du logo tombe
+pile sur la gauche du rail joueurs et la droite des actions sur la droite du
+panneau latéral, à n'importe quelle largeur de fenêtre.
+
+**Dimensionnement responsive du damier** (`1182587` → `62965cf`) — plusieurs
+itérations pour que le damier grossisse correctement ET que les blocs 1/3 se
+collent à lui sans espace mort résiduel, quel que soit le facteur limitant
+(largeur OU hauteur d'écran) :
+- Plafond `.board-wrap` remonté 775px → 950px.
+- `.board-column` n'est plus `flex-grow` (elle remplissait l'espace flex
+  disponible indépendamment de la taille réelle du damier rendu, laissant un
+  espace mort entre les rails et le damier dès que la hauteur d'écran limitait
+  le damier avant sa largeur) — elle épouse maintenant `width: var(--board-px)`,
+  une variable CSS posée sur `:root` par `BoardRenderer.resize()` (taille totale
+  réelle du canvas rendu). `.layout` passe en `justify-content:center` pour
+  centrer le trio rail/damier/panneau comme un bloc dans cette boîte
+  désormais toujours à la bonne taille.
+- `.layout` et `.topbar-inner` partagent la MÊME formule dynamique :
+  `max-width: calc(var(--board-px, 950px) + 268px + 350px + 52px + 48px)`
+  (268 = `.players-rail`, 350 = `.side-panel`, 52 = 2 gaps, 48 = 2× padding
+  horizontal) — une valeur fixe se désynchronisait dès que `--board-px`
+  changeait.
+- **Boucle de dépendance découverte et corrigée** dans `BoardRenderer.resize()` :
+  la largeur disponible était mesurée sur `.board-wrap`, dont la largeur est
+  elle-même bornée par `.board-column` (donc par `--board-px`, la variable
+  qu'on recalcule). Une fois `--board-px` figé sur une petite valeur (ex. un
+  cycle de zoom navigateur qui rétrécit puis regrossit la fenêtre), plus
+  aucune mesure ne pouvait redécouvrir l'espace réellement disponible — le
+  damier restait bloqué en petit indéfiniment. Corrigé en calculant la largeur
+  depuis `#app` (toujours = la fenêtre, hors du cycle) moins les largeurs
+  fixes du rail et du panneau, plutôt que depuis `.board-wrap`. Voir le
+  commentaire en tête de `resize()` dans `board.js` pour le détail complet ;
+  utile à relire avant de retoucher au dimensionnement du damier.
+- Numéros de coordonnées (rangs/colonnes, `_drawCoords()`) : la police
+  grossissait proportionnellement à la taille de case sans plafond — sur les
+  grands damiers désormais atteignables (950px), elle devenait assez grande
+  pour mordre sur le cadre décoratif. Plafonnée à 12px, ancrages repositionnés
+  (rang ancré à droite vers le bord du canvas au lieu de vers le cadre).
+
+**Tailles de police du rail joueurs** (`459d4a5`) — `.meta-chip-event`,
+`.player-name`, `.stat-value`/`.count-value`, etc. agrandies, sans casse de
+mise en page (ellipsis/retour à la ligne déjà en place absorbent les cas
+longs).
+
+**Fonctionnalité "Nouvelle partie"** (`9d6e931`) — bouton dédié dans la topbar
++ logo (icône + wordmark) cliquable, reset complet (`game`/`headers`/sélection
+remis à l'état de chargement initial). Confirmation via une modale custom
+(`.confirm-overlay`/`confirmModal()` dans `main.js`) si des coups sont en
+cours — **jamais `window.confirm()`** : un dialogue natif bloque tout le fil
+JS de la page (constaté en le déclenchant par erreur pendant cette session,
+l'onglet est resté figé jusqu'à sa fermeture). Deux bugs de clic découverts et
+corrigés au passage, à connaître si on retouche le header :
+- `.players-rail` est décalé vers le haut via `transform: translateY(...)`
+  (logique d'alignement vertical existante dans `alignLayout()`, voir plus
+  bas) et son rectangle transformé déborde visuellement **et
+  interactivement** par-dessus le header, interceptant les clics — `.topbar`
+  a maintenant `position:relative; z-index:5` pour rester au-dessus.
+- Le wordmark est du texte sélectionnable : un clic dont le mousedown/mouseup
+  bouge d'un pixel (souris réelle ou automatisée) peut être interprété comme
+  une sélection de texte plutôt qu'un clic, et le navigateur n'émet alors pas
+  l'évènement `click` — corrigé avec `user-select:none` sur `.brand`.
+
+**Piège d'outillage rencontré pendant cette session** (utile si une future
+session utilise l'automatisation navigateur type Claude-in-Chrome) : les
+coordonnées de clic passées à l'outil sont dans l'espace pixel du
+**screenshot renvoyé**, pas dans les pixels CSS réels de la page — sur cette
+machine le screenshot fait ~1456px de large pour une fenêtre réelle de
+~1778px (ratio ~1.22). Pour cliquer une cible précise (le logo, une case du
+damier), mieux vaut soit passer par `getBoundingClientRect()` + diviser par
+ce ratio, soit dispatcher directement un `PointerEvent`/`MouseEvent` de test
+via `javascript_exec` avec les vraies coordonnées CSS.
 
 ## Lancer le projet en local
 
@@ -102,7 +206,15 @@ permanent de la liste des coups et l'export PDN/TXT.
 
 - `BoardRenderer` gère un seul `<canvas>`, redimensionné via `ResizeObserver` sur son
   parent (le plateau se réduit pour tenir dans l'espace disponible, plancher 280px,
-  plafond 775px — voir CSS `.board-wrap`).
+  plafond 950px — voir CSS `.board-wrap`). La largeur disponible n'est PAS lue sur
+  `.board-wrap` mais calculée depuis `#app` moins les largeurs fixes du rail/panneau
+  (pour casser une boucle de dépendance avec `--board-px` — voir "Session
+  logo/branding" plus haut avant de toucher à `resize()`). Un listener `window
+  'resize'` complète le `ResizeObserver` en filet de sécurité (zoom navigateur).
+  `resize()` pose 3 variables CSS sur l'élément `.board-column` (`--frame-px`,
+  `--frame-inset`, consommées par `main.js`/`.controls-bar`) et une sur `:root`
+  (`--board-px`, taille totale du canvas, consommée par `.board-column`/`.layout`/
+  `.topbar-inner` pour que la mise en page épouse la taille réelle du damier).
 - `squareAtFraction(xFrac, yFrac)` convertit une position **relative** (0..1 de la
   boîte du canvas telle qu'affichée) en numéro de case — volontairement indépendant de
   `canvas.width`/`devicePixelRatio` pour éviter tout écart d'arrondi. `main.js` calcule
@@ -135,6 +247,16 @@ permanent de la liste des coups et l'export PDN/TXT.
   convention FMJD — une rafle ne note que départ×arrivée (`27x9`), jamais le chemin
   complet (`27x18x9`). Le chargeur PDN (`loader.js`) accepte les deux formes en import
   (il retombe sur une correspondance par extrémités si le chemin complet ne matche pas).
+- **Ne jamais utiliser `window.confirm()`/`alert()`/`prompt()`** : un dialogue natif
+  bloque tout le fil JS de la page (constaté en le déclenchant par erreur — l'onglet
+  reste figé jusqu'à sa fermeture, y compris pour l'automatisation de test). Utiliser
+  le pattern `confirmModal(message)` (Promise-based, `.confirm-overlay` dans
+  `index.html`) déjà en place pour "Nouvelle partie" — le réutiliser pour toute future
+  confirmation plutôt que d'en recréer un autre.
+- `startNewGame()` est le pattern de référence pour un reset complet de partie :
+  `game = new DraughtsGame()`, `headers = { Event: 'Partie libre' }`,
+  `selectedSquare = null`, puis `syncHeaderFieldsFromState()` + `refreshUI()` — même
+  logique que `loadParsedGame()` mais sans partie à charger.
 
 ## Tester manuellement une position spécifique (sans jouer coup par coup)
 
