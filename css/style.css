@@ -507,14 +507,16 @@ body {
 }
 
 /* ---------- Controls ---------- */
-/* Largeur calée exactement sur celle du damier LUI-MÊME — --cells-px, posée par
-   BoardRenderer.resize() dans board.js à `this.size` (le carré de cases, PAS `px` le
-   canvas entier qui inclut la marge de numérotation) — et centrée dans la colonne
-   (`margin:0 auto` — `.board-column` ne centre plus ses enfants via `align-items`, ça
-   empêchait `.board-wrap` de se voir allouer sa vraie largeur disponible, cf. commentaire
-   sur `.board-wrap`) : damier et bandeau étant centrés sur le même axe horizontal, cette
-   largeur plus étroite que le canvas fait tomber les bords de 2b exactement sur les bords
-   des CASES (retour Mickaël A10, exigence 1 — bloc 2b = largeur exacte du bloc 2a). */
+/* Largeur calée exactement sur celle du damier LUI-MÊME — --frame-px, posée par
+   BoardRenderer.resize() dans board.js à `this.size + 16` : la largeur du CADRE
+   DÉCORATIF dessiné par _drawFrame() (le bord visuellement le plus évident du plateau,
+   confirmé par Mickaël comme référence — pas le carré de cases seul, plus étroit de 8px
+   de chaque côté, ni `px` le canvas entier avec la marge des numéros, plus large) — et
+   centrée dans la colonne (`margin:0 auto` — `.board-column` ne centre plus ses enfants
+   via `align-items`, ça empêchait `.board-wrap` de se voir allouer sa vraie largeur
+   disponible, cf. commentaire sur `.board-wrap`) : damier et bandeau étant centrés sur le
+   même axe horizontal, cette largeur fait tomber les bords de 2b exactement sur les bords
+   du CADRE (retour Mickaël A10, exigence 1 — bloc 2b = largeur exacte du bloc 2a). */
 .controls-bar {
   display: flex;
   align-items: center;
@@ -524,7 +526,7 @@ body {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
   padding: 10px;
-  width: var(--cells-px, 100%);
+  width: var(--frame-px, 100%);
   max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -585,7 +587,7 @@ body {
   font-size: 15.5px;
   color: var(--text-2);
   letter-spacing: 0.02em;
-  width: var(--cells-px, 100%);
+  width: var(--frame-px, 100%);
   max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -616,8 +618,15 @@ body {
   padding: 7px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr;
+  /* align-content: normal se comporte comme stretch dans une grille — avec peu de coups
+     joués, la (ou les) ligne(s) s'étirent sur toute la hauteur du panneau au lieu de
+     rester compactes en haut. C'est un défaut CSS générique de la grille elle-même, pas
+     lié à la fonctionnalité "commentaire de coup" annulée par ailleurs (A3) — on le
+     corrige indépendamment (retour Mickaël, capture à l'appui : "grand bloc jaune vide"). */
+  align-content: start;
   gap: 1px;
 }
 .move-row {

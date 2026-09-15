@@ -670,9 +670,16 @@ function alignLayout() {
 
   const canvasRect = canvas.getBoundingClientRect();
   const panelTabsRect = el.panelTabs.getBoundingClientRect();
-  // Exigence 2 : le haut du damier (bloc 2a, le canvas lui-même) doit tomber exactement
-  // sur le haut du bloc 3 (haut des onglets Coups joués/Bibliothèque).
-  const deltaTop = panelTabsRect.top - canvasRect.top;
+  // Exigence 2 : le haut du CADRE DÉCORATIF (bloc 2a — retour Mickaël, même référence que
+  // l'exigence 1 : le bord visuellement le plus évident du plateau, pas le canvas complet
+  // ni le carré de cases seul) doit tomber exactement sur le haut du bloc 3. Le cadre est
+  // inséré de `--frame-inset` par rapport au bord du canvas (posé par board.js, cf.
+  // _drawFrame()) — sans ce décalage on alignait le bord du CANVAS (qui inclut une marge
+  // vide de plus par-dessus le cadre) sur le bloc 3, ce qui plaçait le cadre visible trop
+  // bas et ne semblait "pas appliqué" à l'écran malgré un delta calculé correctement.
+  const frameInset = parseFloat(getComputedStyle(document.querySelector('.board-column')).getPropertyValue('--frame-inset')) || 0;
+  const frameTop = canvasRect.top + frameInset;
+  const deltaTop = panelTabsRect.top - frameTop;
   el.boardWrap.style.transform = `translateY(${deltaTop}px)`;
 
   // Exigence 3 : le milieu de l'écart entre les cartes Noirs/Blancs (bloc 1) doit tomber
@@ -688,7 +695,7 @@ function alignLayout() {
 }
 
 // Recalculé à chaque changement de taille du damier (redimensionnement de fenêtre) — même
-// signal que celui qui pilote déjà `--cells-px` dans board.js — ainsi qu'à chaque
+// signal que celui qui pilote déjà `--frame-px` dans board.js — ainsi qu'à chaque
 // changement de hauteur des cartes joueurs ou du bandeau d'onglets (ex. un nom de joueur
 // qui passe sur 2 lignes).
 const layoutResizeObserver = new ResizeObserver(() => alignLayout());

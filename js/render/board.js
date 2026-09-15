@@ -17,11 +17,14 @@ const DEFAULT_BOARD_THEME = 'bois';
 // Styles de pièces — chaque entrée référence sa fonction de rendu (déclarations `function`
 // plus bas dans ce fichier ; le hoisting les rend disponibles ici). "Classique" reste le
 // style par défaut.
+// "Toernooibase" (drawPieceToernooibase, plus bas) reste délibérément absent de cette
+// carte : le rendu n'est toujours pas conforme aux images de référence (A2bis, retour
+// Mickaël) et ne doit pas être sélectionnable tant qu'il n'a pas été revu — la fonction
+// est conservée intacte pour ne pas perdre ce travail en attendant la prochaine passe.
 export const PIECE_STYLES = {
   classique: { label: 'Classique', render: drawPieceClassique },
   relief: { label: 'Relief', render: drawPieceRelief },
   boisGrave: { label: 'Bois gravé', render: drawPieceWood },
-  toernooibase: { label: 'Toernooibase', render: drawPieceToernooibase },
 };
 const DEFAULT_PIECE_STYLE = 'classique';
 
@@ -77,17 +80,21 @@ export class BoardRenderer {
     this.canvas.style.height = px + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.cell = this.size / 10;
-    // Le bandeau de contrôles et la ligne de statut se calent sur --cells-px (retour
-    // Mickaël A10, exigence 1) : la largeur de RÉFÉRENCE est celle du damier lui-même
-    // (le carré de cases, `this.size`), PAS `px` (le canvas entier, qui inclut la marge
-    // réservée à la numérotation de chaque côté) — sans quoi le bandeau matchait la
-    // largeur du canvas complet, débordant de LABEL_MARGIN de chaque côté au-delà des
-    // cases visibles. Damier (canvas, centré) et bandeau (centré via margin:auto) étant
-    // centrés sur le même axe horizontal dans `.board-column`, utiliser une largeur plus
-    // étroite (this.size < px) pour le bandeau le fait automatiquement s'aligner
-    // exactement sur les bords des CASES, pas sur les bords du canvas.
+    // Le bandeau de contrôles et la ligne de statut se calent sur --frame-px (retour
+    // Mickaël A10, exigence 1 — 2e passe) : la largeur de RÉFÉRENCE pour "le damier"
+    // (bloc 2a) est celle du CADRE DÉCORATIF dessiné par _drawFrame() — le bord
+    // visuellement le plus évident pour l'œil — PAS le carré de cases seul (this.size,
+    // 1re tentative, trop étroit) ni `px` (le canvas entier avec la marge des numéros,
+    // trop large). _drawFrame() dessine ce cadre en `roundRect(LABEL_MARGIN-8,
+    // LABEL_MARGIN-8, this.size+16, this.size+16, …)` : il déborde de 8px de chaque côté
+    // des cases, inséré de LABEL_MARGIN-8 par rapport au bord du canvas. --frame-inset
+    // (même valeur) permet à main.js de retrouver ce même décalage pour l'alignement
+    // vertical (exigence 2), sans dupliquer la constante LABEL_MARGIN ailleurs.
     const boardColumn = this.canvas.closest('.board-column');
-    if (boardColumn) boardColumn.style.setProperty('--cells-px', `${this.size}px`);
+    if (boardColumn) {
+      boardColumn.style.setProperty('--frame-px', `${this.size + 16}px`);
+      boardColumn.style.setProperty('--frame-inset', `${LABEL_MARGIN - 8}px`);
+    }
     this.render();
   }
 
