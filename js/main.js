@@ -346,7 +346,28 @@ function stopAutoplay() {
 function scheduleAutoplayStep() {
   if (!isPlaying) return;
   if (game.future.length === 0) { stopAutoplay(); return; }
-  autoplayTimer = setTimeout(() => {
+  autoplayTimer = setTimeout(async () => {
+    // Ne pas démarrer un nouveau coup si l'utilisateur a arrêté la lecture pendant
+    // la pause (mais un coup déjà entamé — voir plus bas — va jusqu'au bout une fois
+    // son animation lancée, pour éviter qu'une pièce s'arrête visuellement à mi-chemin).
+    if (!isPlaying || game.future.length === 0) return;
+    // La pile `future` contient encore le coup à venir tel que joué à l'origine — on
+    // l'anime AVANT de faire avancer l'état du moteur (`game.redo()`), exactement comme
+    // le fait `playMove()` pour un coup joué à la souris. Auparavant cette boucle
+    // appelait `game.redo()` puis `refreshUI()` directement, sans jamais passer par
+    // `renderer.animateMove()` : la pièce sautait instantanément d'une case à l'autre en
+    // lecture automatique, quelle que soit la vitesse choisie (retour Mickaël A6, bug
+    // distinct découvert après validation du curseur).
+    const moveInfo = game.future[game.future.length - 1].move;
+    const path = moveInfo.type === 'capture'
+      ? [moveInfo.from, ...moveInfo.path]
+      : [moveInfo.from, moveInfo.to];
+    const capturedPieces = moveInfo.type === 'capture'
+      ? moveInfo.captured.map(sq => ({ square: sq, piece: game.board[sq] }))
+      : [];
+    isAnimating = true;
+    await renderer.animateMove({ path, piece: moveInfo.piece, capturedPieces });
+    isAnimating = false;
     game.redo();
     refreshUI();
     if (game.future.length === 0) stopAutoplay();

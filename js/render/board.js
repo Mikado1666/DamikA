@@ -609,11 +609,13 @@ function drawPieceWood(ctx, cx, cy, r, piece, opts = {}) {
   ctx.restore();
 }
 
-// Style "Toernooibase" — 4e style de pion (retour Mickaël A2bis), motif "cible"/médaille
-// à anneaux concentriques plats et réguliers, sans dégradé 3D ni gravure bois. Dessiné
-// d'après `reference-pion-toernooibase-1.png` (pion) et `reference-pion-toernooibase-2.png`
-// (dame — anneau central dédoublé) : pas de code source fourni pour ce style, contrairement
-// aux 3 autres, donc pas de portage, une interprétation directe des deux images.
+// Style "Toernooibase" — 4e style de pion (retour Mickaël A2bis). 1re tentative non
+// conforme aux images de référence : ce n'est PAS une cible plate à alternance de teintes,
+// c'est un empilement d'anneaux BOMBÉS (chacun son propre reflet), tous éclairés depuis la
+// même direction (clair en haut-gauche, sombre en bas-droite) — d'où le dégradé conique
+// partagé, réappliqué à chaque anneau, plutôt qu'une alternance de couleurs par bague.
+// Voir `reference-pion-toernooibase-1.png` (pion) / `-2.png` (dame — anneaux centraux
+// dédoublés), comparées directement avant cette 2e passe.
 function drawPieceToernooibase(ctx, cx, cy, r, piece, opts = {}) {
   const { alpha = 1, scale = 1 } = opts;
   const radius = r * scale;
@@ -622,51 +624,58 @@ function drawPieceToernooibase(ctx, cx, cy, r, piece, opts = {}) {
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  // Ombre portée légère (médaille plate posée sur le plateau, pas de relief 3D)
+  // Ombre portée
   ctx.beginPath();
-  ctx.ellipse(cx, cy + radius * 0.18, radius * 0.88, radius * 0.5, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.ellipse(cx, cy + radius * 0.2, radius * 0.92, radius * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fill();
 
-  const base = isWhite ? '#d9a839' : '#1c1c1c';
-  const ringDark = isWhite ? '#a9760f' : '#000000';
-  const ringLight = isWhite ? '#eccb70' : '#3c3c3c';
-  const rim = isWhite ? '#7a5a0c' : '#000000';
+  const hi = isWhite ? '#fbe6a0' : '#5c5c5c';
+  const lo = isWhite ? '#8a5c10' : '#000000';
+  const groove = isWhite ? '#5a3a08' : '#000000';
 
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fillStyle = base;
-  ctx.fill();
-  ctx.lineWidth = Math.max(1, radius * 0.07);
-  ctx.strokeStyle = rim;
-  ctx.stroke();
+  // Éclairage conique constant (même direction pour tous les anneaux) : c'est ce qui
+  // donne l'aspect "empilement de bourrelets" — une pente lumineuse identique répétée à
+  // chaque rayon, séparée par de fines rainures, plutôt qu'un dégradé radial unique
+  // (Relief) ou une gravure creusée (Bois gravé).
+  const conic = ctx.createConicGradient(-Math.PI * 0.75, cx, cy);
+  conic.addColorStop(0, hi);
+  conic.addColorStop(0.5, lo);
+  conic.addColorStop(1, hi);
 
-  // Anneaux concentriques plats, alternance claire/foncée (motif cible)
-  [0.82, 0.62, 0.42].forEach((f, i) => {
+  [1, 0.8, 0.6, 0.4].forEach((f) => {
     ctx.beginPath();
     ctx.arc(cx, cy, radius * f, 0, Math.PI * 2);
-    ctx.strokeStyle = i % 2 === 0 ? ringDark : ringLight;
-    ctx.lineWidth = Math.max(1, radius * 0.06);
+    ctx.fillStyle = conic;
+    ctx.fill();
+    ctx.lineWidth = Math.max(0.75, radius * 0.018);
+    ctx.strokeStyle = groove;
+    ctx.globalAlpha = alpha * 0.6;
     ctx.stroke();
+    ctx.globalAlpha = alpha;
   });
 
   if (piece.king) {
-    // Anneau central dédoublé (référence image 2) au lieu du glyphe couronne habituel.
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.24, 0, Math.PI * 2);
-    ctx.strokeStyle = ringLight;
-    ctx.lineWidth = Math.max(1, radius * 0.05);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.13, 0, Math.PI * 2);
-    ctx.strokeStyle = ringDark;
-    ctx.lineWidth = Math.max(1, radius * 0.05);
-    ctx.stroke();
+    // Anneaux centraux dédoublés (référence image 2) au lieu du glyphe couronne habituel.
+    [0.24, 0.14].forEach((f) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * f, 0, Math.PI * 2);
+      ctx.strokeStyle = groove;
+      ctx.lineWidth = Math.max(1, radius * 0.03);
+      ctx.globalAlpha = alpha * 0.75;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    });
   } else {
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.2, 0, Math.PI * 2);
-    ctx.fillStyle = ringDark;
+    ctx.arc(cx, cy, radius * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = conic;
     ctx.fill();
+    ctx.lineWidth = Math.max(0.75, radius * 0.018);
+    ctx.strokeStyle = groove;
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
   }
 
   ctx.restore();

@@ -310,7 +310,6 @@ body {
   flex: 1 1 660px;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 12px;
   min-width: 360px;
   min-height: 0;
@@ -473,12 +472,22 @@ body {
 }
 
 .board-wrap {
-  flex: 0 1 auto;
-  width: auto;
+  /* Pas d'aspect-ratio ici : le carré vient du canvas lui-même (BoardRenderer.resize()
+     calcule Math.min(clientWidth, clientHeight) et fixe la taille CSS du canvas en
+     conséquence). `.board-wrap` n'est qu'une boîte de bornage — largeur ET hauteur
+     doivent chacune être capées indépendamment à 775px OU à l'espace réellement
+     disponible dans `.board-column` (100%), quelle que soit la dimension qui limite.
+     Avec `width:auto` + `height:100%` + `aspect-ratio:1/1` (version précédente), la
+     largeur ne dépendait QUE de la hauteur disponible et jamais de la largeur réelle
+     de la colonne : le damier pouvait s'afficher plus large que sa colonne et déborder
+     du bandeau de contrôles en dessous, qui lui respecte la largeur réelle de son
+     conteneur (retour Mickaël A10, alignement toujours faux après correction du
+     chevauchement). */
+  flex: 1 1 auto;
+  width: 100%;
   height: 100%;
   max-width: 775px;
   max-height: 775px;
-  aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -499,9 +508,11 @@ body {
 
 /* ---------- Controls ---------- */
 /* Largeur calée exactement sur celle du damier (--board-px, posée par BoardRenderer.resize()
-   dans board.js) et centrée dans la colonne : auparavant `.board-column` étirait ce bandeau
-   sur toute sa largeur, indépendamment de la largeur réelle du damier affiché, d'où un
-   désalignement des bords gauche/droit (retour Mickaël A10). */
+   dans board.js) et centrée dans la colonne (`margin:0 auto` — `.board-column` ne centre
+   plus ses enfants via `align-items`, ça empêchait `.board-wrap` de se voir allouer sa
+   vraie largeur disponible, cf. commentaire sur `.board-wrap`) : auparavant `.board-column`
+   étirait ce bandeau sur toute sa largeur, indépendamment de la largeur réelle du damier
+   affiché, d'où un désalignement des bords gauche/droit (retour Mickaël A10). */
 .controls-bar {
   display: flex;
   align-items: center;
@@ -513,6 +524,7 @@ body {
   padding: 10px;
   width: var(--board-px, 100%);
   max-width: 100%;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 .ctrl-btn {
@@ -573,6 +585,7 @@ body {
   letter-spacing: 0.02em;
   width: var(--board-px, 100%);
   max-width: 100%;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
