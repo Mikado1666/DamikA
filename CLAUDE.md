@@ -4,7 +4,20 @@ PWA de dames internationales 10x10 (FMJD), vanilla JS (ES modules natifs, pas de
 build step, pas de framework), rendu plateau en Canvas 2D. Voir `CAHIER_DES_CHARGES.md`
 pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
-## État du projet (dernière mise à jour : 2026-09-15)
+## État du projet (dernière mise à jour : 2026-09-16)
+
+- **Résumé de la session du 2026-09-16** (voir les sections dédiées plus bas pour le détail
+  de chacun) : chantier "Bibliothèque persistante" (localStorage, Sauvegarder/Ouvrir/import
+  append vs remplace) ; chantier "commentaire de coup" (A3) repris avec un popover flottant,
+  persistance PDN complète ; chantier "Bloc 1 premium" (cartes joueurs) avec la piste
+  visuelle "Plaque tournoi", upload/URL de photo, cadre portrait (pas cercle) ; registre
+  photo joueur avec correspondance tolérante nom→photo et pré-remplissage automatique
+  (`data/player-photos.json`, scripts Node de résolution Toernooibase, puis backend
+  Cloudflare Worker en remplacement direct depuis l'app) ; corrections de bugs sur un vrai
+  export Toernooibase brut (en-têtes sans guillemets, tag `WhiteRating`/`BlackRating`, URL
+  de photo mal formée) et sur la synchronisation Bibliothèque ↔ Bloc 1. Tout testé en
+  navigateur à chaque étape (voir sections correspondantes), pas seulement écrit puis
+  supposé fonctionnel.
 
 - **Chantier logo + identité visuelle "Damika" : terminé et validé par Mickaël**
   (bloc C de `RETOURS_SESSION_2026-09-16.md`, commits `b6ebdbe` → `9d6e931`).
@@ -25,12 +38,147 @@ pour la spec fonctionnelle complète et l'état d'avancement détaillé.
     été **retiré du sélecteur** (`PIECE_STYLES` dans `js/render/board.js`) —
     la fonction `drawPieceToernooibase` existe toujours dans le fichier mais
     n'est plus branchée, en attendant une reprise.
+- **Chantier "Bibliothèque persistante" : terminé et validé par Mickaël** (tests
+  navigateur save/open library du 2026-09-16). Persistance automatique en
+  localStorage (clé `damika:library-state` — texte PDN complet de la
+  bibliothèque, index actif, PDN de la partie en cours, flag `libraryDirty`),
+  restauration automatique au chargement, boutons "Sauvegarder"/"Ouvrir" pour
+  gérer la bibliothèque comme un fichier `.pdn` multi-parties (via
+  `serializeLibraryToPdn`/`serializeLibraryEntryToPdn` dans
+  `js/pdn/serializer.js`, nouveau module `js/pdn/storage.js`), garde-fou
+  `confirmModal()` avant tout remplacement de bibliothèque non sauvegardée
+  (bouton "Ouvrir", et coller presse-papier — corrigé au passage, il écrasait
+  la bibliothèque sans confirmation avant cette session). Le bouton "Importer"
+  existant est resté un **ajout** à la bibliothèque active (comportement
+  distinct de "Ouvrir une bibliothèque", qui **remplace**). Au passage,
+  `confirmModal(message, okLabel)` accepte maintenant un libellé de bouton
+  explicite — avant cette session le bouton OK affichait toujours "Nouvelle
+  partie" quel que soit le contexte (résidu du premier usage de la modale),
+  ce qui aurait été trompeur pour les nouveaux garde-fous bibliothèque.
+  **Bug corrigé** : après un AJOUT à la bibliothèque (Importer en mode append,
+  Ajouter la partie, Coller — ce dernier remplace toute la bibliothèque mais
+  peut apporter plusieurs parties d'un coup), la DERNIÈRE partie ajoutée doit
+  systématiquement devenir l'entrée active (affichée + surlignée), jamais
+  laisser l'ancienne partie affichée sans rapport avec ce qui vient d'être
+  ajouté. `importFiles()` en mode append oubliait de le faire quand la
+  bibliothèque n'était pas vide (`libraryActiveIndex`/`loadParsedGame()`
+  seulement dans la branche `wasEmpty`) ; `pastePdnText()` sélectionnait le
+  PREMIER jeu collé (`games[0]`) au lieu du dernier. Corrigé dans les deux :
+  `libraryActiveIndex = library.length - 1` (ou `games.length - 1`) +
+  `loadParsedGame()` systématiques après un ajout. Vérifié sur les 3 points
+  d'entrée (Importer sur bibliothèque non vide, Ajouter la partie, Coller
+  multi-parties).
+  Complété ensuite par : un raccourci Ctrl+V dans la zone "Coups joués"
+  (`#move-list`, rendue focusable via `tabindex="0"`, écouteur `paste` natif
+  lisant `e.clipboardData` plutôt que `navigator.clipboard.readText()` —
+  inspiré de Turbo Dambase, réutilise la même fonction `pastePdnText()` que le
+  bouton "Coller" donc même garde-fou/mêmes messages) ; un bouton "➕ Ajouter
+  la partie" (`btnLibraryAddCurrent` dans l'onglet Bibliothèque) qui ajoute la
+  partie actuellement affichée à la bibliothèque active sans passer par un
+  export/réimport manuel ; et un libellé explicite sur "💾 Sauvegarder la
+  bibliothèque"/"📁 Ouvrir une bibliothèque" (uniquement visibles dans l'onglet
+  **Bibliothèque** du panneau latéral, pas dans la barre du haut — à
+  distinguer des boutons "Importer"/"Exporter" de la barre du haut qui eux
+  agissent sur une seule partie). Puis par : suppression d'une entrée (icône
+  "✕" visible au survol de la ligne — `.library-item-delete`, opacity 0→1 en
+  CSS plutôt qu'une rangée d'icônes permanente — garde-fou `confirmModal()`
+  systématique, définitif, pas d'undo bibliothèque ; si l'entrée supprimée
+  était l'active, sélection de celle qui prend sa place dans la liste, ou
+  reset vers une partie libre si la bibliothèque devient vide —
+  `deleteLibraryEntry()`) et renommage inline d'une entrée (double-clic sur le
+  titre → `<input>` de remplacement, `startRenameLibraryEntry()` — stocké dans
+  un en-tête PDN non standard `headers.Label`, plutôt qu'une propriété JS à
+  part, pour survivre à Sauvegarder/Ouvrir/localStorage sans changement de
+  format puisque `serializeLibraryEntryToPdn`/`parsePdn` traitent déjà tout
+  en-tête présent génériquement).
+  **Piège rencontré et corrigé** : le premier jet du clic de sélection sur une
+  entrée appelait `renderLibrary()` (reconstruction complète de la liste),
+  ce qui détruisait le nœud DOM du titre entre les deux clics d'un
+  double-clic — le second clic atterrissait alors sur un titre déjà remplacé/
+  détaché, et le navigateur retombait sur son comportement par défaut
+  (sélection de texte) au lieu de déclencher `dblclick` sur le bon élément.
+  Corrigé en ne faisant plus qu'un simple bascule de la classe `.active` (pas
+  de reconstruction DOM) sur un clic de sélection — `renderLibrary()` n'est
+  appelé que quand le contenu de la bibliothèque change réellement (ajout,
+  suppression, renommage validé, import...). À garder en tête pour toute
+  future logique de clic/double-clic sur une liste reconstruite dynamiquement.
+- **Chantier "commentaire de coup" (A3) repris et terminé : validé.** Contrairement
+  à la 1ʳᵉ version (`8d8f33b`, retirée dans `64d7e8b` — bloc "Coups joués" +
+  textarea fixe jugé inesthétique par Mickaël), cette reprise change de
+  placement plutôt que de retenter le même bloc permanent : popover flottant
+  (`position: fixed`, positionné en JS près de l'icône cliquée), déclenché par
+  une icône dédiée (`.move-comment-toggle`) à côté de chaque coup dans
+  `#move-list` — distincte du texte du coup, qui garde son clic "aller à ce
+  coup" existant (`jumpToPly`).
+  **2ᵉ itération suite à retour Mickaël** (l'icône « discrète » à opacity 0.3
+  restait visible sur CHAQUE coup et polluait la liste) : plus aucune icône
+  visible par défaut sur un coup sans commentaire ; un coup commenté porte un
+  marquage fort et permanent (`.move-ply-text.has-comment` : soulignement
+  doré + `.move-comment-dot` : point plein doré "●", toujours visible), pour
+  un repérage en un coup d'œil en scannant toute la liste. Popover aussi
+  élargi (220px→320px, textarea 3→7 lignes, `resize: vertical`).
+  **3ᵉ itération** (même retour, cette fois sur le déclencheur "ajouter" —
+  même agrandi, un pictogramme restait moins lisible qu'un texte explicite) :
+  remplacé par un lien texte flottant `.move-comment-hint` ("+ Ajouter un
+  commentaire" / "Modifier le commentaire" si déjà présent), révélé
+  uniquement au survol de la ligne (`.move-ply:hover .move-comment-hint`).
+  Positionné en CSS pur, PAS en JS comme le popover lui-même : reste un
+  descendant DOM de `.move-ply`.
+  **4ᵉ itération (bug bloquant constaté par Mickaël)** : le premier jet de ce
+  lien démarrait `top: 100%; margin-top: 2px` — donc 2px SOUS la ligne. En
+  déplaçant le curseur vers le lien pour cliquer, ce petit espace mort faisait
+  retomber le survol sur la ligne SUIVANTE (qui a son propre déclencheur),
+  coupant le `:hover` d'origine avant même d'atteindre le lien — **impossible
+  à cliquer en pratique**, alors qu'un survol statique donnait l'impression
+  que ça marchait. Corrigé en supprimant tout écart : le lien démarre
+  désormais exactement à `top: 0; left: 0` (coïncide avec la boîte de
+  `.move-ply` lui-même, aucun pixel à traverser) et s'étend en largeur
+  PAR-DESSUS le coup et, si besoin, sur la cellule voisine DE LA MÊME ligne —
+  jamais sur la ligne du dessous (contrainte explicite de Mickaël). Comme il
+  occupe dès l'apparition exactement la zone déjà survolée, il n'y a plus de
+  transition de survol à négocier. Ancré à gauche par défaut, à droite pour
+  un coup Noirs (`.move-ply-black`, idx impair, grandit vers la gauche) pour
+  ne jamais déborder du panneau (~350px). Vérifié en testant un vrai
+  déplacement de curseur (survol → décalage → clic) avant de considérer le
+  correctif validé, pas juste un survol statique — le bug précédent n'était
+  visible qu'en mouvement.
+  - **Stockage** : `comment` attaché directement aux entrées `history`/`future`
+    de `DraughtsGame` (`js/engine/rules.js`), pas une `Map` externe indexée par
+    ply comme dans `8d8f33b` — voyage tout seul avec son entrée au fil des
+    `undo()`/`redo()`. Accès via `game.getCommentAt(idx)`/`setCommentAt(idx, texte)`,
+    idx = même indexation que `fullMoveList()` (history puis future inversé).
+  - **Persistance PDN complète** : `pdn/loader.js` reporte désormais
+    `mv.comment` sur l'entrée d'historique au rejeu (`setCommentAt`) au lieu de
+    le jeter comme avant cette session ; `serializer.js`
+    (`serializeToPdn`/`serializeLibraryEntryToPdn`) réécrit le commentaire.
+    S'intègre gratuitement au chantier bibliothèque persistante déjà en place
+    (Sauvegarder/Ouvrir/localStorage transportent les commentaires sans code
+    dédié supplémentaire).
+  - **Piège de convention découvert et corrigé pendant cette session** : le
+    tokenizer PDN (`parser.js`, `pendingComment`) attache un commentaire
+    `{ ... }` au **prochain** token 'move' qu'il rencontre après lui —
+    convention "commentaire AVANT le coup qu'il annote" (`{note} 32-28`), pas
+    après. Un premier essai qui écrivait `notation {commentaire}` (après)
+    cassait le round-trip : au rechargement, le commentaire se retrouvait
+    silencieusement réattribué au coup SUIVANT. Corrigé dans `appendComment()`
+    (serializer.js) pour écrire `{commentaire} notation` (avant) — vérifié
+    stable sur plusieurs cycles sauvegarde/rechargement. À charge pour toute
+    future modification touchant à l'écriture de commentaires PDN de
+    respecter cette convention prefix, pas la convention "suffixe" plus
+    intuitive à première vue.
+  - **Piège récurrent réappliqué** : `TEXTAREA` ajouté à la liste des tags
+    exclus du raccourci clavier global (`window.addEventListener('keydown', ...)`)
+    — son absence avait déjà causé le bug historique "Espace avalé par la
+    lecture auto" documenté dans `f2def34`/`64d7e8b` sur la 1ʳᵉ version de cette
+    fonctionnalité ; le popover a son propre `stopPropagation()` sur `keydown`
+    en plus, en défense en profondeur.
 - **Prochain chantier (pas commencé)** : Mobile et IA (bloc C de
   `RETOURS_SESSION_2026-09-16.md`), phases à part, volontairement pas commencées.
 - **Backlog fonctionnel restant** : voir bloc B de `RETOURS_SESSION_2026-09-16.md`
-  (14 points — annotations de coups, exports image/PDF, partage lien/QR,
-  fichiers récents, favoris, aide clavier, recherche bibliothèque, photos
-  joueurs, sons, réglage durée flèche, mode clair). Pas urgent, à planifier.
+  (14 points — exports image/PDF, partage lien/QR, fichiers récents, favoris,
+  aide clavier, recherche bibliothèque, photos joueurs, sons, réglage durée
+  flèche, mode clair — annotations de coups et bibliothèque de parties sortis
+  de cette liste, traités séparément ci-dessus). Pas urgent, à planifier.
   Le `CAHIER_DES_CHARGES.md` est noté comme partiellement obsolète sur ce
   point (thèmes/styles de pions) — à mettre à jour un jour.
 
@@ -289,6 +437,300 @@ Utile aussi pour du debug ad hoc : un second listener `damika:dump` qui répond 
 `damika:dumpResult` avec l'état interne (`selectedSquare`, `game.legalMoves`, etc.)
 permet d'inspecter l'état sans passer par le DOM. Toujours nettoyer ces écouteurs de
 debug avant de committer — ils n'ont rien à faire en production.
+
+## Bug corrigé : troncature du nom de joueur (Bloc 1)
+
+`.player-name` tronquait les noms longs avec "…" (`white-space:nowrap` +
+`text-overflow:ellipsis`) alors que `textContent` contenait déjà le nom
+complet (`main.js:572-573`) — uniquement un problème d'affichage CSS. Corrigé
+en autorisant le retour à la ligne (`white-space:normal; overflow-wrap:
+break-word`) plutôt qu'en réduisant la police dynamiquement (pas de JS
+nécessaire). Sans risque pour l'alignement du damier : `alignLayout()`
+anticipait déjà ce cas exact via son `ResizeObserver` sur `.blackCard`/
+`.whiteCard` (commentaire présent de longue date : "un nom de joueur qui
+passe sur 2 lignes"). Testé avec des noms longs réels (virgule + tirets) —
+plus de troncature, alignement intact.
+
+## Chantier "Bloc 1 premium" (cartes joueurs) : terminé et validé
+
+Piste visuelle **B "Plaque tournoi"** retenue par Mickaël parmi 3 prototypées et comparées
+dans un artifact avant codage (bordure dorée pleine, avatar circulaire à anneau conique
+façon médaille, badge Elo façon pastille de classement ancré en haut à droite de la carte,
+tag couleur "Noirs"/"Blancs" à côté du nom, stats Score/Pions en pilules avec icône ♛/●).
+CSS : `.player-card`/`.player-avatar-ring`/`.elo-badge`/`.side-tag`/`.stat-block` dans
+`style.css`. Les sélecteurs déjà utilisés par `main.js` (`.meta-field[data-field=...]`,
+`.stat-value[data-field=...]`, `#count-white`/`#count-black`) ont été conservés tels quels
+sous le nouveau capot visuel — aucun changement de logique JS pour l'Elo/Titre/Score/Pions,
+seulement la mise en page CSS autour.
+
+**Photo de joueur** (upload + URL, remplace l'avatar lettré par défaut) :
+- Clic sur l'anneau d'avatar (`.player-avatar-ring`, un `<button>`) ouvre un popover
+  flottant (même mécanique de positionnement JS que le popover de commentaire de coup) avec
+  deux voies : fichier local ou URL externe.
+- **Fichier local** : compressé/recadré en carré via `<canvas>` (160×160, JPEG qualité 0.8,
+  `compressImageFile()`) avant stockage — descend de plusieurs Mo à ~15-30 Ko, négligeable
+  pour `localStorage`.
+- **URL externe (ex. Toernooibase)** : stockée telle quelle, SANS compression — un
+  `<canvas>` ne peut pas relire une image cross-origin sans en-têtes CORS que ces sites ne
+  fournissent pas (`canvas.toDataURL()` échouerait, canvas "taint"). L'`<img>` l'affiche
+  directement sans ce problème (le CORS ne bloque que la *lecture* par JS, pas l'affichage).
+  `onerror` sur cet `<img>` retombe automatiquement sur l'avatar lettré si l'URL devient
+  injoignable (site down, image déplacée), avec un toast d'erreur.
+- **Registre nom → photo** (`localStorage`, clé `damika:player-photo-registry`), PAS lié à
+  une partie ou une bibliothèque précise : indexé par la valeur BRUTE de
+  `headers.White`/`Black` (avec la virgule "Nom, Prénom" telle que le PDN l'encode, pas la
+  version affichée sans virgule) — une fois une photo associée à un nom, elle réapparaît
+  automatiquement pour toute future partie référençant ce même nom, sans ressaisie.
+  Choix assumé faute de mieux : **aucun identifiant Toernooibase n'existe dans les PDN**
+  standards (vérifié via la spec PDN 3.0 — seul `WhiteFmjdId`/`BlackFmjdId`, un ID FMJD
+  international différent, existe — et via un exemple réel de PDN KNDB/Turbo Dambase
+  partagé sur le forum FFJD, qui ne contient que `[White "Nom, Prénom"]` en texte brut) ;
+  le matching par nom est d'ailleurs exactement ce que fait l'outil externe "Toernooibase
+  naar Turbo Dambase Converter". Un automatisme complet (déduire l'URL de la photo depuis
+  un ID joueur) n'est donc pas possible en JS pur, ni en scrapant la fiche Toernooibase
+  (bloqué CORS, pas de backend sur ce projet par conception).
+- **Piège CSS rencontré et corrigé** : `.player-photo-popover { display: flex; ... }`
+  (propriété `display` déclarée explicitement) primait sur la règle UA `[hidden]{display:
+  none}` — même spécificité (0,1,0), et un rôle auteur l'emporte toujours sur l'UA à
+  spécificité égale. Le popover s'affichait donc au chargement de la page malgré l'attribut
+  `hidden`. Corrigé en ajoutant `.player-photo-popover[hidden] { display: none; }` explicite,
+  comme le reste des overlays de ce fichier (`.dropdown-menu[hidden]`, `.toast[hidden]`,
+  etc.) — **tout nouvel élément `[hidden]` qui déclare sa propre propriété `display` doit
+  systématiquement avoir cette règle jumelle**, sinon le même piège se reproduira (le
+  popover de commentaire de coup n'y avait pas été exposé uniquement parce qu'il ne déclare
+  pas `display` du tout, laissant l'UA `[hidden]` s'appliquer sans concurrent).
+
+## Script ponctuel : pré-remplissage photos Toernooibase (terminé, étapes 1 et 2)
+
+`scripts/fetch-toernooibase-photos.mjs` — Node.js, exécuté à la main en développement,
+**jamais intégré à l'appli** (aucune restriction CORS côté Node, contrairement au
+navigateur). Généraliste : liste de joueurs fournie à l'exécution (paires `"Nom" SpId` en
+argument, ou `--file scripts/players.txt` — une ligne par joueur `Nom;SpId`), aucun lien
+avec un tournoi ou une liste figée. Génère/complète `data/player-photos.json`
+(`{ "Nom complet": "URL photo" }`, fusionné avec le contenu existant).
+
+**Limite vérifiée en profondeur** : Toernooibase n'a aucun endpoint de recherche par nom
+exploitable en simple GET (page d'accueil sans formulaire de recherche joueur, listing
+alphabétique paginé sur 322 pages sans recherche directe, seule "recherche" = applet Java
+interactif `zoekvenster.php`) — **le script prend donc un SpId par joueur, pas un nom
+seul**. Le SpId se trouve manuellement sur le site. Testé avec succès sur `SpId=5032`
+("Mickael Callegari") : extraction de `<img src=../Afbeeldingen/Spelers/5032.jpg
+alt=Mickael Callegari>` sur la fiche `liddetailp.php`, vérifiée par requête `HEAD` (200,
+`image/jpeg` réel, pas un placeholder).
+
+**Étape 2 (chargement au démarrage) : codée et testée.** `loadPlayerPhotoPrefill()` dans
+`main.js` charge `data/player-photos.json` en fetch asynchrone au démarrage (non bloquant —
+les avatars affichent la lettre le temps du chargement) dans une table séparée
+`playerPhotoPrefill`, **délibérément distincte** de `playerPhotoRegistry` (le registre
+manuel persisté) plutôt que fusionnée dedans : évite qu'un pré-remplissage figé une bonne
+fois dans le registre persisté bloque silencieusement une future mise à jour du fichier
+JSON (script relancé avec une meilleure photo). `applyAvatar()` consulte les deux
+(`playerPhotoRegistry[name] || playerPhotoPrefill[name]`), le registre manuel gagnant
+toujours. Fichier absent (script jamais exécuté) ou JSON invalide : avalé silencieusement,
+pas bloquant. Testé en navigateur : le pré-remplissage s'affiche pour un nom présent dans
+le JSON, l'avatar lettré reste pour un nom absent, et une photo choisie manuellement pour un
+nom déjà pré-rempli **prend le dessus et le reste après rechargement** (vérifié) — le
+pré-remplissage ne revient jamais écraser un choix manuel.
+
+**Bug corrigé : correspondance nom→photo trop stricte.** `applyAvatar()` faisait
+`playerPhotoRegistry[name] || playerPhotoPrefill[name]` — une égalité EXACTE de chaîne.
+Taper juste "Callegari" ne retrouvait donc pas la photo enregistrée sous "Callegari,
+Mickael". Remplacé par `lookupPhotoUrl()` :
+1. **Correspondance exacte tolérante** (`nameTokens()`) : casse, espaces superflus, virgule
+   et ordre des mots ignorés — "Callegari, Mickael", "Mickael Callegari" et "CALLEGARI
+   mickael" se reconnaissent comme le même joueur (comparaison par ensemble de mots triés).
+2. **Repli nom de famille seul** (`surnameOf()`, `lookupInTable()`) : si le nom tapé est UN
+   SEUL mot, comparé au nom de famille de chaque entrée (partie avant la virgule, sinon
+   dernier mot en repli "Prénom Nom"). Si toutes les entrées qui correspondent pointent vers
+   la même photo → utilisée. Si elles pointent vers des photos DIFFÉRENTES (homonymes,
+   plusieurs joueurs distincts) → **aucune n'est choisie**, avatar lettré par défaut plutôt
+   qu'un risque de photo de la mauvaise personne. Portée volontairement limitée au nom de
+   famille (pas de repli sur le seul prénom, trop de faux positifs pour peu de gain).
+3. Le registre manuel (`playerPhotoRegistry`) est vérifié EN ENTIER (les deux étapes
+   ci-dessus) avant même de regarder `playerPhotoPrefill` — une ambiguïté détectée côté
+   manuel ne se rabat jamais sur le pré-remplissage automatique.
+
+Testé en navigateur : "Callegari" seul retrouve la photo enregistrée sous un nom complet ;
+ajout d'un second "Callegari" avec une photo différente dans le registre → retour immédiat
+à l'avatar lettré (ambiguïté détectée, pas de choix au hasard) ; suppression de l'entrée
+conflictuelle → la photo réapparaît normalement au rechargement.
+
+**Limite connue, non traitée ici** (hors demande) : le bouton "Retirer la photo" du popover
+compare toujours par égalité stricte sur le nom actuellement affiché
+(`playerPhotoRegistry[name]`) — si une photo affichée provient d'une correspondance floue
+(nom de famille seul), "Retirer" peut ne rien faire car la clé réelle du registre diffère du
+nom tapé. À revisiter si ce cas gêne en pratique.
+
+**Correctif d'esthétique : cadre de l'avatar passé de cercle à rectangle portrait.** Les
+photos Toernooibase sont au format identité (88×117px réels, ratio ~0.75, vérifié en
+parsant l'en-tête JPEG) — un cercle ne peut en montrer qu'un recadrage carré du centre,
+coupant systématiquement le haut du crâne ou le menton/les épaules. `.player-avatar-ring`
+est passé de 66×66px cercle à 62×82px rectangle à coins arrondis (`var(--radius-sm)`),
+ratio proche de la source réelle donc quasi aucun recadrage nécessaire. L'anneau conique
+"médaille" ne rendait pas bien sur un rectangle — remplacé par une bordure pleine en
+dégradé linéaire (toujours distinct Blancs/Noirs par la couleur). Piste alternative
+(agrandir le cercle + ajuster `object-position`) écartée : un problème de ratio
+incompatible ne se résout pas par un simple réglage de centrage.
+
+**Piste bonus : terminée.** `scripts/resolve-toernooibase-players.mjs` — prend en argument
+un fichier `.pdn` (typiquement exporté depuis l'appli via "Sauvegarder la bibliothèque"),
+en extrait tous les noms uniques (`[White "..."]`/`[Black "..."]`), les résout en SpId via
+l'index alphabétique de Toernooibase, puis enchaîne automatiquement sur
+`fetch-toernooibase-photos.mjs` pour les noms résolus sans ambiguïté (`execFileSync`).
+- **Index alphabétique** (`spelalfa.php?start=<Lettre>&tel2=<page>`) : liste ~100
+  joueurs/page au format `Nom, Prénom` + SpId, triés par nom de famille. Une lettre est
+  indexée UNE FOIS (toutes ses pages) puis réutilisée pour tous les noms de cette lettre à
+  résoudre — pas une requête par nom.
+- **Piège de pagination découvert et corrigé en testant** : le paramètre `teller` (deviné
+  par analogie avec l'autre listing du site, `spelalfa.php?tel2=N` sans `start=`) est un
+  no-op qui renvoie systématiquement la page 1 quelle que soit sa valeur — un premier essai
+  semblait donc "boucler à l'infini" sur les mêmes ~90 entrées jusqu'au garde-fou de
+  pagination (6000 entrées, toutes des doublons de la page 1). Le vrai paramètre est `tel2`
+  (1-indexé), qui pagine correctement et renvoie une page vide une fois la dernière lettre
+  dépassée — c'est cette page vide qui permet l'arrêt automatique de `fetchLetterIndex()`.
+  Vérifié par essais successifs (`curl` direct) avant de corriger le script, pas juste en
+  supposant que ça marchait.
+- **Homonymes** : si plusieurs entrées de l'index ont un nom strictement identique, aucune
+  n'est choisie automatiquement — toutes leurs SpId sont listés dans une section "à
+  vérifier manuellement" de la sortie console.
+- Testé de bout en bout sur un PDN synthétique à 2 joueurs : "Callegari, Mickael" résolu
+  sans ambiguïté (1087 entrées indexées pour la lettre C) puis sa photo récupérée
+  automatiquement ; "Nom Inconnu Test XYZ" correctement signalé comme introuvable. La
+  branche homonymes n'a pas pu être testée sur un cas réel trouvé en direct (aucun doublon
+  rencontré dans l'échantillon exploré) mais repose sur la même structure de données
+  (regroupement par nom normalisé dans une `Map`) déjà validée par les deux autres cas —
+  risque résiduel faible, non revérifié en conditions réelles.
+
+## Backend Toernooibase (Cloudflare Worker) — changement d'architecture
+
+**DamikA n'est plus un site 100% statique sans backend.** Une seule fonctionnalité en
+dépend : le bouton "🔍 Récupérer sur Toernooibase" du popover photo joueur (Bloc 1). Tout
+le reste de l'app (moteur, plateau, bibliothèque, PDN...) reste inchangé, statique, sans
+build step. Ce backend est un choix délibéré et isolé, pas une refonte générale.
+
+**Pourquoi un backend alors qu'un navigateur ne peut pas scraper Toernooibase (CORS)** : un
+Worker Cloudflare fait la requête sortante à la place du navigateur, sans restriction CORS
+côté serveur — l'appli l'appelle ensuite en `fetch()` classique, le Worker répondant avec
+les en-têtes CORS nécessaires.
+
+**Validé avant de construire quoi que ce soit** : un Worker de test jetable
+(`wrangler deploy --temporary`, sans compte Cloudflare) a d'abord vérifié qu'une requête
+sortante depuis le réseau Cloudflare Workers vers Toernooibase aboutit bien (200, vraie
+page HTML) plutôt que d'être bloquée comme via un proxy public générique testé plus tôt
+(`r.jina.ai`, qui recevait la page de vérification anti-bot Cloudflare de Toernooibase —
+Toernooibase est lui-même derrière Cloudflare, `Server: cloudflare` confirmé par `curl -I`).
+Résultat du test : `{"status":200,"looksBlocked":false,"photoMatch":"../Afbeeldingen/Spelers/5032.jpg"}`
+— confirmé en conditions réelles, pas supposé.
+
+**Honnêteté sur le risque, comme demandé par Mickaël** : ce test prouve que ça marche
+AUJOURD'HUI, pas que ça marchera toujours. Toernooibase pourrait activer des règles
+anti-bot plus strictes (mode "Bot Fight") qui bloqueraient aussi le trafic Worker à tout
+moment, sans préavis, y compris après un déploiement qui fonctionnait. Aucune garantie à
+100%, d'où le filet de sécurité ci-dessous.
+
+### Le Worker (`worker/index.js`)
+
+Endpoint GET unique : `?name=<nom du joueur>` → `{ status: "resolved", spId, matchedName,
+photoUrl }` (ou `"ambiguous"` avec la liste des candidats, `"not_found"`, `"no_photo"`,
+`"error"`). Logique de résolution nom→SpId **dupliquée** (pas partagée en module commun)
+depuis `scripts/resolve-toernooibase-players.mjs` — Node et le runtime Workers n'ont pas le
+même système de modules/outillage, et le volume de code concerné est faible. Toute
+correction de la logique de recherche (ex. un nouveau piège de pagination Toernooibase)
+doit donc être répercutée **dans les deux fichiers**.
+
+### Déploiement
+
+```
+cd worker
+npx wrangler login        # première fois : ouvre le navigateur, autorise l'accès à ton compte Cloudflare
+npx wrangler deploy       # déploie/redéploie sur *.workers.dev
+```
+Aucune variable d'environnement requise. Après un redéploiement qui change l'URL (rare —
+seulement si le `name` dans `wrangler.toml` change), mettre à jour `TOERNOOIBASE_WORKER_URL`
+en haut de `js/main.js`.
+
+**⚠️ État actuel du déploiement (à régulariser rapidement)** : le Worker en production
+(`https://damika-toernooibase-photos.shell-green.workers.dev`, testé et fonctionnel — voir
+au-dessus) a été déployé via `wrangler deploy --temporary` (aucun compte requis pour aller
+vite pendant cette session) plutôt que `wrangler login`. Un compte temporaire Cloudflare
+("Shell Green") a été créé automatiquement, **à réclamer dans les 60 minutes suivant le
+déploiement** via l'URL de claim affichée par la commande (sans quoi le Worker disparaît).
+Si ce délai est dépassé au moment de lire ceci, relancer `npx wrangler login` (avec un
+compte Cloudflare réel, gratuit) puis `npx wrangler deploy` depuis `worker/` pour obtenir
+un déploiement permanent — l'URL changera, à reporter dans `TOERNOOIBASE_WORKER_URL`.
+
+### Palier gratuit (Cloudflare Workers, plan Free — vérifier sur leur page tarifs au
+moment de relire ceci, ces chiffres peuvent changer) : 100 000 requêtes/jour, ~1000
+requêtes/minute en rafale, 10 ms de temps CPU actif par requête (le temps d'attente réseau
+du `fetch()` vers Toernooibase n'est pas compté), aucune carte bancaire requise. Très
+largement suffisant pour un usage personnel (quelques clics par session).
+
+### Filet de sécurité : le script Node reste la voie de secours
+
+`scripts/resolve-toernooibase-players.mjs` + `scripts/fetch-toernooibase-photos.mjs`
+**restent intacts et fonctionnels**, inchangés par ce chantier. Si le Worker tombe en panne
+ou se fait bloquer par Toernooibase, le bouton affiche un toast d'erreur invitant à
+utiliser l'URL manuelle ou le script Node — jamais un plantage silencieux.
+
+## Bugs corrigés : import PDN Toernooibase brut + synchronisation Bibliothèque
+
+Découverts sur un vrai fichier Toernooibase (`Callegari - Crevat 2025.pdn.pdn`, fourni par
+Mickaël) qui n'affichait ni noms de joueurs, ni Elo, ni photos après import — alors que la
+liste des coups s'affichait bien (preuve que le fichier était lu, juste mal interprété).
+
+1. **En-têtes PDN sans guillemets.** Certains exports Toernooibase bruts omettent purement
+   et simplement les guillemets attendus par la norme : `[White Callegari, Mickael]` au
+   lieu de `[White "Callegari, Mickael"]` — y compris pour des valeurs contenant une
+   virgule. `parser.js` exigeait des guillemets (`/^\[\w+\s+".*"\]$/`) aussi bien pour
+   détecter une ligne d'en-tête que pour en extraire la valeur — toute la ligne d'en-tête
+   était donc silencieusement ignorée (ni erreur ni avertissement), tandis que le texte des
+   coups, découpé indépendamment, continuait de se parser normalement. D'où le symptôme
+   trompeur "les coups s'affichent mais pas les infos joueurs". Corrigé avec `HEADER_LINE_RE
+   = /^\[(\w+)\s+(.*)\]$/`, guillemets retirés seulement s'ils sont présents en début/fin de
+   valeur — accepte les deux formats indifféremment.
+2. **Tag Elo `WhiteRating`/`BlackRating` jamais lu.** L'app ne lisait que
+   `WhiteElo`/`BlackElo` (convention lidraughts) — or c'est `WhiteRating`/`BlackRating` le
+   tag standard PDN 3.0 (spec FMJD, confirmé via wiegerw.github.io/pdn/pdntags.html) et
+   c'est ce qu'exportent les fichiers Toernooibase bruts. `syncHeaderFieldsFromState()`
+   affiche maintenant `headers.WhiteElo || headers.WhiteRating` (idem Black) — les deux
+   variantes sont réellement rencontrées en pratique, aucune des deux n'est à privilégier
+   dans l'absolu.
+3. **URL de photo cassée dans `WhiteUrl`/`BlackUrl`.** Sur ce même export brut, l'URL est
+   mal formée à la source : `httptoernooibase.kndb.nlAfbeeldingenSpelers5032.jpg` (il
+   manque `://`, les `/` entre segments). `fixMalformedToernooibaseUrl()` reconnaît le motif
+   `toernooibase.kndb.nl` + `Afbeeldingen` + `Spelers` + un nombre + `.jpg` (slashes
+   optionnels dans le motif — matche aussi bien une URL cassée qu'une déjà bien formée,
+   comme dans d'autres exports Toernooibase, cf. plus haut) et reconstruit l'URL canonique.
+   **Nouveauté associée** : `WhiteUrl`/`BlackUrl`, une fois corrigées, alimentent
+   automatiquement `playerPhotoPrefill` au chargement de la partie
+   (`registerPhotoUrlFromHeaders()`) — même niveau de priorité que
+   `data/player-photos.json`, donc jamais au-dessus d'un choix manuel, et sans écraser une
+   entrée de pré-remplissage déjà connue pour ce nom. Concrètement : importer un PDN
+   Toernooibase peuple désormais les photos des DEUX joueurs sans aucune action
+   supplémentaire, dès lors que le fichier contient ces tags.
+4. **Bibliothèque jamais synchronisée avec les éditions du Bloc 1.** Éditer un champ (nom de
+   joueur, Elo, événement...) de la partie active ne mettait à jour QUE la variable `headers`
+   en mémoire — `library[libraryActiveIndex].headers` restait un instantané figé pris au
+   moment du chargement (import/clic dans la liste), jamais retouché. Le titre/sous-titre
+   affichés dans l'onglet Bibliothèque ne reflétaient donc jamais les modifications, y
+   compris après sauvegarde. Corrigé avec `syncActiveLibraryEntryHeaders()`, appelée depuis
+   le même listener `blur` qui met déjà à jour `headers` — recopie `headers` dans l'entrée de
+   bibliothèque active, préserve un renommage manuel existant (`headers.Label`, propre à la
+   bibliothèque et absent des en-têtes de la partie elle-même), marque `libraryDirty`, et
+   rafraîchit l'affichage (`renderLibrary()`) + la persistance (`scheduleSave()`).
+   **Bug connexe découvert en corrigeant celui-ci** : `startNewGame()` ne réinitialisait
+   jamais `libraryActiveIndex` — après "Nouvelle partie", l'entrée précédemment active
+   restait marquée comme telle dans l'onglet Bibliothèque alors que le damier affiche une
+   partie libre sans rapport. Sans ce correctif complémentaire, `syncActiveLibraryEntryHeaders()`
+   aurait fini par écraser cette entrée avec les en-têtes de la partie libre à la première
+   édition de champ après "Nouvelle partie" — corrigé en même temps
+   (`libraryActiveIndex = -1` + `renderLibrary()` dans `startNewGame()`).
+
+Testé de bout en bout sur le fichier réel fourni : noms ("Crevat Luc"/"Callegari Mickael"),
+Elo ("Elo 2004"/"Elo 2032"), titre ("CMF"), photos des deux joueurs (auto-détectées via
+`WhiteUrl`/`BlackUrl` reconstruites) tous corrects après import ; édition du champ Event
+("Tournoi Modifié Test") répercutée instantanément dans le sous-titre de l'entrée
+Bibliothèque, vérifiée à la fois dans le DOM et dans le PDN persisté en `localStorage`.
 
 ## Ce qui manque (voir CAHIER_DES_CHARGES.md pour la liste complète)
 

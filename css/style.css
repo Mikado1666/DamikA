@@ -9,6 +9,7 @@
   --text-2: #8c7c63;
   --gold: #d4af69;
   --gold-soft: rgba(212, 175, 105, 0.18);
+  --gold-dim: #8a6b3c;
   --accent-white: #f2e9d8;
   --accent-black: #171310;
   --success: #7ad3a0;
@@ -351,6 +352,10 @@ body {
   flex: 1;
 }
 .library-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -359,8 +364,50 @@ body {
 }
 .library-item:hover { background: var(--gold-soft); }
 .library-item.active { border-color: var(--gold); background: var(--gold-soft); }
-.library-item-title { font-size: 15.5px; color: var(--text-0); font-weight: 600; }
+.library-item-info { min-width: 0; flex: 1; }
+.library-item-title { font-size: 15.5px; color: var(--text-0); font-weight: 600; user-select: none; }
+.library-item-title:hover { text-decoration: underline dotted; }
 .library-item-meta { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.library-item-rename-input {
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 600;
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  padding: 2px 5px;
+}
+/* Bouton de suppression discret : visible seulement au survol de la ligne (ou en focus
+   clavier, pour rester accessible sans souris) — cohérent avec la densité du reste de la
+   liste, pas de rangée d'icônes permanente qui alourdirait chaque ligne. */
+.library-item-delete {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.library-item:hover .library-item-delete,
+.library-item-delete:focus-visible {
+  opacity: 1;
+}
+.library-item-delete:hover {
+  background: #a03030;
+  border-color: #a03030;
+  color: #fff;
+}
 .library-empty {
   padding: 25px;
   text-align: center;
@@ -425,53 +472,144 @@ body {
   min-height: 0;
 }
 
+/* ---------- Cartes joueurs — "Plaque tournoi" (piste B validée par Mickaël,
+   RETOURS_SESSION photos/esthétique Bloc 1) : bordure dorée pleine, avatar circulaire à
+   anneau conique façon médaille, badge Elo façon pastille de classement, tag couleur à
+   côté du nom, stats en pilules avec icône. Prototypé et comparé (pistes A/B/C) dans un
+   artifact avant validation — voir CLAUDE.md. */
 .player-card {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 15px;
-  background: linear-gradient(180deg, var(--panel), #1b140e);
-  border: 1px solid var(--panel-border);
+  gap: 14px;
+  background: linear-gradient(165deg, #2a2015 0%, var(--panel) 30%, #19130d 100%);
+  border: 1px solid var(--gold-dim, #8a6b3c);
   border-radius: var(--radius-md);
-  padding: 15px;
-  box-shadow: var(--shadow-panel);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-panel), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.player-photo {
-  width: 75px;
-  height: 75px;
+/* Cadre portrait (piste 2 retenue après retour Mickaël) : les photos officielles
+   Toernooibase sont au format "photo d'identité" (88×117px réels, ratio ~0.75) — un cercle
+   ne peut en montrer qu'un recadrage carré du centre, ce qui coupe systématiquement le
+   haut du crâne ou le menton/les épaules quel que soit `object-position`. Le cadre épouse
+   donc le ratio réel de la source (62×82px ≈ 0.756) plutôt que de forcer un cercle :
+   `object-fit: cover` n'a alors presque rien à recadrer. L'anneau conique "médaille" ne
+   rendait pas bien sur un rectangle — remplacé par une bordure pleine dorée (couleur
+   différente par côté, même logique de distinction Blancs/Noirs qu'avant). */
+.player-avatar-ring {
+  position: relative;
   flex-shrink: 0;
+  width: 62px;
+  height: 82px;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.player-avatar-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+}
+.player-avatar-ring[data-side-ring="white"]::before { background: linear-gradient(180deg, #fbf4e3, #ccb98c); }
+.player-avatar-ring[data-side-ring="black"]::before { background: linear-gradient(180deg, var(--gold-dim, #8a6b3c), #2a2015); }
+.player-avatar-ring:hover::after {
+  content: '✎';
+  position: absolute;
+  inset: 0;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 26px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-0);
+  font-size: 18px;
 }
-.player-photo[data-side-avatar="white"] {
-  background: radial-gradient(circle at 35% 30%, #fbf4e3, #ccb98c);
-  color: #241a0d;
+.player-avatar-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--radius-sm) - 2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 22px;
+  overflow: hidden;
+  background: var(--bg-1);
 }
-.player-photo[data-side-avatar="black"] {
-  background: radial-gradient(circle at 35% 30%, #3c352c, #0d0b09);
-  color: var(--gold);
-  border: 1px solid #4a3d29;
+.player-avatar-inner[data-side-avatar="white"] .avatar-letter { color: #e9d9ae; }
+.player-avatar-inner[data-side-avatar="black"] .avatar-letter { color: var(--gold); }
+.avatar-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
 }
 
 .player-card-body { flex: 1; min-width: 0; }
 
+/* Badge Elo façon pastille de classement, ancré en haut à droite de la carte (retour
+   Mickaël : rendu "plaque tournoi" plutôt qu'un champ texte parmi d'autres). */
+.elo-badge {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--bg-0);
+  background: var(--gold);
+  padding: 3px 9px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.elo-badge:hover, .elo-badge:focus { background: var(--text-0); }
+
+.player-name-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding-right: 46px; /* réserve la place du badge Elo pour ne jamais passer dessous */
+}
 .player-name {
-  font-weight: 700;
-  font-size: 20px;
+  font-weight: 800;
+  font-size: 18px;
   color: var(--text-0);
   outline: none;
   padding: 1px 4px;
   border-radius: 5px;
   cursor: text;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Nom complet toujours lisible, jamais tronqué (retour Mickaël) : passage à la ligne
+     plutôt que troncature "…" — .player-card-body a déjà `min-width: 0` pour autoriser le
+     retour à la ligne dans un flex item, et alignLayout() (main.js) réagit déjà à un
+     changement de hauteur de carte via ResizeObserver (cas "nom sur 2 lignes" anticipé de
+     longue date dans son commentaire), donc aucun risque de désaligner le damier. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.15;
 }
 .player-name:hover, .player-name:focus { background: var(--gold-soft); }
+
+.side-tag {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: var(--gold-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
 
 .player-card-meta {
   display: flex;
@@ -480,7 +618,7 @@ body {
   flex-wrap: wrap;
 }
 .meta-field {
-  font-size: 15px;
+  font-size: 13px;
   color: var(--text-2);
   outline: none;
   padding: 1px 5px;
@@ -492,15 +630,25 @@ body {
 
 .player-card-stats {
   display: flex;
-  gap: 20px;
-  margin-top: 9px;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
 }
-.stat-block { text-align: left; }
+.stat-block {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-align: left;
+  background: var(--bg-1);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 4px 10px 4px 8px;
+}
+.stat-icon { font-style: normal; color: var(--gold); font-size: 12px; }
 .stat-value {
-  display: block;
-  font-size: 23px;
-  font-weight: 700;
-  color: var(--gold);
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-0);
   line-height: 1;
   outline: none;
   cursor: text;
@@ -508,21 +656,18 @@ body {
   padding: 1px 2px;
   margin: -1px -2px;
 }
-.stat-value:hover, .stat-value:focus { background: var(--gold-soft); }
+.stat-value:hover, .stat-value:focus { background: var(--gold-soft); color: var(--gold); }
 .count-value {
-  display: block;
-  font-size: 23px;
-  font-weight: 700;
-  color: var(--gold);
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-0);
   line-height: 1;
 }
 .stat-label, .count-label {
-  display: block;
-  font-size: 12px;
+  font-size: 10px;
   color: var(--text-2);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: 4px;
+  letter-spacing: 0.06em;
 }
 
 .players-rail-divider {
@@ -727,6 +872,13 @@ body {
   align-content: start;
   gap: 1px;
 }
+/* tabindex="0" ajouté pour rendre la zone focusable au clic — nécessaire pour recevoir
+   l'évènement 'paste' natif (Ctrl+V colle un PDN, cf. écouteur dans main.js) — anneau de
+   focus discret plutôt que le contour bleu par défaut du navigateur. */
+.move-list:focus-visible {
+  outline: 1px solid var(--gold);
+  outline-offset: -1px;
+}
 .move-row {
   display: grid;
   grid-template-columns: 35px 1fr 1fr;
@@ -737,14 +889,146 @@ body {
 }
 .move-num { color: var(--text-2); }
 .move-ply {
-  padding: 3px 7px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 3px 5px 3px 7px;
   border-radius: 5px;
-  cursor: pointer;
   color: var(--text-0);
 }
 .move-ply:hover { background: var(--gold-soft); }
 .move-ply.current { background: var(--gold); color: #241a0d; font-weight: 700; }
 .move-ply.empty { visibility: hidden; }
+.move-ply-text { cursor: pointer; }
+/* Coup commenté : marquage FORT sur le texte lui-même (retour Mickaël — un pictogramme
+   discret perdu dans la ligne ne suffisait pas pour repérer d'un coup d'œil, en scannant
+   toute la liste, quels coups sont commentés), cumulé avec le point plein doré ci-dessous. */
+.move-ply-text.has-comment {
+  text-decoration: underline;
+  text-decoration-color: var(--gold);
+  text-underline-offset: 2px;
+}
+/* Point plein doré : indicateur permanent d'un coup déjà commenté (contrairement au lien
+   texte ci-dessous, qui lui n'apparaît qu'au survol). */
+.move-comment-dot {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--gold);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 3px;
+}
+/* Lien texte "+ Ajouter un commentaire" / "Modifier le commentaire" (2e itération : un
+   pictogramme, même agrandi, restait moins lisible qu'un texte — retour Mickaël).
+   3e itération (bug bloquant constaté par Mickaël) : la version précédente démarrait
+   `top: 100%` + `margin-top: 2px`, donc 2px SOUS la ligne — en descendant vers le lien, le
+   curseur traversait cet espace mort et retombait sur la ligne SUIVANTE (qui a son propre
+   survol), coupant le `:hover` d'origine avant même d'atteindre le lien : impossible à
+   cliquer. Corrigé en abandonnant tout écart vertical — le lien démarre exactement à `top:
+   0; left: 0` (la même position que .move-ply lui-même, aucun pixel à traverser) et
+   s'étend en largeur PAR-DESSUS le coup et, si besoin, sur la cellule voisine DE LA MÊME
+   ligne (jamais sur la ligne du dessous). Comme il occupe dès l'apparition exactement la
+   zone déjà survolée, il n'y a plus aucune transition de survol à négocier : le curseur est
+   déjà "dedans" au moment où le lien apparaît. */
+.move-comment-hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  z-index: 40;
+  white-space: nowrap;
+  background: var(--bg-1);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+  padding: 0 9px;
+  font-size: 12.5px;
+  color: var(--gold);
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+/* Coup Noirs (2e colonne) : le lien grandit vers la GAUCHE (depuis le bord droit de sa
+   cellule) plutôt que vers la droite, pour ne jamais déborder hors du panneau (~350px). */
+.move-ply-black .move-comment-hint { left: auto; right: 0; }
+.move-ply:hover .move-comment-hint { opacity: 1; pointer-events: auto; }
+
+/* Popover photo joueur (clic sur l'anneau d'avatar) : même mécanique de positionnement en
+   JS que le popover de commentaire de coup ci-dessous — fichier local OU URL externe (ex.
+   Toernooibase), pas de scraping (bloqué CORS, cf. CLAUDE.md). */
+.player-photo-popover[hidden] { display: none; }
+.player-photo-popover {
+  position: fixed;
+  z-index: 60;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.player-photo-popover-title { font-size: 13px; font-weight: 700; color: var(--text-0); margin-bottom: 2px; }
+.player-photo-popover-sep { text-align: center; font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.08em; }
+.player-photo-popover input[type="text"] {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  box-sizing: border-box;
+}
+.player-photo-popover input[type="text"]:focus { outline: none; border-color: var(--gold); }
+.player-photo-popover .text-btn { flex: none; font-size: 13px; padding: 7px 10px; }
+.player-photo-popover-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; border-top: 1px solid var(--panel-border); padding-top: 8px; }
+
+/* Popover flottant (position: fixed, positionné en JS près de l'icône cliquée) : ne
+   perturbe jamais la mise en page de #move-list, contrairement à l'ancienne textarea fixe
+   sous la liste. Élargi (320px, 7 lignes) suite au retour Mickaël — la 1ère version était
+   trop exiguë pour un commentaire confortable à relire/éditer. */
+.move-comment-popover {
+  position: fixed;
+  z-index: 60;
+  width: 320px;
+  background: var(--bg-1);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.move-comment-popover textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 130px;
+  background: var(--bg-2);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+.move-comment-popover textarea:focus { outline: none; border-color: var(--gold); }
+.move-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.move-comment-actions .text-btn { flex: none; padding: 5px 12px; font-size: 13px; }
 
 .panel-footer {
   display: flex;

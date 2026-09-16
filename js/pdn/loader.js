@@ -45,6 +45,9 @@ export function loadGameFromPdn(parsedGame) {
       }
       game.playSimpleMove(simple);
     }
+    // Le coup vient d'être commité en tête de `history` — reporter son commentaire PDN
+    // (déjà lu par le parseur mais jusqu'ici jeté, jamais stocké dans le moteur).
+    if (mv.comment) game.setCommentAt(game.history.length - 1, mv.comment);
     loadedCount += 1;
   }
 

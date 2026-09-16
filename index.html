@@ -79,19 +79,29 @@
       </div>
 
       <div class="player-card" data-side="black">
-        <div class="player-photo" data-side-avatar="black">N</div>
+        <button type="button" class="player-avatar-ring" data-side-ring="black" title="Changer la photo">
+          <span class="player-avatar-inner" data-side-avatar="black">
+            <span class="avatar-letter">N</span>
+            <img class="avatar-photo" alt="" hidden>
+          </span>
+        </button>
         <div class="player-card-body">
-          <div class="player-name" data-field="Black" contenteditable="true" spellcheck="false">Joueur Noirs</div>
+          <span class="meta-field elo-badge" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
+          <div class="player-name-row">
+            <div class="player-name" data-field="Black" contenteditable="true" spellcheck="false">Joueur Noirs</div>
+            <span class="side-tag">Noirs</span>
+          </div>
           <div class="player-card-meta">
             <span class="meta-field" data-field="BlackTitle" contenteditable="true" title="Titre">—</span>
-            <span class="meta-field" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
           </div>
           <div class="player-card-stats">
             <div class="stat-block">
+              <i class="stat-icon">♛</i>
               <span class="stat-value" data-field="BlackScore" contenteditable="true" title="Score">—</span>
               <span class="stat-label">Score</span>
             </div>
             <div class="stat-block" id="count-black">
+              <i class="stat-icon">●</i>
               <span class="count-value">20</span>
               <span class="count-label">Pions</span>
             </div>
@@ -104,19 +114,29 @@
       </div>
 
       <div class="player-card" data-side="white">
-        <div class="player-photo" data-side-avatar="white">B</div>
+        <button type="button" class="player-avatar-ring" data-side-ring="white" title="Changer la photo">
+          <span class="player-avatar-inner" data-side-avatar="white">
+            <span class="avatar-letter">B</span>
+            <img class="avatar-photo" alt="" hidden>
+          </span>
+        </button>
         <div class="player-card-body">
-          <div class="player-name" data-field="White" contenteditable="true" spellcheck="false">Joueur Blancs</div>
+          <span class="meta-field elo-badge" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
+          <div class="player-name-row">
+            <div class="player-name" data-field="White" contenteditable="true" spellcheck="false">Joueur Blancs</div>
+            <span class="side-tag">Blancs</span>
+          </div>
           <div class="player-card-meta">
             <span class="meta-field" data-field="WhiteTitle" contenteditable="true" title="Titre">—</span>
-            <span class="meta-field" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
           </div>
           <div class="player-card-stats">
             <div class="stat-block">
+              <i class="stat-icon">♛</i>
               <span class="stat-value" data-field="WhiteScore" contenteditable="true" title="Score">—</span>
               <span class="stat-label">Score</span>
             </div>
             <div class="stat-block" id="count-white">
+              <i class="stat-icon">●</i>
               <span class="count-value">20</span>
               <span class="count-label">Pions</span>
             </div>
@@ -158,13 +178,21 @@
         <button class="panel-tab" id="tab-library" data-tab="library">Bibliothèque <span id="library-count" class="tab-badge" hidden>0</span></button>
       </div>
       <div class="panel-body" id="panel-moves">
-        <ol class="move-list" id="move-list"></ol>
+        <ol class="move-list" id="move-list" tabindex="0"></ol>
         <div class="panel-footer">
           <button id="btn-undo" class="text-btn">↺ Annuler</button>
           <button id="btn-redo" class="text-btn">↻ Rétablir</button>
         </div>
       </div>
       <div class="panel-body" id="panel-library" hidden>
+        <input type="file" id="library-file-input" accept=".pdn,.txt" hidden />
+        <div class="panel-footer">
+          <button id="btn-library-add-current" class="text-btn" title="Ajouter la partie actuellement affichée à la bibliothèque">➕ Ajouter la partie</button>
+        </div>
+        <div class="panel-footer">
+          <button id="btn-library-save" class="text-btn" title="Enregistrer TOUTE la bibliothèque active dans un fichier .pdn">💾 Sauvegarder la bibliothèque</button>
+          <button id="btn-library-open" class="text-btn" title="Charger un fichier bibliothèque .pdn (remplace la bibliothèque active)">📁 Ouvrir une bibliothèque</button>
+        </div>
         <ul class="library-list" id="library-list"></ul>
         <div class="library-empty" id="library-empty">Aucune partie importée pour l'instant.</div>
       </div>
@@ -172,6 +200,26 @@
   </main>
 
   <div class="toast" id="toast" hidden></div>
+  <div class="player-photo-popover" id="player-photo-popover" hidden>
+    <div class="player-photo-popover-title" id="player-photo-popover-title">Photo du joueur</div>
+    <input type="file" id="player-photo-file-input" accept="image/*" hidden>
+    <button type="button" class="text-btn" id="player-photo-choose-file">📁 Choisir un fichier</button>
+    <div class="player-photo-popover-sep">ou</div>
+    <input type="text" id="player-photo-url-input" placeholder="Coller l'URL d'une photo (ex. Toernooibase)">
+    <button type="button" class="text-btn" id="player-photo-use-url">Utiliser cette URL</button>
+    <div class="player-photo-popover-sep">ou</div>
+    <button type="button" class="text-btn" id="player-photo-fetch-toernooibase" title="Recherche automatique par nom sur Toernooibase">🔍 Récupérer sur Toernooibase</button>
+    <div class="player-photo-popover-actions">
+      <button type="button" class="text-btn" id="player-photo-remove">Retirer la photo</button>
+      <button type="button" class="text-btn" id="player-photo-close">Fermer</button>
+    </div>
+  </div>
+  <div class="move-comment-popover" id="move-comment-popover" hidden>
+    <textarea id="move-comment-input" placeholder="Commentaire sur ce coup…" rows="7"></textarea>
+    <div class="move-comment-actions">
+      <button id="move-comment-close" class="text-btn">Fermer</button>
+    </div>
+  </div>
   <div class="dropzone-overlay" id="dropzone-overlay" hidden>
     <div class="dropzone-message">Déposer le fichier PDN ici</div>
   </div>
@@ -180,7 +228,7 @@
       <div class="confirm-message" id="confirm-message"></div>
       <div class="confirm-actions">
         <button id="confirm-cancel" class="text-btn">Annuler</button>
-        <button id="confirm-ok" class="action-btn confirm-ok-btn">Nouvelle partie</button>
+        <button id="confirm-ok" class="action-btn confirm-ok-btn">Confirmer</button>
       </div>
     </div>
   </div>

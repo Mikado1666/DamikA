@@ -9,12 +9,28 @@ export function moveInfoToNotation(moveInfo) {
 
 const HEADER_ORDER = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'WhiteElo', 'BlackElo', 'Result'];
 
+// Le tokenizer PDN (pdn/parser.js) ne gère pas les accolades imbriquées/échappées dans un
+// commentaire { ... } : il s'arrête à la première "}" rencontrée. On retire donc { et } du
+// texte à l'écriture plutôt que de produire un fichier que notre propre parseur ne
+// relirait pas correctement.
+function sanitizeComment(comment) {
+  return String(comment).replace(/[{}]/g, '').trim();
+}
+
+// Le tokenizer attache un commentaire { ... } au PROCHAIN token 'move' qu'il rencontre
+// après lui (`pendingComment`, cf. tokenizeMovetext dans parser.js) — convention "commentaire
+// AVANT le coup qu'il annote", pas après. Écrire `{comment}` après la notation romprait le
+// round-trip (le commentaire se retrouverait attribué au coup suivant en relecture).
+function appendComment(notation, comment) {
+  return comment ? `{${sanitizeComment(comment)}} ${notation}` : notation;
+}
+
 function movePairs(moves) {
   const parts = [];
   for (let i = 0; i < moves.length; i += 2) {
     const num = i / 2 + 1;
-    const white = moveInfoToNotation(moves[i]);
-    const black = moves[i + 1] ? moveInfoToNotation(moves[i + 1]) : null;
+    const white = appendComment(moveInfoToNotation(moves[i]), moves[i].comment);
+    const black = moves[i + 1] ? appendComment(moveInfoToNotation(moves[i + 1]), moves[i + 1].comment) : null;
     parts.push({ num, white, black });
   }
   return parts;
@@ -38,6 +54,39 @@ export function serializeToPdn({ headers = {}, moves, result = '*' }) {
     .join(' ');
   lines.push(`${movetext}${movetext ? ' ' : ''}${result}`.trim());
   return `${lines.join('\n')}\n`;
+}
+
+// Sérialise une entrée de bibliothèque telle que retournée par parsePdn() : les coups y
+// sont déjà des chaînes de notation ({ notation }), pas des moveInfo structurés
+// ({ from, to, type }) comme dans serializeToPdn ci-dessus — donc pas de moveInfoToNotation
+// ici, on écrit directement `notation`.
+export function serializeLibraryEntryToPdn({ headers = {}, moves = [], result = '*' }) {
+  const lines = [];
+  const allKeys = new Set([...HEADER_ORDER, ...Object.keys(headers)]);
+  for (const key of allKeys) {
+    if (key === 'Result') continue;
+    const val = headers[key];
+    if (val) lines.push(`[${key} "${val}"]`);
+  }
+  lines.push(`[Result "${result}"]`);
+  lines.push('');
+
+  const parts = [];
+  for (let i = 0; i < moves.length; i += 2) {
+    const num = i / 2 + 1;
+    const white = appendComment(moves[i].notation, moves[i].comment);
+    const black = moves[i + 1] ? appendComment(moves[i + 1].notation, moves[i + 1].comment) : null;
+    parts.push(`${num}. ${white}${black ? ` ${black}` : ''}`);
+  }
+  const movetext = parts.join(' ');
+  lines.push(`${movetext}${movetext ? ' ' : ''}${result}`.trim());
+  return `${lines.join('\n')}\n`;
+}
+
+// Concatène toute une bibliothèque (tableau d'entrées parsePdn()) en un seul texte PDN
+// multi-parties, rechargeable tel quel par parsePdn().
+export function serializeLibraryToPdn(library) {
+  return library.map(serializeLibraryEntryToPdn).join('\n');
 }
 
 export function serializeToTxt({ headers = {}, moves, result = '*' }) {

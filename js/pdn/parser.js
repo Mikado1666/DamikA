@@ -11,6 +11,15 @@
 const RESULT_TOKENS = new Set(['1-0', '0-1', '1/2-1/2', '*', '2-0', '0-2', '1-1']);
 const MOVE_ANNOTATION_SUFFIX = /^([0-9x\-]+)([!?]*)$/;
 
+// En-tête PDN : `[Clé "valeur"]` (norme) — mais certains exports Toernooibase bruts
+// omettent purement et simplement les guillemets (`[White Callegari, Mickael]`), y compris
+// pour des valeurs contenant une virgule. Le groupe 2 capture donc tout ce qui précède le
+// "]" final, guillemets ou non ; parseHeaders() les retire ensuite s'ils sont présents. Un
+// fichier de ce type garde ses coups lisibles malgré tout (le découpage du texte des coups
+// est indépendant de celui des en-têtes), ce qui masquait le problème : seuls le nom des
+// joueurs, le rating, etc. disparaissaient silencieusement, jamais la partie elle-même.
+const HEADER_LINE_RE = /^\[(\w+)\s+(.*)\]$/;
+
 // --- Étape 1 : découpage du texte brut en blocs de parties -------------------
 // Un bloc = un groupe d'en-têtes [Clé "valeur"] suivi du texte des coups,
 // jusqu'au prochain bloc d'en-têtes ou la fin du fichier.
@@ -21,7 +30,7 @@ function splitIntoGameBlocks(text) {
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    const isHeaderLine = /^\[\w+\s+".*"\]$/.test(line);
+    const isHeaderLine = HEADER_LINE_RE.test(line);
 
     if (isHeaderLine) {
       if (current && current.movetextLines.length > 0) {
@@ -47,10 +56,12 @@ function splitIntoGameBlocks(text) {
 // --- Étape 2 : parsing des en-têtes -------------------------------------------
 function parseHeaders(headerLines) {
   const headers = {};
-  const re = /^\[(\w+)\s+"(.*)"\]$/;
   for (const line of headerLines) {
-    const m = re.exec(line);
-    if (m) headers[m[1]] = m[2];
+    const m = HEADER_LINE_RE.exec(line);
+    if (!m) continue;
+    let value = m[2].trim();
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    headers[m[1]] = value;
   }
   return headers;
 }

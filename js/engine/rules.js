@@ -373,8 +373,8 @@ export class DraughtsGame {
     });
   }
 
-  _commit(newBoard, moveInfo) {
-    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: moveInfo });
+  _commit(newBoard, moveInfo, comment = null) {
+    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: moveInfo, comment });
     this.future = [];
     this.board = newBoard;
     this.sideToMove = opponent(this.sideToMove);
@@ -383,7 +383,7 @@ export class DraughtsGame {
   undo() {
     if (this.history.length === 0) return false;
     const prev = this.history.pop();
-    this.future.push({ board: this.board, sideToMove: this.sideToMove, move: prev.move });
+    this.future.push({ board: this.board, sideToMove: this.sideToMove, move: prev.move, comment: prev.comment });
     this.board = prev.board;
     this.sideToMove = prev.sideToMove;
     return true;
@@ -392,9 +392,32 @@ export class DraughtsGame {
   redo() {
     if (this.future.length === 0) return false;
     const next = this.future.pop();
-    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: next.move });
+    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: next.move, comment: next.comment });
     this.board = next.board;
     this.sideToMove = next.sideToMove;
+    return true;
+  }
+
+  // Commentaire libre associé à un coup, adressé par sa position dans la liste complète et
+  // chronologique des coups (mêmes indices que fullMoveList() côté UI : history puis future
+  // inversé) — pas une Map externe indexée par ply, pour que le commentaire voyage tout seul
+  // avec son entrée d'historique au fil des undo()/redo() sans structure parallèle à
+  // resynchroniser.
+  _resolveMoveEntry(idx) {
+    if (idx < 0) return null;
+    if (idx < this.history.length) return this.history[idx];
+    const futureIdx = this.future.length - 1 - (idx - this.history.length);
+    return futureIdx >= 0 && futureIdx < this.future.length ? this.future[futureIdx] : null;
+  }
+
+  getCommentAt(idx) {
+    return this._resolveMoveEntry(idx)?.comment || null;
+  }
+
+  setCommentAt(idx, text) {
+    const entry = this._resolveMoveEntry(idx);
+    if (!entry) return false;
+    entry.comment = text || null;
     return true;
   }
 }
