@@ -19,8 +19,45 @@ let isPlaying = false;
 
 // --- état de partie / bibliothèque -------------------------------------------
 let headers = { Event: 'Partie libre' };
+
+// PDN encode traditionnellement le nom "Nom, Prénom" (convention KNDB/Turbo Dambase, cf.
+// exemple `[White "Scholma, Auke"]`) — affichage en "Prénom Nom" pour un rendu plus naturel
+// dans la carte joueur, sans toucher à `headers.White/Black` : la valeur d'origine reste
+// inchangée pour l'export PDN. Pas de virgule (pas de PDN structuré) : affiché tel quel.
+// PDN encode la date en AAAA.MM.JJ (convention PDN standard) — affichage en JJ/MM/AAAA
+// dans le bandeau méta sans toucher à `headers.Date` : la valeur d'origine reste
+// inchangée pour l'export PDN. Format inattendu (pas 3 groupes numériques) : tel quel.
+function formatPdnDate(date) {
+  const m = /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(date);
+  if (!m) return date;
+  const [, y, mo, d] = m;
+  return `${d}/${mo}/${y}`;
+}
+
+// [Result "X-Y"] : X = score Blancs, Y = score Noirs (même ordre que les tags [White]/[Black]).
+// "*" (partie en cours) ou tag absent/mal formé : pas de score exploitable, placeholder "—"
+// géré par l'appelant (renvoie [null, null]).
+function parseResultScore(result) {
+  const m = /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec((result || '').trim());
+  return m ? [m[1], m[2]] : [null, null];
+}
+
+function formatPlayerName(name) {
+  const parts = name.split(',');
+  if (parts.length !== 2) return name;
+  const [last, first] = parts.map((p) => p.trim());
+  if (!last || !first) return name;
+  return `${first} ${last}`;
+}
 let library = []; // parties parsées disponibles (import multi-parties)
 let libraryActiveIndex = -1;
+// Nom de la bibliothèque elle-même (distinct du nom de chaque partie qu'elle contient) —
+// vide par défaut, placeholder "Bibliothèque sans nom" géré en CSS (:empty::before). Encodé
+// dans le fichier .pdn comme un en-tête non standard `[LibraryName "..."]` PLACÉ AVANT les
+// en-têtes de la 1re partie (cf. extractLibraryName/serializeLibraryToPdnWithName plus bas) —
+// même mécanisme générique que `headers.Label` pour une entrée individuelle, mais retiré des
+// headers de la partie elle-même après lecture pour ne pas polluer son export/affichage.
+let libraryName = '';
 // true dès que `library` change sans passage par "Sauvegarder la bibliothèque" — sert de
 // garde-fou avant toute action qui remplacerait la bibliothèque active (coller, ouvrir un
 // fichier bibliothèque). Indépendant de la sauvegarde automatique localStorage plus bas :
@@ -74,7 +111,16 @@ async function loadPlayerPhotoPrefill() {
   try {
     const res = await fetch('data/player-photos.json');
     if (!res.ok) return;
-    playerPhotoPrefill = await res.json();
+    // FUSION, pas remplacement : au chargement de la page, `restoreAppState()` (synchrone)
+    // a déjà pu enregistrer une entrée dans `playerPhotoPrefill` via `registerPhotoUrlFromHeaders`
+    // (WhiteUrl/BlackUrl de la partie en cours, ex. collée juste avant un F5) AVANT que ce fetch
+    // (asynchrone, donc plus lent) ne se résolve. `playerPhotoPrefill = await res.json()` tout
+    // court écrasait cette entrée fraîchement posée avec le contenu du fichier seul — bug
+    // constaté : une photo visible juste après un collage disparaissait systématiquement au F5,
+    // le fetch écrasant l'enregistrement fait entre-temps par la restauration de la partie.
+    // Les entrées déjà présentes dans `playerPhotoPrefill` (posées en session) gagnent sur le
+    // contenu du fichier en cas de conflit de nom.
+    playerPhotoPrefill = { ...(await res.json()), ...playerPhotoPrefill };
   } catch {
     // Fichier absent (script jamais exécuté) ou JSON invalide : pas un cas bloquant, l'appli
     // fonctionne normalement avec uniquement les photos choisies manuellement.
@@ -87,6 +133,7 @@ const el = {
   countBlack: document.querySelector('#count-black .count-value'),
   tempoDelta: document.getElementById('tempo-delta'),
   statusLine: document.getElementById('status-line'),
+  statusText: document.getElementById('status-text'),
   moveList: document.getElementById('move-list'),
   btnFirst: document.getElementById('btn-first'),
   btnPrev: document.getElementById('btn-prev'),
@@ -122,6 +169,7 @@ const el = {
   panelLibrary: document.getElementById('panel-library'),
   libraryList: document.getElementById('library-list'),
   libraryEmpty: document.getElementById('library-empty'),
+  libraryName: document.getElementById('library-name'),
   libraryCount: document.getElementById('library-count'),
   btnLibrarySave: document.getElementById('btn-library-save'),
   btnLibraryOpen: document.getElementById('btn-library-open'),
@@ -212,11 +260,11 @@ function refreshUI() {
   const gameOver = game.isGameOver();
   if (gameOver) {
     const w = game.winner();
-    el.statusLine.textContent = w === WHITE ? 'Les Blancs gagnent — plus aucun coup possible pour les Noirs' : 'Les Noirs gagnent — plus aucun coup possible pour les Blancs';
+    el.statusText.textContent = w === WHITE ? 'Les Blancs gagnent — plus aucun coup possible pour les Noirs' : 'Les Noirs gagnent — plus aucun coup possible pour les Blancs';
   } else {
     // Le halo pulsant sur les pièces concernées suffit déjà à signaler la prise
     // obligatoire (retour Mickaël A5) — plus besoin de le répéter dans le texte d'état.
-    el.statusLine.textContent = `Trait aux ${game.sideToMove === WHITE ? 'Blancs' : 'Noirs'}`;
+    el.statusText.textContent = `Trait aux ${game.sideToMove === WHITE ? 'Blancs' : 'Noirs'}`;
   }
 
   renderMoveList();
@@ -481,12 +529,32 @@ async function playMove(action) {
 }
 
 // --- undo / redo / navigation ---------------------------------------------------
-el.btnUndo.addEventListener('click', () => { stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); });
-el.btnRedo.addEventListener('click', () => { stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); });
-el.btnPrev.addEventListener('click', () => { stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); });
-el.btnNext.addEventListener('click', () => { stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); });
+function goToPrevMove() { stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); }
+function goToNextMove() { stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); }
+el.btnUndo.addEventListener('click', goToPrevMove);
+el.btnRedo.addEventListener('click', goToNextMove);
+el.btnPrev.addEventListener('click', goToPrevMove);
+el.btnNext.addEventListener('click', goToNextMove);
 el.btnFirst.addEventListener('click', () => { stopAutoplay(); while (game.undo()) {} selectedSquare = null; refreshUI(); });
 el.btnLast.addEventListener('click', () => { stopAutoplay(); while (game.redo()) {} selectedSquare = null; refreshUI(); });
+
+// Navigation à la molette sur le damier (comme Toernooibase) : vers le bas = coup suivant,
+// vers le haut = coup précédent. Uniquement au-dessus du canvas (pas toute la page), pour ne
+// pas interférer avec le scroll de la liste des coups/bibliothèque à côté. `preventDefault()`
+// empêche le scroll de la page derrière le damier ; listener non-passif requis pour ça (un
+// listener 'wheel' est passif par défaut, preventDefault() serait silencieusement ignoré).
+// Garde-fou anti-rafale : un trackpad envoie de nombreux évènements 'wheel' à faible delta
+// pour un seul geste — on limite à un coup par tranche de 150ms, plutôt qu'un coup par
+// évènement (qui ferait défiler plusieurs coups d'un coup sur un simple geste de molette).
+let lastWheelNavAt = 0;
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const now = performance.now();
+  if (now - lastWheelNavAt < 150) return;
+  lastWheelNavAt = now;
+  if (e.deltaY > 0) goToNextMove();
+  else if (e.deltaY < 0) goToPrevMove();
+}, { passive: false });
 
 el.btnPlay.addEventListener('click', () => { isPlaying ? stopAutoplay() : startAutoplay(); });
 
@@ -563,6 +631,10 @@ let flipped = false;
 function toggleFlip() {
   flipped = !flipped;
   renderer.setFlipped(flipped);
+  // Permute l'ordre d'affichage des 2 cartes joueurs (et de la zone score entre elles) pour
+  // rester cohérent avec l'orientation du plateau — uniquement visuel (`order` flex en CSS,
+  // cf. .players-rail.flipped dans style.css), aucune donnée ni le DOM lui-même ne bougent.
+  el.playersRail.classList.toggle('flipped', flipped);
 }
 el.btnFlip.addEventListener('click', toggleFlip);
 el.btnFullscreen.addEventListener('click', () => {
@@ -625,15 +697,11 @@ function syncHeaderFieldsFromState() {
   const chipLabels = { Event: 'Événement', Site: 'Lieu', Date: 'Date', Round: 'Ronde' };
   document.querySelectorAll('.meta-chip[data-field]').forEach((elm) => {
     const key = elm.dataset.field;
-    const val = headers[key] || chipDefaults[key] || '—';
+    const rawVal = headers[key] || chipDefaults[key] || '—';
+    const val = key === 'Date' && rawVal !== '—' ? formatPdnDate(rawVal) : rawVal;
     elm.textContent = val;
     elm.title = val !== '—' ? val : chipLabels[key];
   });
-  // PDN encode traditionnellement le nom "Nom, Prénom" (convention KNDB/Turbo Dambase, cf.
-  // exemple `[White "Scholma, Auke"]`) — affichage sans la virgule pour un rendu plus
-  // naturel dans la carte joueur, sans toucher à `headers.White/Black` : la valeur d'origine
-  // reste inchangée pour l'export PDN.
-  const formatPlayerName = (name) => name.replace(/,\s*/g, ' ');
   const whiteName = document.querySelector('.player-name[data-field="White"]');
   const blackName = document.querySelector('.player-name[data-field="Black"]');
   if (whiteName) whiteName.textContent = headers.White ? formatPlayerName(headers.White) : 'Joueur Blancs';
@@ -653,10 +721,25 @@ function syncHeaderFieldsFromState() {
   const blackTitle = document.querySelector('.meta-field[data-field="BlackTitle"]');
   if (whiteTitle) whiteTitle.textContent = headers.WhiteTitle || '—';
   if (blackTitle) blackTitle.textContent = headers.BlackTitle || '—';
-  const whiteScore = document.querySelector('.stat-value[data-field="WhiteScore"]');
-  const blackScore = document.querySelector('.stat-value[data-field="BlackScore"]');
-  if (whiteScore) whiteScore.textContent = headers.WhiteScore || '—';
-  if (blackScore) blackScore.textContent = headers.BlackScore || '—';
+  // Score global affiché entre les deux cartes (#score-center), pas sur chaque carte
+  // individuellement — plus lisible en un coup d'œil pour savoir qui a gagné (retour
+  // Mickaël). Le camp gagnant est mis en valeur (doré) ; égalité ou partie en cours
+  // ("*"/tag absent) : affichage neutre, aucun camp mis en valeur.
+  const scoreBlack = document.getElementById('score-black');
+  const scoreWhite = document.getElementById('score-white');
+  const [whiteResultScore, blackResultScore] = parseResultScore(headers.Result);
+  if (scoreBlack && scoreWhite) {
+    scoreBlack.textContent = blackResultScore ?? '—';
+    scoreWhite.textContent = whiteResultScore ?? '—';
+    scoreBlack.classList.remove('winner');
+    scoreWhite.classList.remove('winner');
+    if (whiteResultScore !== null && blackResultScore !== null) {
+      const w = parseFloat(whiteResultScore);
+      const b = parseFloat(blackResultScore);
+      if (w > b) scoreWhite.classList.add('winner');
+      else if (b > w) scoreBlack.classList.add('winner');
+    }
+  }
   // WhiteUrl/BlackUrl (photo officielle Toernooibase, quand le PDN les fournit) alimentent
   // le pré-remplissage AVANT d'afficher les avatars — au même niveau de priorité que
   // data/player-photos.json (playerPhotoPrefill), donc jamais au-dessus d'un choix manuel,
@@ -941,13 +1024,18 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
     const key = elm.dataset.field;
     let val = elm.textContent.trim();
     if (key.endsWith('Elo') && /^Elo\s/.test(val)) val = val.replace(/^Elo\s*/, '').trim();
-    // .player-name affiche "Nom, Prénom" sans la virgule (cf. syncHeaderFieldsFromState) —
+    // .player-name affiche "Prénom Nom" (cf. formatPlayerName/syncHeaderFieldsFromState) —
     // si la valeur affichée correspond exactement à l'ancienne valeur juste reformatée
     // (aucune vraie modification, juste un focus/blur accidentel), on ne touche pas à
     // `headers` pour ne pas perdre définitivement la virgule d'origine utile à l'export PDN.
     const isUntouchedPlayerName = elm.classList.contains('player-name')
-      && headers[key] && val === headers[key].replace(/,\s*/g, ' ');
-    if (!isUntouchedPlayerName) {
+      && headers[key] && val === formatPlayerName(headers[key]);
+    // Même logique pour le chip Date, affiché en JJ/MM/AAAA (cf. formatPdnDate) alors que
+    // `headers.Date` reste en AAAA.MM.JJ — sans ce garde-fou, un focus/blur accidentel sans
+    // vraie modification écraserait `headers.Date` avec le format d'affichage inversé.
+    const isUntouchedDate = key === 'Date'
+      && headers[key] && val === formatPdnDate(headers[key]);
+    if (!isUntouchedPlayerName && !isUntouchedDate) {
       if (val && val !== '—') headers[key] = val;
       else delete headers[key];
     }
@@ -973,6 +1061,27 @@ function syncActiveLibraryEntryHeaders() {
   renderLibrary();
 }
 
+// Sérialise la bibliothèque en y encodant `libraryName` (si renseigné) comme un en-tête
+// `[LibraryName "..."]` placé AVANT les en-têtes de la 1re partie. Le découpage en blocs du
+// parseur (splitIntoGameBlocks) fusionne des lignes d'en-tête consécutives tant qu'aucun
+// texte de coup ne s'est encore intercalé — ce en-tête "orphelin" atterrit donc simplement
+// dans les headers de la 1re partie à la relecture, sans aucun changement au parseur ; on le
+// retire ensuite de ces headers via extractLibraryName() pour ne pas polluer cette partie.
+function serializeLibraryWithName(entries, name) {
+  const pdn = serializeLibraryToPdn(entries);
+  return name ? `[LibraryName "${name}"]\n${pdn}` : pdn;
+}
+
+// Repère et retire `headers.LibraryName` de la 1re partie d'un tableau parsé (mutation en
+// place) — utilisé à la fois pour la restauration localStorage et pour "Ouvrir une
+// bibliothèque". Renvoie le nom trouvé, ou '' si absent.
+function extractLibraryName(entries) {
+  if (entries.length === 0 || !entries[0].headers.LibraryName) return '';
+  const name = entries[0].headers.LibraryName;
+  delete entries[0].headers.LibraryName;
+  return name;
+}
+
 // --- persistance locale (localStorage) -------------------------------------------------
 // Sauvegarde silencieuse en arrière-plan à chaque changement d'état (coup joué, undo/redo,
 // import, édition d'en-tête...) — débattue via un court délai pour éviter d'écrire à
@@ -984,10 +1093,23 @@ function scheduleSave() {
   saveTimer = setTimeout(saveAppState, 400);
 }
 function saveAppState() {
-  const pdnText = library.length > 0 ? serializeLibraryToPdn(library) : '';
+  saveTimer = null;
+  const pdnText = library.length > 0 ? serializeLibraryWithName(library, libraryName) : '';
   const currentGamePdn = serializeToPdn(currentGamePayload());
   saveLibraryState({ version: 1, pdnText, activeIndex: libraryActiveIndex, currentGamePdn, libraryDirty });
 }
+// Filet de sécurité contre la course debounce (400ms) / rafraîchissement immédiat de la
+// page : un F5 juste après une action (ex. "Ajouter la partie" suivi d'un refresh instantané)
+// arrivait AVANT que le timer de scheduleSave() se déclenche, perdant silencieusement l'écriture
+// (bug constaté en direct — la bibliothèque revenait vide après un simple F5). `beforeunload`
+// se déclenche de façon synchrone avant que la page ne se décharge, y compris pour un rechargement
+// déclenché par script (`location.reload()`) — on force l'écriture immédiate d'un save en attente.
+window.addEventListener('beforeunload', () => {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveAppState();
+  }
+});
 
 // Restauration au chargement : reconstruit la bibliothèque et la partie en cours à partir
 // du dernier état sauvegardé, s'il existe. Un état corrompu (JSON invalide, PDN illisible)
@@ -999,6 +1121,7 @@ function restoreAppState() {
     if (state.pdnText) {
       const restoredLibrary = parsePdn(state.pdnText);
       if (restoredLibrary.length > 0) {
+        libraryName = extractLibraryName(restoredLibrary);
         library = restoredLibrary;
         libraryActiveIndex = Math.min(Math.max(state.activeIndex ?? 0, 0), library.length - 1);
       }
@@ -1026,10 +1149,73 @@ function restoreAppState() {
 // tous génériquement — le renommage survit donc à Sauvegarder/Ouvrir/localStorage sans
 // aucun changement de format.
 function libraryEntryTitle(entry) {
-  return entry.headers.Label || `${entry.headers.White || 'Blancs'} — ${entry.headers.Black || 'Noirs'}`;
+  const label = customLabelOf(entry);
+  if (label) return label;
+  return defaultLibraryEntryTitle(entry);
 }
 
+// Titre par défaut (noms des joueurs), SANS tenir compte d'un éventuel `headers.Label` — sert
+// à détecter si un renommage n'a en fait rien changé (cf. startRenameLibraryEntry).
+function defaultLibraryEntryTitle(entry) {
+  return `${formatPlayerName(entry.headers.White || 'Blancs')} — ${formatPlayerName(entry.headers.Black || 'Noirs')}`;
+}
+
+// `headers.Label`, mais SEULEMENT s'il diffère réellement du titre par défaut — auto-guérit
+// les entrées où un `Label` redondant a été figé par un ancien bug (renommage validé sans
+// changement, corrigé dans startRenameLibraryEntry, mais dont la donnée déjà enregistrée en
+// localStorage/fichier .pdn avant ce correctif restait plane pour toujours). Sans ce garde-
+// fou, une entrée déjà "polluée" perdait pour de bon la couleur Noirs + le score, même après
+// correction du bug qui l'avait créée — seules les NOUVELLES entrées en bénéficiaient.
+function customLabelOf(entry) {
+  const label = entry.headers.Label;
+  if (!label || label === defaultLibraryEntryTitle(entry)) return null;
+  return label;
+}
+
+// Version DOM du titre pour l'affichage dans la liste (contrairement à libraryEntryTitle()
+// ci-dessus, texte brut utilisé pour le renommage/la confirmation de suppression) : ordre
+// TOUJOURS Blancs — Noirs (convention [White]/[Black]), score "X-Y" (même ordre) en fin de
+// ligne — ex. "Arnaud Cordier — Kevin Machtelinck 0-2". Coloration FIXE, indépendante du
+// résultat (retour Mickaël : pas de mise en évidence dynamique du vainqueur) — seul le nom
+// des Noirs porte une couleur distincte (`.library-item-black`, même bronze que l'anneau
+// photo Noirs du Bloc 1, cf. `.player-avatar-ring[data-side-ring="black"]`), Blancs et score
+// restent en texte neutre standard.
+function renderLibraryItemTitle(entry, container) {
+  container.textContent = '';
+  const label = customLabelOf(entry);
+  if (label) { container.textContent = label; return; }
+  const whiteName = formatPlayerName(entry.headers.White || 'Blancs');
+  const blackName = formatPlayerName(entry.headers.Black || 'Noirs');
+  const [whiteScore, blackScore] = parseResultScore(entry.result);
+  const blackNameSpan = document.createElement('span');
+  blackNameSpan.className = 'library-item-black';
+  blackNameSpan.textContent = blackName;
+  container.append(document.createTextNode(whiteName), document.createTextNode(' — '), blackNameSpan);
+  if (whiteScore !== null && blackScore !== null) {
+    container.append(document.createTextNode(` ${whiteScore}-${blackScore}`));
+  }
+}
+
+// N'écrase pas le champ pendant que l'utilisateur est en train d'y taper (même précaution
+// que pour les autres champs éditables du panneau) — seulement au repos.
+function syncLibraryNameField() {
+  if (document.activeElement === el.libraryName) return;
+  el.libraryName.textContent = libraryName;
+}
+
+el.libraryName.addEventListener('blur', () => {
+  libraryName = el.libraryName.textContent.trim();
+  el.libraryName.textContent = libraryName;
+  scheduleSave();
+});
+// Évite qu'un retour à la ligne (Entrée) n'insère un <br> dans ce contenteditable — un nom
+// de bibliothèque est une seule ligne, comme le nom d'une entrée (startRenameLibraryEntry).
+el.libraryName.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); el.libraryName.blur(); }
+});
+
 function renderLibrary() {
+  syncLibraryNameField();
   el.libraryList.innerHTML = '';
   el.libraryEmpty.hidden = library.length > 0;
   el.libraryCount.hidden = library.length === 0;
@@ -1042,7 +1228,7 @@ function renderLibrary() {
     info.className = 'library-item-info';
     const title = document.createElement('div');
     title.className = 'library-item-title';
-    title.textContent = libraryEntryTitle(entry);
+    renderLibraryItemTitle(entry, title);
     title.title = 'Double-cliquer pour renommer';
     title.addEventListener('dblclick', (e) => {
       e.preventDefault(); // évite la sélection de texte native sur double-clic
@@ -1051,8 +1237,7 @@ function renderLibrary() {
     });
     const meta = document.createElement('div');
     meta.className = 'library-item-meta';
-    meta.textContent = [entry.headers.Event, `${entry.moves.length} coups`, entry.result]
-      .filter(Boolean).join(' · ');
+    meta.textContent = entry.headers.Event || '';
     info.append(title, meta);
 
     const deleteBtn = document.createElement('button');
@@ -1096,7 +1281,12 @@ function startRenameLibraryEntry(idx, titleElm) {
   input.addEventListener('click', (e) => e.stopPropagation());
   const commit = () => {
     const val = input.value.trim();
-    if (val) entry.headers.Label = val;
+    // Un renommage "validé" sans changement réel (double-clic puis Entrée/clic ailleurs sans
+    // rien taper) ne doit PAS figer un `headers.Label` — sinon le titre bascule silencieusement
+    // en texte brut fixe, perdant définitivement le rendu dynamique (couleur Noirs + score),
+    // même si rien n'a été personnalisé (bug constaté : confondu au départ avec un problème
+    // d'entrée "active" alors que la cause réelle était ce commit trop permissif).
+    if (val && val !== defaultLibraryEntryTitle(entry)) entry.headers.Label = val;
     else delete entry.headers.Label;
     libraryDirty = true;
     renderLibrary();
@@ -1218,13 +1408,28 @@ async function importFiles(fileList, { mode = 'append' } = {}) {
     return;
   }
   if (mode === 'replace') {
+    libraryName = extractLibraryName(parsedGames);
     library = parsedGames;
     libraryActiveIndex = 0;
     libraryDirty = false; // vient d'être ouverte depuis un fichier, synchronisée avec le disque
     renderLibrary();
     loadParsedGame(library[0]);
     if (library.length > 1) switchTab('library');
+  } else if (parsedGames.length === 1) {
+    // Un fichier à une seule partie n'est PAS ajouté à la bibliothèque à l'import — juste
+    // chargé comme "partie en cours", sans référence à une entrée existante (bug constaté :
+    // importer sans jamais cliquer "Ajouter la partie" écrivait quand même dans la
+    // bibliothèque, et "Nouvelle partie" puis un 2e import pouvait donner l'impression que
+    // la 1re partie avait "disparu" alors qu'elle restait figée comme entrée jamais voulue).
+    // Il faut un clic explicite sur "Ajouter la partie" (btnLibraryAddCurrent) pour l'y faire
+    // entrer — même geste que pour n'importe quelle partie jouée/éditée manuellement.
+    libraryActiveIndex = -1;
+    renderLibrary();
+    loadParsedGame(parsedGames[0]);
   } else {
+    // Fichier multi-parties (ex. export Toernooibase d'un tournoi entier) : cliquer
+    // "Ajouter la partie" une à une serait impraticable — ajout direct à la bibliothèque
+    // conservé pour ce cas, comme avant.
     library = library.concat(parsedGames);
     libraryDirty = true;
     // La dernière partie ajoutée devient l'entrée active — même règle que "Ajouter la
@@ -1233,7 +1438,7 @@ async function importFiles(fileList, { mode = 'append' } = {}) {
     libraryActiveIndex = library.length - 1;
     renderLibrary();
     loadParsedGame(library[libraryActiveIndex]);
-    if (library.length > 1) switchTab('library');
+    switchTab('library');
   }
   scheduleSave();
 }
@@ -1286,12 +1491,22 @@ el.btnLibraryAddCurrent.addEventListener('click', () => {
   showToast('Partie ajoutée à la bibliothèque.', 'success');
 });
 
-el.btnLibrarySave.addEventListener('click', () => {
+// Retire uniquement les caractères invalides dans un nom de fichier Windows (\/:*?"<>|) —
+// contrairement à safeFilename() (export d'une seule partie), on garde espaces/accents
+// lisibles ici : le nom de bibliothèque est saisi à la main par l'utilisateur, pas dérivé
+// d'un nom de joueur PDN, donc pas besoin de le réduire à des underscores.
+function suggestedLibraryFilename() {
+  const name = libraryName.trim() || 'bibliotheque';
+  return `${name.replace(/[\\/:*?"<>|]+/g, '_')}.pdn`;
+}
+
+el.btnLibrarySave.addEventListener('click', async () => {
   if (library.length === 0) {
     showToast('Bibliothèque vide, rien à sauvegarder.', 'error');
     return;
   }
-  downloadText('bibliotheque.pdn', serializeLibraryToPdn(library), 'application/x-pdn');
+  const saved = await saveTextWithPicker(suggestedLibraryFilename(), serializeLibraryWithName(library, libraryName), 'application/x-pdn', '.pdn');
+  if (!saved) return; // fenêtre "Enregistrer sous" annulée par l'utilisateur
   libraryDirty = false;
   scheduleSave();
   showToast('Bibliothèque sauvegardée.', 'success');
@@ -1329,12 +1544,22 @@ function currentGamePayload() {
 // (cf. écouteur 'paste' sur el.moveList plus bas) : même garde-fou, même parsing, même
 // comportement de chargement — pour que les deux entrées restent strictement synchronisées.
 async function pastePdnText(text) {
+  const games = parsePdn(text);
+  if (games.length === 0) { showToast('Presse-papier : aucun PDN reconnu.', 'error'); return; }
+  if (games.length === 1) {
+    // Un seul PDN collé n'est PAS ajouté à la bibliothèque (ni ne la remplace) — même règle
+    // que l'import fichier d'une seule partie (cf. importFiles) : juste chargé comme "partie
+    // en cours", il faut un clic explicite sur "Ajouter la partie" pour l'y faire entrer.
+    libraryActiveIndex = -1;
+    renderLibrary();
+    loadParsedGame(games[0]);
+    return;
+  }
   if (libraryDirty && library.length > 0) {
     const ok = await confirmModal('Coller une partie remplacera la bibliothèque active. Les changements non sauvegardés seront perdus.', 'Coller');
     if (!ok) return;
   }
-  const games = parsePdn(text);
-  if (games.length === 0) { showToast('Presse-papier : aucun PDN reconnu.', 'error'); return; }
+  // Fichier/presse-papier multi-parties : remplace la bibliothèque active, comme avant.
   library = games;
   // La dernière partie collée devient l'entrée active — même règle que "Importer"/"Ajouter
   // la partie" (un collage remplace toute la bibliothèque, mais peut contenir plusieurs
@@ -1342,8 +1567,8 @@ async function pastePdnText(text) {
   libraryActiveIndex = games.length - 1;
   libraryDirty = true;
   renderLibrary();
-  loadParsedGame(games[libraryActiveIndex]);
-  if (games.length > 1) switchTab('library');
+  loadParsedGame(library[libraryActiveIndex]);
+  switchTab('library');
 }
 
 el.btnPaste.addEventListener('click', async () => {
@@ -1387,6 +1612,34 @@ function downloadText(filename, content, mime) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// Variante avec choix de nom/dossier via la fenêtre système "Enregistrer sous" (File System
+// Access API, Chrome/Edge uniquement — pas de support Firefox/Safari à ce jour). Repli
+// silencieux sur `downloadText()` (téléchargement direct vers le dossier Téléchargements)
+// si l'API est absente, ou si l'utilisateur annule la fenêtre (`AbortError`, pas une vraie
+// erreur) — ne PAS retomber sur le téléchargement direct dans ce cas précis, une annulation
+// volontaire ne doit pas quand même écrire le fichier. Toute autre erreur retombe sur le
+// téléchargement direct plutôt que de laisser l'utilisateur sans fichier du tout.
+async function saveTextWithPicker(suggestedName, content, mime, extension) {
+  if (typeof window.showSaveFilePicker !== 'function') {
+    downloadText(suggestedName, content, mime);
+    return true;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName,
+      types: [{ description: `Fichier ${extension.replace('.', '').toUpperCase()}`, accept: { [mime]: [extension] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    return true;
+  } catch (err) {
+    if (err && err.name === 'AbortError') return false; // annulé par l'utilisateur
+    downloadText(suggestedName, content, mime);
+    return true;
+  }
+}
 function safeFilename() {
   const w = (headers.White || 'Blancs').replace(/[^\w-]+/g, '_');
   const b = (headers.Black || 'Noirs').replace(/[^\w-]+/g, '_');
@@ -1397,14 +1650,16 @@ el.btnExport.addEventListener('click', () => { el.exportMenu.hidden = !el.export
 window.addEventListener('click', (e) => {
   if (!el.exportDropdown.contains(e.target)) el.exportMenu.hidden = true;
 });
-el.btnExportPdn.addEventListener('click', () => {
-  downloadText(`${safeFilename()}.pdn`, serializeToPdn(currentGamePayload()), 'application/x-pdn');
+el.btnExportPdn.addEventListener('click', async () => {
   el.exportMenu.hidden = true;
+  const saved = await saveTextWithPicker(`${safeFilename()}.pdn`, serializeToPdn(currentGamePayload()), 'application/x-pdn', '.pdn');
+  if (!saved) return; // fenêtre "Enregistrer sous" annulée par l'utilisateur
   showToast('Export PDN téléchargé.', 'success');
 });
-el.btnExportTxt.addEventListener('click', () => {
-  downloadText(`${safeFilename()}.txt`, serializeToTxt(currentGamePayload()), 'text/plain');
+el.btnExportTxt.addEventListener('click', async () => {
   el.exportMenu.hidden = true;
+  const saved = await saveTextWithPicker(`${safeFilename()}.txt`, serializeToTxt(currentGamePayload()), 'text/plain', '.txt');
+  if (!saved) return;
   showToast('Export TXT téléchargé.', 'success');
 });
 

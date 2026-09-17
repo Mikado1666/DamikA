@@ -86,20 +86,15 @@
           </span>
         </button>
         <div class="player-card-body">
-          <span class="meta-field elo-badge" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
           <div class="player-name-row">
             <div class="player-name" data-field="Black" contenteditable="true" spellcheck="false">Joueur Noirs</div>
             <span class="side-tag">Noirs</span>
+            <span class="meta-field elo-badge" data-field="BlackElo" contenteditable="true" title="Elo">Elo —</span>
           </div>
           <div class="player-card-meta">
             <span class="meta-field" data-field="BlackTitle" contenteditable="true" title="Titre">—</span>
           </div>
           <div class="player-card-stats">
-            <div class="stat-block">
-              <i class="stat-icon">♛</i>
-              <span class="stat-value" data-field="BlackScore" contenteditable="true" title="Score">—</span>
-              <span class="stat-label">Score</span>
-            </div>
             <div class="stat-block" id="count-black">
               <i class="stat-icon">●</i>
               <span class="count-value">20</span>
@@ -109,10 +104,11 @@
         </div>
       </div>
 
-      <div class="players-rail-divider">
-        <span class="tempo-delta" id="tempo-delta" title="Compteur de temps (théorie des finales)">0</span>
+      <div class="score-center" id="score-center" title="Score de la partie">
+        <span class="score-center-value" id="score-black" data-side="black">—</span>
+        <span class="score-center-sep">—</span>
+        <span class="score-center-value" id="score-white" data-side="white">—</span>
       </div>
-
       <div class="player-card" data-side="white">
         <button type="button" class="player-avatar-ring" data-side-ring="white" title="Changer la photo">
           <span class="player-avatar-inner" data-side-avatar="white">
@@ -121,20 +117,15 @@
           </span>
         </button>
         <div class="player-card-body">
-          <span class="meta-field elo-badge" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
           <div class="player-name-row">
             <div class="player-name" data-field="White" contenteditable="true" spellcheck="false">Joueur Blancs</div>
             <span class="side-tag">Blancs</span>
+            <span class="meta-field elo-badge" data-field="WhiteElo" contenteditable="true" title="Elo">Elo —</span>
           </div>
           <div class="player-card-meta">
             <span class="meta-field" data-field="WhiteTitle" contenteditable="true" title="Titre">—</span>
           </div>
           <div class="player-card-stats">
-            <div class="stat-block">
-              <i class="stat-icon">♛</i>
-              <span class="stat-value" data-field="WhiteScore" contenteditable="true" title="Score">—</span>
-              <span class="stat-label">Score</span>
-            </div>
             <div class="stat-block" id="count-white">
               <i class="stat-icon">●</i>
               <span class="count-value">20</span>
@@ -153,7 +144,11 @@
         </div>
       </div>
 
-      <div class="status-line" id="status-line">Trait aux Blancs</div>
+      <div class="status-line" id="status-line">
+        <span class="tempo-delta" id="tempo-delta" title="Compteur de temps (théorie des finales)">0</span>
+        <span class="status-sep">·</span>
+        <span id="status-text">Trait aux Blancs</span>
+      </div>
 
       <div class="controls-bar">
         <button id="btn-first" class="ctrl-btn" title="Début (Origine)">⏮</button>
@@ -186,6 +181,7 @@
       </div>
       <div class="panel-body" id="panel-library" hidden>
         <input type="file" id="library-file-input" accept=".pdn,.txt" hidden />
+        <div class="library-name" id="library-name" contenteditable="true" spellcheck="false" data-placeholder="Bibliothèque sans nom" title="Cliquer pour nommer la bibliothèque"></div>
         <div class="panel-footer">
           <button id="btn-library-add-current" class="text-btn" title="Ajouter la partie actuellement affichée à la bibliothèque">➕ Ajouter la partie</button>
         </div>

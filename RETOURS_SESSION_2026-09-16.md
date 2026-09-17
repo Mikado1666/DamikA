@@ -202,6 +202,23 @@ plusieurs thèmes de damier et plusieurs styles de pions existent déjà (et
 vont encore s'enrichir avec A1/A2 ci-dessus). Mettre à jour le document une
 fois les retours visuels de cette session intégrés.
 
+**Mise à jour au 2026-09-17** : cette liste reste la référence pour le backlog
+restant, non retouchée pendant la session du 2026-09-17 (voir CLAUDE.md,
+section "Session 2026-09-17", pour ce qui a été traité ce jour-là — Header,
+Bloc 1, Bibliothèque, molette, déploiement public). Deux précisions :
+- **Point 10 (photo des joueurs) : fait**, dans la session du 2026-09-16
+  (upload/URL, registre nom→photo, pré-remplissage automatique, backend
+  Cloudflare Worker) — jamais mis à jour dans la liste ci-dessus, laissé tel
+  quel par cohérence avec le reste du document.
+- **Point 1 (annotations de coups) : partiellement fait** — le commentaire
+  texte libre par coup existe et est validé (chantier "commentaire de coup",
+  2026-09-16), mais les symboles d'annotation (!, ?, !!, ??) ne sont toujours
+  pas implémentés.
+
+Backlog restant confirmé avec Mickaël en fin de session du 2026-09-17 :
+points 3 (export image/PDF), 4/5 (partage lien/QR), 11/12 (sons), 14 (mode
+clair) — prochain point de reprise.
+
 ---
 
 ## C. En attente, pas dans cette passe

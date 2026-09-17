@@ -4,7 +4,20 @@ PWA de dames internationales 10x10 (FMJD), vanilla JS (ES modules natifs, pas de
 build step, pas de framework), rendu plateau en Canvas 2D. Voir `CAHIER_DES_CHARGES.md`
 pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
-## État du projet (dernière mise à jour : 2026-09-16)
+## État du projet (dernière mise à jour : 2026-09-17)
+
+- **Résumé de la session du 2026-09-17** (voir la section dédiée plus bas, "Session
+  2026-09-17", pour le détail complet) : nombreux ajustements UI sur le Header (export
+  PDN/TXT et sauvegarde bibliothèque via une vraie fenêtre "Enregistrer sous" — File System
+  Access API —, clarté du menu palette DAMIER/PIONS, flip du damier synchronisé avec l'ordre
+  des cartes joueurs), le Bloc 1 (badge Elo mis en avant à côté du nom, score global centré
+  entre les deux cartes avec mise en évidence du vainqueur, compteur de temps déplacé dans la
+  ligne de statut en bas du damier), la Bibliothèque (nom de la bibliothèque elle-même
+  éditable et persisté, sauvegarde via "Enregistrer sous", format des entrées avec couleur
+  fixe pour les Noirs, plusieurs bugs de persistance/rendu corrigés), la navigation à la
+  molette sur le damier (comme Toernooibase), et le déploiement public du site sur
+  **https://damika.shell-green.workers.dev** (Cloudflare, compte "Shell Green"). Chantier
+  "commentaire de coup" (A3) : pas retouché cette session (déjà validé le 2026-09-16).
 
 - **Résumé de la session du 2026-09-16** (voir les sections dédiées plus bas pour le détail
   de chacun) : chantier "Bibliothèque persistante" (localStorage, Sauvegarder/Ouvrir/import
@@ -732,9 +745,116 @@ Elo ("Elo 2004"/"Elo 2032"), titre ("CMF"), photos des deux joueurs (auto-détec
 ("Tournoi Modifié Test") répercutée instantanément dans le sous-titre de l'entrée
 Bibliothèque, vérifiée à la fois dans le DOM et dans le PDN persisté en `localStorage`.
 
+## Session 2026-09-17
+
+Session d'ajustements ciblés sur le Header, le Bloc 1 et la Bibliothèque, plus deux
+chantiers transverses (navigation molette, déploiement public). Chaque point ci-dessous a
+été testé en navigateur (souvent via automatisation Claude-in-Chrome sur un serveur local),
+pas seulement écrit puis supposé fonctionnel.
+
+**Header**
+- **Export PDN/TXT et sauvegarde bibliothèque via une vraie fenêtre "Enregistrer sous"**
+  (File System Access API, `window.showSaveFilePicker`) au lieu d'un téléchargement direct
+  vers le dossier Téléchargements. Nouvelle fonction partagée `saveTextWithPicker()` dans
+  `main.js`, utilisée par les 3 boutons (Export PDN, Export TXT, Sauvegarder la
+  bibliothèque) : filtre d'extension adapté (`.pdn`/`.txt`), nom par défaut cohérent avec la
+  logique déjà en place (`safeFilename()` pour l'export d'une partie, `libraryName` pour la
+  bibliothèque). Repli automatique sur le téléchargement direct si l'API n'est pas supportée
+  (Firefox/Safari) ou en cas d'erreur ; une annulation volontaire de la fenêtre n'écrit
+  jamais de fichier de repli.
+- **Menu palette (icône 🎨) : distinction DAMIER/PIONS renforcée.** Les labels de section
+  étaient trop discrets, confondus avec les options. 2 pistes prototypées en direct dans la
+  page et comparées par Mickaël (bandeau plein doré vs icône+soulignement) — bandeau plein
+  retenu (`.dropdown-section-label` : fond `--gold-soft`, texte doré gras, bordures
+  haut/bas).
+- **Flip du damier synchronisé avec l'ordre des cartes joueurs.** Le bouton "retourner le
+  damier" inversait déjà l'orientation du plateau mais pas l'ordre visuel des 2 cartes du
+  Bloc 1, créant une incohérence. Corrigé en purement visuel (`order` flex CSS sur
+  `.player-card`/`.score-center`, classe `.flipped` sur `.players-rail` togglée dans
+  `toggleFlip()`) — aucune donnée ni le DOM lui-même ne bougent, réversible.
+
+**Bloc 1 (cartes joueurs + zone centrale)**
+- **Score global affiché entre les 2 cartes** (`#score-center`), parsé depuis
+  `[Result "X-Y"]` (nouvelle fonction `parseResultScore()`) — le badge "SCORE" individuel de
+  chaque carte ne fonctionnait jamais (`headers.WhiteScore`/`BlackScore` n'étaient renseignés
+  nulle part dans le code, bug latent). Camp gagnant mis en évidence en doré ; neutre si
+  égalité ou partie en cours. Badges "SCORE" individuels retirés.
+- **Badge Elo mis en avant** : déplacé du coin de la carte (peu visible) vers la ligne du nom,
+  juste à côté du tag Blancs/Noirs — pilule dorée pleine plus grande, 2 options prototypées et
+  comparées avant validation.
+- **Compteur de temps (théorie des finales) déplacé** de la zone entre les cartes (où il
+  déséquilibrait le centrage du score) vers la ligne de statut en bas du damier, combiné avec
+  "Trait aux Blancs/Noirs" (ex. "+2 · Trait aux Blancs"). Le score central est maintenant
+  exactement centré dans son espace (vérifié par mesure de `getBoundingClientRect()`, écart
+  de 0px).
+- Nom des joueurs (cartes ET titres bibliothèque) affiché "Prénom Nom" au lieu du format PDN
+  brut "Nom, Prénom" — affichage uniquement, `headers.White/Black` et l'export PDN gardent le
+  format d'origine intact. Date du bandeau méta affichée en JJ/MM/AAAA (donnée interne reste
+  en AAAA.MM.JJ), même principe.
+
+**Bibliothèque**
+- **Nom de la bibliothèque** (distinct du nom de chaque partie) : nouveau champ éditable
+  `#library-name` en haut de l'onglet, persisté en localStorage et encodé dans le fichier
+  `.pdn` exporté comme un en-tête non standard `[LibraryName "..."]` placé avant la 1ʳᵉ
+  partie (récupéré et retiré proprement à la lecture, ne pollue pas cette partie). Utilisé
+  comme nom de fichier par défaut à la sauvegarde.
+- **Format des entrées** : ordre fixe Blancs — Noirs (jamais réordonné selon le vainqueur,
+  après une 1ʳᵉ tentative de réordonnancement jugée déroutante par Mickaël), score en fin de
+  ligne, couleur bronze fixe (`#c9a06a`, éclaircie après un 1er essai trop peu contrasté)
+  appliquée systématiquement au nom des Noirs — indépendant du résultat. "X coups" retiré de
+  la ligne meta (ne garde que le nom du tournoi).
+- **Plusieurs bugs de persistance/rendu corrigés**, tous liés à des interactions entre
+  chantiers précédents et celui-ci :
+  1. Un import à une seule partie (fichier, coller/Ctrl+V) écrivait quand même dans la
+     bibliothèque sans clic explicite sur "Ajouter la partie" — corrigé sur les deux chemins
+     (`importFiles`/`pastePdnText`) : seul un fichier multi-parties (import groupé type
+     tournoi) continue d'ajouter directement.
+  2. La sauvegarde automatique localStorage (`scheduleSave()`, débattue sur 400ms) perdait
+     une écriture en attente si la page était rafraîchie immédiatement après une action —
+     corrigé par un flush systématique sur `beforeunload`.
+  3. Un renommage inline validé SANS changement réel (double-clic + Entrée sans rien taper)
+     figeait quand même un `headers.Label` redondant, faisant perdre définitivement couleur
+     Noirs + score à l'affichage (confondu au départ avec un bug "entrée active" — il n'y a
+     toujours eu qu'un seul chemin de rendu). Corrigé à la source (`startRenameLibraryEntry`)
+     ET rendu auto-guérisseur pour les entrées déjà corrompues par ce bug avant le correctif
+     (`customLabelOf()` ignore un `Label` identique au titre par défaut).
+  4. Régression apparente "photos joueurs disparaissent au F5" : fausse piste bibliothèque —
+     cause réelle dans `loadPlayerPhotoPrefill()`, qui remplaçait entièrement la table
+     `playerPhotoPrefill` au lieu de la fusionner, écrasant une photo tout juste enregistrée
+     depuis les tags `WhiteUrl`/`BlackUrl` de la partie en cours avant que le fetch de
+     `data/player-photos.json` ne se résolve. Corrigé par fusion (fichier en base, entrées de
+     session prioritaires).
+
+**Navigation à la molette** (comme Toernooibase) : molette bas/haut sur le damier = coup
+suivant/précédent, réutilise `game.undo()`/`redo()` existants (factorisés en
+`goToPrevMove()`/`goToNextMove()`, partagés avec les boutons ◀/▶). Listener non-passif avec
+`preventDefault()` uniquement sur le `<canvas>` (pas toute la page), anti-rafale (1 coup max
+par 150ms) pour ne pas enchaîner plusieurs coups sur un seul geste de trackpad.
+
+**Déploiement public** : site déployé sur **https://damika.shell-green.workers.dev**
+(Cloudflare, compte "Shell Green" déjà utilisé pour le Worker Toernooibase, réutilisé via
+`wrangler login` OAuth — un token API a été envisagé après deux échecs de connexion dus à un
+conflit entre deux tentatives de login lancées en parallèle, mais la connexion OAuth a en
+fait fini par réussir, rendant le token inutile). Déploiement direct via Wrangler CLI
+(upload de fichiers statiques, aucun dépôt Git n'existant pour ce projet) plutôt que
+l'intégration Git de Cloudflare Pages. **Piège rencontré et corrigé** : la commande de
+déploiement exécutée dans le dossier même des fichiers à publier a laissé fuiter deux
+fichiers internes de Wrangler comme "assets" publics du site (`wrangler-account.json` —
+contient seulement l'ID/nom du compte, pas un secret — et un fichier worker vide) ; corrigé
+en relançant le déploiement depuis un dossier de travail séparé du dossier d'assets, et
+vérifié par requêtes directes que ces fichiers renvoient bien 404 sur le site final. Noter
+que Cloudflare a orienté la commande vers son nouveau modèle unifié "Workers + assets
+statiques" plutôt que le Cloudflare Pages classique (`.pages.dev`) — d'où l'URL finale en
+`.workers.dev`, décision confirmée avec Mickaël plutôt qu'imposée. Le Worker
+`damika-toernooibase-photos` existant reste pleinement fonctionnel, aucun conflit entre les
+deux projets sur le même compte. Testé en conditions réelles sur l'URL publique : chargement
+de page, import PDN, affichage joueurs/score, ajout à la bibliothèque.
+
+**Chantier "commentaire de coup" (A3)** : non retouché cette session — reste dans l'état
+finalisé et validé le 2026-09-16.
+
 ## Ce qui manque (voir CAHIER_DES_CHARGES.md pour la liste complète)
 
-Sons, thèmes de plateau/pions personnalisables, mode clair, aide clavier, annotations
-de coups éditables (le parseur PDN les lit déjà, juste pas d'UI), fichiers récents,
-favoris, export image/PDF, partage par lien/QR code, photo des joueurs. Chantier mobile
-et IA pas commencés (volontairement, phases 2 et 3 du projet).
+Sons, mode clair, aide clavier, annotations de coups éditables (le parseur PDN les lit déjà,
+juste pas d'UI), fichiers récents, favoris, export image/PDF, partage par lien/QR code.
+Chantier mobile et IA pas commencés (volontairement, phases 2 et 3 du projet).

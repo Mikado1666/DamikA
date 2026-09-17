@@ -182,13 +182,22 @@ body {
 .dropdown-item:hover { background: var(--gold-soft); color: var(--gold); }
 .dropdown-item.active { color: var(--gold); font-weight: 700; }
 .dropdown-item.active::after { content: ' ✓'; }
+/* Bandeau plein pour bien distinguer les groupes DAMIER/PIONS (retour Mickaël : les labels
+   de section se confondaient avec les options elles-mêmes) — se lit comme un titre de
+   groupe, pas comme une option parmi d'autres. */
 .dropdown-section-label {
-  padding: 9px 15px 4px;
+  padding: 8px 15px;
   font-size: 10.5px;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-2);
+  color: var(--gold);
+  background: var(--gold-soft);
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border);
+  margin-top: 4px;
 }
+.dropdown-section-label:first-child { margin-top: 0; border-top: none; }
 
 /* ---------- Carte meta de partie (rail gauche, au-dessus des joueurs) ---------- */
 .game-meta-card {
@@ -362,12 +371,31 @@ body {
   margin-bottom: 3px;
   border: 1px solid transparent;
 }
+.library-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-0);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  cursor: text;
+  text-align: center;
+}
+.library-name:hover, .library-name:focus { background: var(--gold-soft); color: var(--gold); outline: none; }
+.library-name:empty::before { content: attr(data-placeholder); color: var(--text-2); font-weight: 400; }
 .library-item:hover { background: var(--gold-soft); }
 .library-item.active { border-color: var(--gold); background: var(--gold-soft); }
 .library-item-info { min-width: 0; flex: 1; }
 .library-item-title { font-size: 15.5px; color: var(--text-0); font-weight: 600; user-select: none; }
 .library-item-title:hover { text-decoration: underline dotted; }
 .library-item-meta { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+/* Couleur fixe pour identifier le joueur Noirs dans le titre bibliothèque — même famille
+   bronze que l'anneau photo Noirs du Bloc 1 (`.player-avatar-ring[data-side-ring="black"]`),
+   indépendant du résultat de la partie (retour Mickaël : pas de mise en évidence dynamique
+   du vainqueur). Teinte éclaircie par rapport à --gold-dim (#8a6b3c) : ce ton, prévu pour une
+   bordure décorative, est trop peu contrasté sur le fond sombre du panneau une fois utilisé
+   comme couleur de texte (retour Mickaël : "on voit mal le nom des Noirs"). */
+.library-item-black { color: #c9a06a; }
 .library-item-rename-input {
   font: inherit;
   font-size: 15.5px;
@@ -556,18 +584,18 @@ body {
 
 .player-card-body { flex: 1; min-width: 0; }
 
-/* Badge Elo façon pastille de classement, ancré en haut à droite de la carte (retour
-   Mickaël : rendu "plaque tournoi" plutôt qu'un champ texte parmi d'autres). */
+/* Badge Elo façon pastille de classement — déplacé du coin de la carte (peu visible, retour
+   Mickaël) vers la ligne du nom, à côté du tag Blancs/Noirs : plus grand et plus contrasté
+   (texte foncé sur fond doré plein) pour ressortir immédiatement, tout en restant dans le
+   style pilule "plaque tournoi" déjà en place. */
 .elo-badge {
-  position: absolute;
-  top: -6px;
-  right: -4px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--bg-0);
+  position: static;
+  font-size: 14px;
+  font-weight: 900;
+  color: #241a0d;
   background: var(--gold);
-  padding: 3px 9px;
-  border-radius: 20px;
+  padding: 3px 10px;
+  border-radius: 8px;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -578,7 +606,6 @@ body {
   align-items: center;
   gap: 7px;
   flex-wrap: wrap;
-  padding-right: 46px; /* réserve la place du badge Elo pour ne jamais passer dessous */
 }
 .player-name {
   font-weight: 800;
@@ -670,25 +697,49 @@ body {
   letter-spacing: 0.06em;
 }
 
-.players-rail-divider {
+/* Score global de la partie, entre les deux cartes joueurs (retour Mickaël : plus lisible
+   qu'un badge "Score" séparé sur chaque carte). Ordre Noirs — Blancs = ordre d'affichage
+   haut/bas des cartes. Le camp gagnant est mis en valeur en doré/gras ; égalité ou partie
+   en cours ("*"/tag absent) : les deux chiffres restent neutres. */
+/* Ordre d'affichage des 2 cartes + de la zone score, permuté par le flip du damier (classe
+   `.flipped` sur `.players-rail`, cf. toggleFlip() dans main.js) — la carte du joueur dont
+   les pions sont maintenant en haut du plateau doit être affichée en haut du rail (retour
+   Mickaël). Le contenu des cartes/du score ne change jamais, seul l'ordre visuel bouge :
+   `order` flex, pas de réordonnancement DOM, donc aucun risque sur les données/l'export. */
+.player-card[data-side="black"] { order: 1; }
+.score-center { order: 2; }
+.player-card[data-side="white"] { order: 3; }
+.players-rail.flipped .player-card[data-side="black"] { order: 3; }
+.players-rail.flipped .player-card[data-side="white"] { order: 1; }
+
+.score-center {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-2);
-  font-size: 12px;
-  letter-spacing: 0.15em;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 0 6px;
 }
-.players-rail-divider::before, .players-rail-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--panel-border);
+.score-center-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
 }
-/* Compteur de temps (théorie des finales) — ligne compacte dans le rail joueurs plutôt
-   qu'un pavé encadré séparé (retour Mickaël A8). Doré = avantage Blancs, bleu = avantage
-   Noirs, sans préfixe "Blancs"/"Noirs" (redondant avec la couleur). */
-.tempo-delta {
+.score-center-value.winner {
+  color: var(--gold);
+  font-size: 26px;
+}
+.score-center-sep {
   font-size: 14px;
+  color: var(--text-2);
+}
+
+/* Compteur de temps (théorie des finales) — déplacé de la zone entre les cartes vers la
+   ligne de statut, combiné avec "Trait aux Blancs/Noirs" (retour Mickaël : son ancien
+   emplacement déséquilibrait le centrage du score entre les deux cartes, cf. .score-center
+   ci-dessus). Doré = avantage Blancs, bleu = avantage Noirs, sans préfixe "Blancs"/"Noirs"
+   (redondant avec la couleur). */
+.tempo-delta {
   font-weight: 700;
   letter-spacing: 0;
   color: var(--text-2);
@@ -696,10 +747,10 @@ body {
 .tempo-delta.positive { color: var(--gold); }
 .tempo-delta.negative { color: #6fb3e0; }
 .tempo-delta.disabled { color: var(--text-2); opacity: 0.6; }
+.status-sep { color: var(--text-2); margin: 0 6px; }
 
 @media (max-width: 900px) {
   .players-rail { flex-direction: row; flex: none; }
-  .players-rail-divider { display: none; }
   .player-card { flex: 1; flex-direction: column; text-align: center; }
   .player-card-meta, .player-card-stats { justify-content: center; }
 }
