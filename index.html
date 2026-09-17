@@ -47,6 +47,11 @@
           <div class="dropdown-menu" id="export-menu" hidden>
             <button id="btn-export-pdn" class="dropdown-item">Format PDN</button>
             <button id="btn-export-txt" class="dropdown-item">Format TXT</button>
+            <div class="dropdown-section-label">Diagramme / document</div>
+            <button id="btn-export-image" class="dropdown-item">Image (PNG)</button>
+            <button id="btn-export-pdf" class="dropdown-item">Partie complète (PDF)</button>
+            <div class="dropdown-section-label">Partage</div>
+            <button id="btn-share" class="dropdown-item">🔗 Partager (lien + QR code)</button>
           </div>
         </div>
         <div class="dropdown" id="theme-dropdown">
@@ -60,6 +65,13 @@
         </div>
         <div class="topbar-sep"></div>
         <button id="btn-flip" class="icon-btn" title="Retourner le plateau (F)">⇅</button>
+        <div class="sound-control" id="sound-control">
+          <button id="btn-mute" class="icon-btn" title="Couper le son">🔊</button>
+          <div class="sound-popover" id="sound-popover">
+            <input type="range" id="sound-volume-slider" min="0" max="100" step="1">
+            <span class="sound-volume-value" id="sound-volume-value">100%</span>
+          </div>
+        </div>
         <button id="btn-fullscreen" class="icon-btn" title="Plein écran">⛶</button>
       </div>
     </div>
@@ -228,8 +240,27 @@
       </div>
     </div>
   </div>
+  <div class="confirm-overlay" id="share-overlay" hidden>
+    <div class="confirm-box share-box">
+      <div class="share-title">Partager la partie</div>
+      <div class="share-warning" id="share-warning" hidden></div>
+      <div class="share-body" id="share-body">
+        <div class="share-link-row">
+          <input type="text" id="share-link-input" readonly>
+          <button type="button" class="text-btn" id="share-copy-btn">Copier le lien</button>
+        </div>
+        <div class="share-qr" id="share-qr"></div>
+      </div>
+      <div class="confirm-actions">
+        <button id="share-close-btn" class="text-btn">Fermer</button>
+      </div>
+    </div>
+  </div>
 </div>
 
+<script src="js/vendor/jspdf.umd.min.js"></script>
+<script src="js/vendor/lz-string.min.js"></script>
+<script src="js/vendor/qrcode.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

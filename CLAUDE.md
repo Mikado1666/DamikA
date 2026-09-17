@@ -6,8 +6,21 @@ pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
 ## État du projet (dernière mise à jour : 2026-09-17)
 
-- **Résumé de la session du 2026-09-17** (voir la section dédiée plus bas, "Session
-  2026-09-17", pour le détail complet) : nombreux ajustements UI sur le Header (export
+- **Résumé de la 2ᵉ partie de la session du 2026-09-17** (voir la section dédiée plus bas,
+  "Session 2026-09-17 (suite)", pour le détail complet) : correction du bug de score du
+  Bloc 1 (mauvaise valeur affichée après import d'un PDN Toernooibase, cache navigateur en
+  cause plus qu'un bug de code — voir la section pour le détail de l'investigation) ; 3
+  nouvelles fonctionnalités livrées et testées en navigateur : export image (PNG, damier +
+  légende) et export PDF (page de garde + notation complète + diagramme final) accessibles
+  depuis le menu "Exporter" (jsPDF vendorisé en local) ; partage de partie par lien compressé
+  + QR code, sans backend (LZString + QRCode.js vendorisés en local) ; sons (coup/capture/
+  début/fin de partie) avec réglage de volume et mute, sources documentées dans
+  `assets/sounds/SOURCES.txt` (fichiers réels Lidraughts pour coup/capture/fin de partie,
+  pack CC0 Kenney conservé pour le début de partie faute d'équivalent Lidraughts — décision
+  actée avec Mickaël).
+
+- **Résumé de la 1ʳᵉ partie de la session du 2026-09-17** (voir la section dédiée plus bas,
+  "Session 2026-09-17", pour le détail complet) : nombreux ajustements UI sur le Header (export
   PDN/TXT et sauvegarde bibliothèque via une vraie fenêtre "Enregistrer sous" — File System
   Access API —, clarté du menu palette DAMIER/PIONS, flip du damier synchronisé avec l'ordre
   des cartes joueurs), le Bloc 1 (badge Elo mis en avant à côté du nom, score global centré
@@ -745,7 +758,7 @@ Elo ("Elo 2004"/"Elo 2032"), titre ("CMF"), photos des deux joueurs (auto-détec
 ("Tournoi Modifié Test") répercutée instantanément dans le sous-titre de l'entrée
 Bibliothèque, vérifiée à la fois dans le DOM et dans le PDN persisté en `localStorage`.
 
-## Session 2026-09-17
+## Session 2026-09-17 (1ʳᵉ partie)
 
 Session d'ajustements ciblés sur le Header, le Bloc 1 et la Bibliothèque, plus deux
 chantiers transverses (navigation molette, déploiement public). Chaque point ci-dessous a
@@ -853,8 +866,79 @@ de page, import PDN, affichage joueurs/score, ajout à la bibliothèque.
 **Chantier "commentaire de coup" (A3)** : non retouché cette session — reste dans l'état
 finalisé et validé le 2026-09-16.
 
+## Session 2026-09-17 (suite)
+
+Deuxième partie de la session, enchaînée sur la même journée. Chaque point testé en
+navigateur (souvent via automatisation Claude-in-Chrome) avant confirmation, comme d'habitude.
+
+**Bug corrigé : score du Bloc 1 affichant une valeur incorrecte après import.** Plusieurs
+allers-retours avant d'isoler la vraie cause. Le calcul (`parseResultScore(headers.Result)`,
+injecté dans `#score-black`/`#score-white` par id — donc déjà lié au camp réel, jamais à un
+ordre fixe) était en réalité correct dès le départ. Décision finale de Mickaël sur le design :
+le score reste **centré entre les 2 cartes** (pas de badge individuel par carte, tenté puis
+annulé en cours de session), avec un ordre d'affichage qui **suit la position visuelle des
+cartes** (`order` flex sur `#score-black`/`#score-white`, permuté par `.players-rail.flipped`
+— même mécanique que les cartes elles-mêmes). Le vrai blocage rencontré à plusieurs reprises
+était un **cache navigateur** : même une nouvelle tab peut servir un `main.js` périmé sans
+requête réseau tant qu'un Ctrl+Shift+R n'a pas été fait — confirmé en direct par comparaison
+avant/après hard refresh sur le même scénario.
+
+**Export image (PNG) et PDF**, nouvelles entrées dans le menu "Exporter" existant :
+- **PNG** : capture directe du `<canvas>` du damier (pas besoin d'une lib de capture DOM
+  type html2canvas, le plateau est déjà un canvas natif) + légende composée dessous
+  (joueurs, Elo, tournoi/ronde/date, score, numéro du coup courant), thème sombre bronze/doré
+  cohérent avec l'appli. Téléchargement direct, nom `NomBlancs_vs_NomNoirs_coupXX.png`.
+- **PDF** : jsPDF vendorisé en local (`js/vendor/jspdf.umd.min.js`, aucune dépendance CDN —
+  cohérent avec "pas de build step"). 4 pages : garde (joueurs/Elo/tournoi/score), notation
+  complète 2 colonnes (Noirs en bronze, commentaires de coup en italique), diagramme de la
+  position finale. jsPDF n'a pas de fond de page global : un rectangle plein sombre est
+  redessiné sur CHAQUE page. Le diagramme final est obtenu en naviguant brièvement le jeu réel
+  jusqu'à la fin puis en revenant à la position d'origine (`jumpToPly`, synchrone donc sans
+  flash visible) plutôt qu'en dupliquant un moteur de rendu séparé.
+
+**Partage de partie par lien + QR code**, sans backend : le PDN de la partie en cours est
+compressé (LZString vendorisée en local, `compressToEncodedURIComponent` déjà "URL-safe") et
+embarqué dans le paramètre `?p=` de l'URL. Au chargement, `loadSharedGameFromUrl()` (appelée
+juste après `restoreAppState()`) décode ce paramètre et charge la partie comme "partie en
+cours" **sans jamais toucher à la bibliothèque locale** de la personne qui ouvre le lien —
+vérifié en pratique (bibliothèque inchangée après ouverture d'un lien partagé). Le paramètre
+est retiré de l'URL une fois consommé (`history.replaceState`) pour qu'un F5 ultérieur ne
+réimporte pas silencieusement la version partagée par-dessus un travail en cours. Modale de
+partage (lien copiable + QR, QRCode.js vendorisé en local, `js/vendor/qrcode.min.js`) avec
+avertissement clair si le lien dépasse ~2000 caractères plutôt qu'un lien cassé. QR sur fond
+blanc même en thème sombre : un QR doré-sur-noir est un contraste bien plus faible pour un
+lecteur de smartphone que le noir-sur-blanc classique.
+
+**Sons** (coup joué, capture, début/fin de partie) + réglage de volume/mute — provenance
+exacte documentée dans `assets/sounds/SOURCES.txt` (à relire avant de retoucher aux sons) :
+- `move.mp3`, `capture.mp3`, `game-end.mp3` : fichiers RÉELS du client Lidraughts
+  (`RoepStoep/lidraughts`, `public/sound/standard/{Move,Capture,Victory}.mp3` — pas une
+  resynthèse), récupérés en clair depuis GitHub. Usage confirmé en lisant le code source
+  client (`ui/round/src/ctrl.ts` : `sound.move()`/`sound.capture()` sur chaque coup,
+  `li.sound.victory/defeat/draw()` en fin de partie). Fait notable vérifié par sha256 : dans
+  ce dépôt, `Victory.mp3`/`Defeat.mp3`/`Draw.mp3` sont byte-pour-byte IDENTIQUES — Lidraughts
+  ne joue qu'un seul son de fin de partie sous 3 noms différents, donc `game-end.mp3` est
+  objectivement le bon choix quelle que soit l'issue.
+- `game-start.mp3` : **aucun équivalent trouvé** dans ce dépôt (vérifié à la fois par la
+  liste des fichiers de `public/sound/standard/` et par la recherche des appels `sound.xxx()`
+  dans le code — pas de son de "début de partie" côté Lidraughts). Décision actée avec
+  Mickaël : conserver le fichier CC0 Kenney ("Impact Sounds", `impactPlank_medium_000.ogg`)
+  d'une itération précédente pour cet événement précis plutôt que d'en chercher un substitut
+  — pas d'équivalent Lidraughts, pas de raison de le retirer.
+- Implémentation : simples `<audio>` (pas de Web Audio API, inutile pour 3-4 sons courts),
+  un petit pool de 3 instances par événement (round-robin) pour qu'un son déjà en cours ne
+  soit pas coupé net si un second se déclenche très vite après (ex. autoplay rapide). Bouton
+  🔊/🔇 dans la topbar (clic = mute/démute rapide, état persisté `damika:sound-muted`) ; un
+  survol du même bouton révèle un popover avec un slider 0-100% (persisté séparément,
+  `damika:sound-volume`, appliqué en temps réel aux 4 pools).
+- Piège de test rencontré : `game.isGameOver()` ne doit être vérifié/sonné qu'au point exact
+  où un coup vient d'être commité (dans `playMove()`, l'autoplay et `goToNextMove()`) —
+  jamais dans `refreshUI()` lui-même, qui tourne aussi lors d'une simple navigation
+  (undo/redo/jump), ce qui rejouerait le son de fin de partie à chaque fois qu'on navigue
+  vers la position finale déjà atteinte.
+
 ## Ce qui manque (voir CAHIER_DES_CHARGES.md pour la liste complète)
 
-Sons, mode clair, aide clavier, annotations de coups éditables (le parseur PDN les lit déjà,
-juste pas d'UI), fichiers récents, favoris, export image/PDF, partage par lien/QR code.
+Mode clair, aide clavier, annotations de coups éditables (le parseur PDN les lit déjà,
+juste pas d'UI), fichiers récents, favoris.
 Chantier mobile et IA pas commencés (volontairement, phases 2 et 3 du projet).

@@ -1,0 +1,31 @@
+Provenance des fichiers audio (assets/sounds/)
+================================================
+
+move.mp3, capture.mp3, game-end.mp3
+------------------------------------
+Source : dépôt RoepStoep/lidraughts (client web Lidraughts, AGPL-3.0), thème de sons
+"standard", récupérés en clair (fichiers réels, pas de resynthèse) via :
+
+  https://raw.githubusercontent.com/RoepStoep/lidraughts/master/public/sound/standard/Move.mp3
+  https://raw.githubusercontent.com/RoepStoep/lidraughts/master/public/sound/standard/Capture.mp3
+  https://raw.githubusercontent.com/RoepStoep/lidraughts/master/public/sound/standard/Victory.mp3
+
+Usage confirmé dans le code source du client (ui/round/src/ctrl.ts) :
+  - sound.move()    -> coup simple joué
+  - sound.capture() -> coup avec prise
+  - li.sound.victory() / .defeat() / .draw() -> fin de partie (gagné/perdu/nul du point de
+    vue du joueur) — les 3 fichiers Victory.mp3/Defeat.mp3/Draw.mp3 sont en réalité BYTE POUR
+    BYTE IDENTIQUES dans ce dépôt (même sha256) : Lidraughts ne joue qu'un seul et même son de
+    fin de partie sous 3 noms différents. Damika n'a qu'un événement "fin de partie" générique
+    (pas de notion "j'ai gagné/perdu" côté spectateur) — Victory.mp3 a été choisi comme fichier
+    source, mais c'est objectivement LE son de fin de partie de Lidraughts, quel que soit le nom.
+
+game-start.mp3
+--------------
+AUCUN équivalent trouvé dans public/sound/standard/ de RoepStoep/lidraughts : il n'existe pas
+de son dédié à un "début de partie" dans ce dépôt (vérifié à la fois par la liste des fichiers
+et par recherche des appels `sound.xxx()` dans ui/round/src/ctrl.ts — seuls confirmation/
+genericNotify/berserk/check/move/capture/victory/defeat/draw sont déclenchés côté partie).
+Fichier PROVISOIREMENT resté celui du pack Kenney "Impact Sounds" (CC0) d'une session
+précédente, en attente d'une décision de Mickaël sur quoi utiliser à la place (aucun fichier
+Lidraughts n'a été substitué silencieusement pour cet événement précis).

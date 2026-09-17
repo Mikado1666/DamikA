@@ -11,6 +11,60 @@ let game = new DraughtsGame();
 const canvas = document.getElementById('board-canvas');
 const renderer = new BoardRenderer(canvas);
 
+// --- sons -------------------------------------------------------------------------------
+// move/capture/game-end : fichiers RÉELS du client Lidraughts (RoepStoep/lidraughts, thème
+// "standard", public/sound/standard/{Move,Capture,Victory}.mp3), récupérés en clair depuis
+// GitHub — voir assets/sounds/SOURCES.txt pour le détail exact (URLs, usage confirmé dans
+// ui/round/src/ctrl.ts). game-start : PAS d'équivalent dans ce dépôt (vérifié), reste
+// temporairement le fichier CC0 Kenney d'une session précédente (assets/sounds/LICENSE.txt)
+// en attendant une décision de Mickaël — jamais substitué silencieusement.
+// 4 événements (coup simple, capture, début/fin de partie), son distinct pour une prise —
+// pas de Web Audio API ni de librairie : de simples <audio>, largement suffisant pour des
+// sons courts joués rarement en simultané. Chaque événement a son propre pool de quelques
+// instances plutôt qu'un <audio> unique réutilisé : rejouer un son déjà en cours (ex. 2 coups
+// très rapprochés en autoplay rapide) sur le MÊME élément le coupe net au lieu de superposer
+// les 2 lectures — un petit pool (round-robin) évite cet écrasement audible.
+const SOUND_FILES = {
+  move: 'assets/sounds/move.mp3',
+  capture: 'assets/sounds/capture.mp3',
+  'game-start': 'assets/sounds/game-start.mp3',
+  'game-end': 'assets/sounds/game-end.mp3',
+};
+const SOUND_POOL_SIZE = 3;
+const soundPools = Object.fromEntries(Object.entries(SOUND_FILES).map(([name, src]) => {
+  const pool = Array.from({ length: SOUND_POOL_SIZE }, () => {
+    const a = new Audio(src);
+    a.preload = 'auto';
+    return a;
+  });
+  return [name, { pool, next: 0 }];
+}));
+const SOUND_MUTE_KEY = 'damika:sound-muted';
+const SOUND_VOLUME_KEY = 'damika:sound-volume';
+let soundMuted = localStorage.getItem(SOUND_MUTE_KEY) === '1';
+// Volume 0..1, persisté en pourcentage entier (0-100) — plus lisible en localStorage/devtools
+// qu'un flottant. 0.35 par défaut (raisonnable, pas agressif — demande explicite de Mickaël)
+// si jamais réglé.
+const storedVolumePct = parseInt(localStorage.getItem(SOUND_VOLUME_KEY), 10);
+let soundVolume = Number.isFinite(storedVolumePct) ? Math.min(100, Math.max(0, storedVolumePct)) / 100 : 0.35;
+
+function applySoundVolume() {
+  for (const { pool } of Object.values(soundPools)) {
+    for (const audio of pool) audio.volume = soundVolume;
+  }
+}
+applySoundVolume();
+
+function playSound(name) {
+  if (soundMuted) return;
+  const entry = soundPools[name];
+  if (!entry) return;
+  const audio = entry.pool[entry.next];
+  entry.next = (entry.next + 1) % entry.pool.length;
+  audio.currentTime = 0;
+  audio.play().catch(() => {}); // autoplay bloqué avant tout geste utilisateur : silencieux
+}
+
 // --- état d'interaction -----------------------------------------------------
 let selectedSquare = null;
 let isAnimating = false;
@@ -143,6 +197,9 @@ const el = {
   btnUndo: document.getElementById('btn-undo'),
   btnRedo: document.getElementById('btn-redo'),
   btnFlip: document.getElementById('btn-flip'),
+  btnMute: document.getElementById('btn-mute'),
+  soundVolumeSlider: document.getElementById('sound-volume-slider'),
+  soundVolumeValue: document.getElementById('sound-volume-value'),
   btnFullscreen: document.getElementById('btn-fullscreen'),
   speedSlider: document.getElementById('speed-slider'),
   speedValue: document.getElementById('speed-value'),
@@ -163,6 +220,16 @@ const el = {
   exportMenu: document.getElementById('export-menu'),
   btnExportPdn: document.getElementById('btn-export-pdn'),
   btnExportTxt: document.getElementById('btn-export-txt'),
+  btnExportImage: document.getElementById('btn-export-image'),
+  btnExportPdf: document.getElementById('btn-export-pdf'),
+  btnShare: document.getElementById('btn-share'),
+  shareOverlay: document.getElementById('share-overlay'),
+  shareWarning: document.getElementById('share-warning'),
+  shareBody: document.getElementById('share-body'),
+  shareLinkInput: document.getElementById('share-link-input'),
+  shareCopyBtn: document.getElementById('share-copy-btn'),
+  shareQr: document.getElementById('share-qr'),
+  shareCloseBtn: document.getElementById('share-close-btn'),
   tabMoves: document.getElementById('tab-moves'),
   tabLibrary: document.getElementById('tab-library'),
   panelMoves: document.getElementById('panel-moves'),
@@ -351,14 +418,14 @@ function makePlySpan(moveInfo, idx, currentIdx) {
     span.appendChild(dot);
   }
 
-  // Lien texte flottant, révélé uniquement au survol de la ligne (2e itération : un
-  // pictogramme, même agrandi, restait moins lisible qu'un texte explicite — retour
-  // Mickaël). "+ Ajouter…" sur un coup vierge, "Modifier…" sur un coup déjà commenté (le
-  // point doré ci-dessus reste alors le seul indicateur visible au repos).
+  // Icône "+" dans le flux flex (à côté du texte, jamais par-dessus), révélée uniquement
+  // au survol de la ligne — le point doré ci-dessus reste le seul indicateur visible au
+  // repos pour un coup déjà commenté.
   const hint = document.createElement('button');
   hint.type = 'button';
   hint.className = 'move-comment-hint';
-  hint.textContent = hasComment ? 'Modifier le commentaire' : '+ Ajouter un commentaire';
+  hint.title = hasComment ? 'Modifier le commentaire' : 'Ajouter un commentaire';
+  hint.textContent = '+';
   hint.addEventListener('click', (e) => {
     e.stopPropagation();
     openCommentPopover(idx, hint);
@@ -524,13 +591,23 @@ async function playMove(action) {
 
   isAnimating = false;
   refreshUI();
+  playSound(action.type === 'capture' ? 'capture' : 'move');
+  if (game.isGameOver()) playSound('game-end');
 
   if (isPlaying) scheduleAutoplayStep();
 }
 
 // --- undo / redo / navigation ---------------------------------------------------
 function goToPrevMove() { stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); }
-function goToNextMove() { stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); }
+function goToNextMove() {
+  stopAutoplay();
+  const nextType = game.future[game.future.length - 1]?.move.type;
+  game.redo();
+  selectedSquare = null;
+  refreshUI();
+  playSound(nextType === 'capture' ? 'capture' : 'move');
+  if (game.isGameOver()) playSound('game-end');
+}
 el.btnUndo.addEventListener('click', goToPrevMove);
 el.btnRedo.addEventListener('click', goToNextMove);
 el.btnPrev.addEventListener('click', goToPrevMove);
@@ -596,6 +673,8 @@ function scheduleAutoplayStep() {
     isAnimating = false;
     game.redo();
     refreshUI();
+    playSound(moveInfo.type === 'capture' ? 'capture' : 'move');
+    if (game.isGameOver()) playSound('game-end');
     if (game.future.length === 0) stopAutoplay();
     else scheduleAutoplayStep();
   }, Math.max(220, renderer.animSpeedMs + 260));
@@ -637,6 +716,36 @@ function toggleFlip() {
   el.playersRail.classList.toggle('flipped', flipped);
 }
 el.btnFlip.addEventListener('click', toggleFlip);
+
+// --- mute (état persisté en localStorage, cf. `soundMuted`/SOUND_MUTE_KEY plus haut) --------
+function syncMuteButton() {
+  el.btnMute.textContent = soundMuted ? '🔇' : '🔊';
+  el.btnMute.title = soundMuted ? 'Activer le son' : 'Couper le son';
+}
+el.btnMute.addEventListener('click', () => {
+  soundMuted = !soundMuted;
+  localStorage.setItem(SOUND_MUTE_KEY, soundMuted ? '1' : '0');
+  syncMuteButton();
+});
+syncMuteButton();
+
+// --- volume (popover révélé au survol de l'icône 🔊, cf. .sound-control:hover dans
+// style.css) — slider 0-100%, appliqué en temps réel aux 3 pools de sons, persisté
+// séparément du mute (les 2 réglages sont indépendants : baisser le volume ne démute pas,
+// et le mute n'écrase pas le volume mémorisé).
+function syncVolumeSlider() {
+  const pct = Math.round(soundVolume * 100);
+  el.soundVolumeSlider.value = String(pct);
+  el.soundVolumeValue.textContent = `${pct}%`;
+}
+el.soundVolumeSlider.addEventListener('input', () => {
+  soundVolume = Number(el.soundVolumeSlider.value) / 100;
+  localStorage.setItem(SOUND_VOLUME_KEY, el.soundVolumeSlider.value);
+  el.soundVolumeValue.textContent = `${el.soundVolumeSlider.value}%`;
+  applySoundVolume();
+});
+syncVolumeSlider();
+
 el.btnFullscreen.addEventListener('click', () => {
   if (!document.fullscreenElement) document.getElementById('app').requestFullscreen?.();
   else document.exitFullscreen?.();
@@ -721,10 +830,11 @@ function syncHeaderFieldsFromState() {
   const blackTitle = document.querySelector('.meta-field[data-field="BlackTitle"]');
   if (whiteTitle) whiteTitle.textContent = headers.WhiteTitle || '—';
   if (blackTitle) blackTitle.textContent = headers.BlackTitle || '—';
-  // Score global affiché entre les deux cartes (#score-center), pas sur chaque carte
-  // individuellement — plus lisible en un coup d'œil pour savoir qui a gagné (retour
-  // Mickaël). Le camp gagnant est mis en valeur (doré) ; égalité ou partie en cours
-  // ("*"/tag absent) : affichage neutre, aucun camp mis en valeur.
+  // Score centré ENTRE les deux cartes (#score-center), aligné avec les 2 — design voulu
+  // par Mickaël. Le chiffre Noirs porte la même couleur bronze que dans la Bibliothèque
+  // (cf. #score-black:not(.winner) dans style.css) pour identifier le camp sans ambiguïté
+  // quel que soit l'ordre d'affichage ; l'ordre visuel des 2 valeurs suit le flip via CSS
+  // (order flex sur #score-black/#score-white, permuté par .players-rail.flipped).
   const scoreBlack = document.getElementById('score-black');
   const scoreWhite = document.getElementById('score-white');
   const [whiteResultScore, blackResultScore] = parseResultScore(headers.Result);
@@ -1366,6 +1476,7 @@ async function startNewGame() {
   renderLibrary();
   syncHeaderFieldsFromState();
   refreshUI();
+  playSound('game-start');
 }
 el.btnNewGame.addEventListener('click', startNewGame);
 // Sur tout le logo (icône + wordmark), pas seulement le wordmark #easter-egg — convention
@@ -1382,6 +1493,7 @@ function loadParsedGame(parsedGame) {
   selectedSquare = null;
   syncHeaderFieldsFromState();
   refreshUI();
+  playSound('game-start');
   if (warnings.length) {
     showToast(`Import partiel : ${loadedMoves}/${totalMoves} coups chargés — ${warnings[0]}`, 'error');
   } else if (loadedMoves > 0) {
@@ -1663,6 +1775,302 @@ el.btnExportTxt.addEventListener('click', async () => {
   showToast('Export TXT téléchargé.', 'success');
 });
 
+// --- export image (PNG) / PDF ------------------------------------------------------------
+// Téléchargement direct (pas de fenêtre "Enregistrer sous" ici, contrairement au PDN/TXT —
+// demande explicite de Mickaël pour ces 2 formats) : même mécanique que downloadText() mais
+// pour un Blob binaire (image/PDF) plutôt qu'un texte.
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Infos de match communes aux 2 exports (légende image + page de garde PDF) — un seul
+// endroit pour dériver nom/Elo/tournoi/score depuis `headers`, cohérent avec le reste de
+// l'app (mêmes helpers que le Bloc 1 : formatPlayerName, parseResultScore).
+function matchMetaLines() {
+  const white = headers.White ? formatPlayerName(headers.White) : 'Blancs';
+  const black = headers.Black ? formatPlayerName(headers.Black) : 'Noirs';
+  const whiteElo = headers.WhiteElo || headers.WhiteRating;
+  const blackElo = headers.BlackElo || headers.BlackRating;
+  const [whiteScore, blackScore] = parseResultScore(headers.Result);
+  const tournamentParts = [];
+  if (headers.Event && headers.Event !== 'Partie libre') tournamentParts.push(headers.Event);
+  if (headers.Round && headers.Round !== '—') tournamentParts.push(`Ronde ${headers.Round}`);
+  if (headers.Date && headers.Date !== '—') tournamentParts.push(formatPdnDate(headers.Date));
+  return {
+    white, black, whiteElo, blackElo,
+    whiteScore, blackScore,
+    namesLine: `${white}${whiteElo ? ` (Elo ${whiteElo})` : ''}  —  ${black}${blackElo ? ` (Elo ${blackElo})` : ''}`,
+    tournamentLine: tournamentParts.join(' · '),
+    scoreLine: whiteScore !== null && blackScore !== null ? `Score ${whiteScore} — ${blackScore}` : '',
+  };
+}
+
+// Le damier est déjà un <canvas> natif — pas besoin d'une lib de capture DOM (html2canvas) :
+// on compose directement une légende sous une copie de son image bitmap. Couleurs alignées
+// sur les variables CSS du thème (--bg-0/--gold/--text-1, cf. :root dans style.css) pour ne
+// pas produire une image au fond clair générique dans une appli par ailleurs 100% sombre.
+async function exportBoardImage() {
+  const boardCanvas = renderer.canvas;
+  const dpr = renderer.dpr || 1;
+  const meta = matchMetaLines();
+  const lines = [meta.namesLine];
+  const sub = [meta.tournamentLine, meta.scoreLine].filter(Boolean).join('   ·   ');
+  if (sub) lines.push(sub);
+  lines.push(`Coup ${game.history.length}`);
+
+  const padding = 16 * dpr;
+  const lineHeight = 24 * dpr;
+  const legendHeight = padding * 2 + lines.length * lineHeight;
+  const out = document.createElement('canvas');
+  out.width = boardCanvas.width;
+  out.height = boardCanvas.height + legendHeight;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#100c09'; // --bg-0
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(boardCanvas, 0, 0);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let y = boardCanvas.height + padding + lineHeight / 2;
+  lines.forEach((line, i) => {
+    ctx.font = i === 0 ? `bold ${17 * dpr}px system-ui, sans-serif` : `${13 * dpr}px system-ui, sans-serif`;
+    ctx.fillStyle = i === 0 ? '#d4af69' : '#c9bba0'; // --gold / --text-1
+    ctx.fillText(line, out.width / 2, y);
+    y += lineHeight;
+  });
+
+  const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
+  downloadBlob(`${safeFilename()}_coup${game.history.length}.png`, blob);
+}
+
+// Capture le damier à la position FINALE de la partie (toutes les prises/coups joués),
+// indépendamment de la position actuellement affichée/naviguée par l'utilisateur (contraire
+// à exportBoardImage() ci-dessus, qui capture la position courante — cf. demande Mickaël).
+// jumpToPly() navigue le jeu réel puis revient à l'index de départ ; les 2 sauts se font de
+// façon synchrone (pas d'animation, cf. son implémentation) donc dans la même frame que le
+// reste de cette fonction — le navigateur ne peint jamais l'état intermédiaire, aucun
+// flash visible pour l'utilisateur.
+function boardImageDataUrlAtFinalPosition() {
+  const originalIdx = game.history.length - 1;
+  const finalIdx = fullMoveList(game).length - 1;
+  if (finalIdx !== originalIdx) jumpToPly(finalIdx);
+  const dataUrl = renderer.canvas.toDataURL('image/png');
+  if (finalIdx !== originalIdx) jumpToPly(originalIdx);
+  return dataUrl;
+}
+
+// PDF complet : page de garde + notation intégrale (2 colonnes Blancs/Noirs, commentaires
+// inclus) + diagramme de la position finale. Thème sombre bronze/doré cohérent avec l'appli
+// (jsPDF ne fournit pas de fond de page global : on redessine un rectangle plein sur CHAQUE
+// page, cf. `paintPageBackground()` appelé après chaque `addPage()`).
+function exportGamePdf() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 48;
+  const BG = '#100c09';
+  const GOLD = '#d4af69';
+  const TEXT_1 = '#c9bba0';
+  const TEXT_2 = '#8c7c63';
+  const BLACK_BRONZE = '#c9a06a';
+
+  function paintPageBackground() {
+    doc.setFillColor(BG);
+    doc.rect(0, 0, pageW, pageH, 'F');
+  }
+
+  const meta = matchMetaLines();
+
+  // --- page de garde ---
+  paintPageBackground();
+  doc.setTextColor(GOLD);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text(`${meta.white}  —  ${meta.black}`, pageW / 2, 140, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(13);
+  doc.setTextColor(TEXT_1);
+  const eloLine = [
+    meta.whiteElo ? `${meta.white} : Elo ${meta.whiteElo}` : null,
+    meta.blackElo ? `${meta.black} : Elo ${meta.blackElo}` : null,
+  ].filter(Boolean).join('   ·   ');
+  let coverY = 180;
+  if (eloLine) { doc.text(eloLine, pageW / 2, coverY, { align: 'center' }); coverY += 22; }
+  if (meta.tournamentLine) { doc.text(meta.tournamentLine, pageW / 2, coverY, { align: 'center' }); coverY += 22; }
+  if (meta.scoreLine) {
+    doc.setTextColor(GOLD);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(meta.scoreLine, pageW / 2, coverY + 10, { align: 'center' });
+  }
+
+  // --- notation complète ---
+  doc.addPage();
+  paintPageBackground();
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(GOLD);
+  doc.text('Notation', margin, margin);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  let y = margin + 26;
+  const lineH = 16;
+  const colNum = margin;
+  const colWhite = margin + 46;
+  const colBlack = margin + 190;
+  const moves = fullMoveList(game);
+  for (let i = 0; i < moves.length; i += 2) {
+    if (y > pageH - margin) {
+      doc.addPage();
+      paintPageBackground();
+      y = margin;
+    }
+    const white = moves[i];
+    const black = moves[i + 1];
+    doc.setTextColor(TEXT_2);
+    doc.text(`${i / 2 + 1}.`, colNum, y);
+    doc.setTextColor(TEXT_1);
+    doc.text(moveNotation(white), colWhite, y);
+    if (black) {
+      doc.setTextColor(BLACK_BRONZE);
+      doc.text(moveNotation(black), colBlack, y);
+    }
+    y += lineH;
+    // Commentaires : ligne(s) italique(s) indentée(s) sous le coup concerné, dans la
+    // couleur neutre du texte (pas d'emphase de couleur, juste le style italique).
+    for (const mv of [white, black]) {
+      if (!mv || !mv.comment) continue;
+      if (y > pageH - margin) { doc.addPage(); paintPageBackground(); y = margin; }
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(9.5);
+      doc.setTextColor(TEXT_2);
+      const wrapped = doc.splitTextToSize(mv.comment, pageW - colWhite - margin);
+      wrapped.forEach((wline) => {
+        if (y > pageH - margin) { doc.addPage(); paintPageBackground(); y = margin; }
+        doc.text(wline, colWhite, y);
+        y += 12;
+      });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      y += 2;
+    }
+  }
+
+  // --- diagramme de la position finale ---
+  doc.addPage();
+  paintPageBackground();
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(GOLD);
+  doc.text('Position finale', pageW / 2, margin, { align: 'center' });
+  const diagramDataUrl = boardImageDataUrlAtFinalPosition();
+  const diagramSize = Math.min(pageW - margin * 2, pageH - margin * 2 - 40);
+  doc.addImage(diagramDataUrl, 'PNG', (pageW - diagramSize) / 2, margin + 30, diagramSize, diagramSize);
+
+  doc.save(`${safeFilename()}.pdf`);
+}
+
+el.btnExportImage.addEventListener('click', async () => {
+  el.exportMenu.hidden = true;
+  await exportBoardImage();
+  showToast('Image exportée.', 'success');
+});
+el.btnExportPdf.addEventListener('click', () => {
+  el.exportMenu.hidden = true;
+  exportGamePdf();
+  showToast('PDF exporté.', 'success');
+});
+
+// --- partage (lien compressé + QR code) ---------------------------------------------------
+// Pas de backend : le PDN de la partie en cours est compressé (LZString, vendorisée en local
+// — cf. js/vendor/lz-string.min.js, `compressToEncodedURIComponent` produit directement une
+// chaîne déjà "URL-safe", pas besoin d'encodeURIComponent en plus) et embarqué tel quel dans
+// le paramètre `?p=` de l'URL. Quiconque ouvre ce lien reçoit la partie complète sans qu'elle
+// n'ait jamais transité par un serveur.
+const SHARE_URL_WARN_THRESHOLD = 2000;
+
+function buildShareUrl() {
+  const pdn = serializeToPdn(currentGamePayload());
+  const compressed = LZString.compressToEncodedURIComponent(pdn);
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('p', compressed);
+  return url.toString();
+}
+
+function openShareModal() {
+  const url = buildShareUrl();
+  const tooLong = url.length > SHARE_URL_WARN_THRESHOLD;
+  el.shareWarning.hidden = !tooLong;
+  el.shareBody.hidden = tooLong;
+  if (tooLong) {
+    el.shareWarning.textContent = `Cette partie est trop longue pour tenir dans un lien partageable (${url.length} caractères, au-delà de ${SHARE_URL_WARN_THRESHOLD}). Utilise plutôt l'export PDN/PDF pour la transmettre.`;
+  } else {
+    el.shareLinkInput.value = url;
+    el.shareQr.innerHTML = '';
+    // eslint-disable-next-line no-new -- l'instance QRCode s'attache elle-même au conteneur, rien à garder
+    new QRCode(el.shareQr, {
+      text: url,
+      width: 200,
+      height: 200,
+      colorDark: '#100c09',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  }
+  el.shareOverlay.hidden = false;
+}
+
+el.btnShare.addEventListener('click', () => {
+  el.exportMenu.hidden = true;
+  openShareModal();
+});
+el.shareCloseBtn.addEventListener('click', () => { el.shareOverlay.hidden = true; });
+el.shareCopyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(el.shareLinkInput.value);
+    showToast('Lien copié dans le presse-papier.', 'success');
+  } catch {
+    el.shareLinkInput.select();
+    showToast('Impossible de copier automatiquement — sélectionné, utilise Ctrl+C.', 'error');
+  }
+});
+
+// Chargement d'une partie partagée via `?p=` (lien généré par openShareModal ci-dessus) :
+// charge la partie comme "partie en cours" SANS toucher à la bibliothèque locale de la
+// personne qui ouvre le lien (même principe que l'import à une seule partie dans
+// importFiles() — cf. son commentaire — mais ici on ne passe même pas par renderLibrary()
+// puisque `library` lui-même n'est pas modifié). Le paramètre est retiré de l'URL une fois
+// consommé (`history.replaceState`) pour qu'un F5 ultérieur, après que l'utilisateur ait
+// continué à jouer/modifier la partie, ne réimporte pas silencieusement la version partagée
+// par-dessus son travail.
+function loadSharedGameFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const compressed = params.get('p');
+  if (!compressed) return false;
+  history.replaceState(null, '', window.location.pathname);
+  try {
+    const pdn = LZString.decompressFromEncodedURIComponent(compressed);
+    if (!pdn) return false;
+    const games = parsePdn(pdn);
+    if (games.length === 0) return false;
+    libraryActiveIndex = -1;
+    loadParsedGame(games[0]);
+    return true;
+  } catch {
+    showToast('Lien de partage invalide ou corrompu.', 'error');
+    return false;
+  }
+}
+
 // --- thème du damier / style des pions ------------------------------------------------
 function renderThemeOptions(container, entries, activeId, onPick) {
   container.innerHTML = '';
@@ -1774,6 +2182,10 @@ if ('serviceWorker' in navigator) {
 }
 
 restoreAppState();
+// Lien de partage (`?p=`) : prioritaire sur la partie en cours restaurée ci-dessus (on vient
+// de cliquer un lien exprès pour voir CETTE partie-là), mais la bibliothèque locale déjà
+// restaurée reste intacte — loadSharedGameFromUrl() ne la touche jamais.
+loadSharedGameFromUrl();
 refreshUI();
 // Chargement asynchrone, non bloquant pour l'affichage initial — les avatars affichent la
 // lettre par défaut le temps du fetch, puis basculent sur la photo pré-remplie si trouvée

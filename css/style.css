@@ -154,6 +154,45 @@ body {
   margin: 0 5px;
 }
 
+/* Popover volume (survol OU clic sur l'icône 🔊) : le clic sur l'icône elle-même reste un
+   mute/démute rapide (comportement déjà en place) — le survol du conteneur révèle EN PLUS
+   un slider, sans qu'il faille cliquer pour l'atteindre. Même mécanique CSS hover-reveal que
+   `.move-comment-hint` (opacity/pointer-events, pas de JS de positionnement nécessaire ici
+   car il n'y a qu'un seul point d'ancrage possible, contrairement au popover de commentaire
+   qui doit suivre chaque coup dans une liste). */
+.sound-control { position: relative; }
+.sound-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+  padding: 10px 12px;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.sound-control:hover .sound-popover,
+.sound-popover:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+#sound-volume-slider { width: 100px; accent-color: var(--gold); cursor: pointer; }
+.sound-volume-value {
+  font-size: 12px;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+
 .dropdown { position: relative; }
 .dropdown-menu {
   position: absolute;
@@ -314,6 +353,53 @@ body {
   color: var(--danger);
 }
 .confirm-ok-btn:hover { background: var(--danger); color: var(--accent-white); }
+
+/* ---------- Modale de partage (lien + QR code) — même overlay que la modale de
+   confirmation ci-dessus, juste un contenu plus large pour accueillir le champ lien et le
+   QR code. Le QR lui-même reste sur fond BLANC (`.share-qr`) même en thème sombre : un QR
+   code doré-sur-noir est un contraste bien plus faible pour un lecteur de smartphone que le
+   noir-sur-blanc classique — la fiabilité du scan prime ici sur la cohérence stricte du
+   thème, la bordure dorée autour suffit à le rattacher visuellement au reste de la modale. */
+.share-box { max-width: 360px; }
+.share-title {
+  color: var(--gold);
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.share-warning {
+  background: rgba(226, 105, 79, 0.12);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+.share-link-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+#share-link-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-size: 12.5px;
+  padding: 8px 10px;
+}
+.share-qr {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+}
 
 /* ---------- Panel tabs / library ---------- */
 .panel-tabs {
@@ -697,21 +783,36 @@ body {
   letter-spacing: 0.06em;
 }
 
-/* Score global de la partie, entre les deux cartes joueurs (retour Mickaël : plus lisible
-   qu'un badge "Score" séparé sur chaque carte). Ordre Noirs — Blancs = ordre d'affichage
-   haut/bas des cartes. Le camp gagnant est mis en valeur en doré/gras ; égalité ou partie
-   en cours ("*"/tag absent) : les deux chiffres restent neutres. */
-/* Ordre d'affichage des 2 cartes + de la zone score, permuté par le flip du damier (classe
-   `.flipped` sur `.players-rail`, cf. toggleFlip() dans main.js) — la carte du joueur dont
-   les pions sont maintenant en haut du plateau doit être affichée en haut du rail (retour
-   Mickaël). Le contenu des cartes/du score ne change jamais, seul l'ordre visuel bouge :
-   `order` flex, pas de réordonnancement DOM, donc aucun risque sur les données/l'export. */
+/* Ordre d'affichage des 2 cartes, permuté par le flip du damier (classe `.flipped` sur
+   `.players-rail`, cf. toggleFlip() dans main.js) — la carte du joueur dont les pions sont
+   maintenant en haut du plateau doit être affichée en haut du rail (retour Mickaël). Le
+   contenu des cartes ne change jamais, seul l'ordre visuel bouge : `order` flex, pas de
+   réordonnancement DOM, donc aucun risque sur les données/l'export. */
 .player-card[data-side="black"] { order: 1; }
 .score-center { order: 2; }
 .player-card[data-side="white"] { order: 3; }
 .players-rail.flipped .player-card[data-side="black"] { order: 3; }
 .players-rail.flipped .player-card[data-side="white"] { order: 1; }
+/* Le score lui-même (les 2 valeurs DANS .score-center) doit suivre la même permutation que
+   les cartes, sinon un chiffre resterait toujours affiché du même côté alors que la carte
+   correspondante change de position (retour Mickaël). Même mécanique `order` flex que
+   ci-dessus (le séparateur reste au milieu via son propre `order: 2` explicite plus bas).
+   Décision finale de Mickaël : sans flip, ordre BRUT du tag PDN [Result] (Blancs-Noirs,
+   donc Blancs affiché en premier/gauche) ; le flip inverse les 2, exactement comme il
+   inverse les 2 cartes ci-dessus. */
+#score-white { order: 1; }
+#score-black { order: 3; }
+.players-rail.flipped #score-white { order: 3; }
+.players-rail.flipped #score-black { order: 1; }
 
+/* Score centré ENTRE les 2 cartes joueurs, aligné avec les 2 (retour Mickaël : c'est le
+   design voulu, pas des pilules séparées sur chaque carte). Piège rencontré : une simple
+   paire "X — Y" neutre est ambiguë au premier coup d'œil — rien ne rattache visuellement un
+   chiffre à son camp, et l'ordre affiché par défaut (Noirs en premier, cartes Noirs en haut)
+   ne correspond pas à l'ordre Blancs-Noirs du tag PDN [Result], ce qui a fait croire à un
+   score inversé alors que la valeur était correcte. Levé en donnant au chiffre des Noirs la
+   MÊME couleur bronze que dans la Bibliothèque (`.library-item-black`) — la couleur, pas la
+   position, identifie sans ambiguïté le camp, quel que soit l'ordre d'affichage/le flip. */
 .score-center {
   display: flex;
   align-items: baseline;
@@ -725,20 +826,21 @@ body {
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
 }
+#score-black:not(.winner) { color: #c9a06a; }
 .score-center-value.winner {
   color: var(--gold);
   font-size: 26px;
 }
 .score-center-sep {
+  order: 2;
   font-size: 14px;
   color: var(--text-2);
 }
 
 /* Compteur de temps (théorie des finales) — déplacé de la zone entre les cartes vers la
    ligne de statut, combiné avec "Trait aux Blancs/Noirs" (retour Mickaël : son ancien
-   emplacement déséquilibrait le centrage du score entre les deux cartes, cf. .score-center
-   ci-dessus). Doré = avantage Blancs, bleu = avantage Noirs, sans préfixe "Blancs"/"Noirs"
-   (redondant avec la couleur). */
+   emplacement déséquilibrait le centrage du score entre les deux cartes). Doré = avantage
+   Blancs, bleu = avantage Noirs, sans préfixe "Blancs"/"Noirs" (redondant avec la couleur). */
 .tempo-delta {
   font-weight: 700;
   letter-spacing: 0;
@@ -952,7 +1054,14 @@ body {
 .move-ply:hover { background: var(--gold-soft); }
 .move-ply.current { background: var(--gold); color: #241a0d; font-weight: 700; }
 .move-ply.empty { visibility: hidden; }
-.move-ply-text { cursor: pointer; }
+.move-ply-text {
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Coup commenté : marquage FORT sur le texte lui-même (retour Mickaël — un pictogramme
    discret perdu dans la ligne ne suffisait pas pour repérer d'un coup d'œil, en scannant
    toute la liste, quels coups sont commentés), cumulé avec le point plein doré ci-dessous. */
@@ -973,42 +1082,32 @@ body {
   line-height: 1;
   padding: 2px 3px;
 }
-/* Lien texte "+ Ajouter un commentaire" / "Modifier le commentaire" (2e itération : un
-   pictogramme, même agrandi, restait moins lisible qu'un texte — retour Mickaël).
-   3e itération (bug bloquant constaté par Mickaël) : la version précédente démarrait
-   `top: 100%` + `margin-top: 2px`, donc 2px SOUS la ligne — en descendant vers le lien, le
-   curseur traversait cet espace mort et retombait sur la ligne SUIVANTE (qui a son propre
-   survol), coupant le `:hover` d'origine avant même d'atteindre le lien : impossible à
-   cliquer. Corrigé en abandonnant tout écart vertical — le lien démarre exactement à `top:
-   0; left: 0` (la même position que .move-ply lui-même, aucun pixel à traverser) et
-   s'étend en largeur PAR-DESSUS le coup et, si besoin, sur la cellule voisine DE LA MÊME
-   ligne (jamais sur la ligne du dessous). Comme il occupe dès l'apparition exactement la
-   zone déjà survolée, il n'y a plus aucune transition de survol à négocier : le curseur est
-   déjà "dedans" au moment où le lien apparaît. */
+/* Bouton "+" (ajouter un commentaire), révélé uniquement au survol de la ligne.
+   4e itération (bug bloquant constaté par Mickaël) : les versions précédentes étaient un
+   lien texte en overlay `position: absolute` par-dessus TOUTE la ligne, qui masquait le
+   texte du coup au survol (ex. "39-34" devenait illisible). Corrigé en abandonnant tout
+   positionnement absolu : c'est maintenant une simple icône ronde, DANS le flux flex de
+   `.move-ply`, placée après le texte du coup — elle ne peut donc plus jamais le recouvrir.
+   `.move-ply-text` a en contrepartie `overflow:hidden; text-overflow:ellipsis` pour
+   tronquer proprement si l'espace vient à manquer plutôt que d'écraser l'icône. */
 .move-comment-hint {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
+  flex: none;
   display: flex;
   align-items: center;
-  z-index: 40;
-  white-space: nowrap;
-  background: var(--bg-1);
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   border: 1px solid var(--gold);
-  border-radius: var(--radius-sm);
-  padding: 0 9px;
-  font-size: 12.5px;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1;
   color: var(--gold);
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
 }
-/* Coup Noirs (2e colonne) : le lien grandit vers la GAUCHE (depuis le bord droit de sa
-   cellule) plutôt que vers la droite, pour ne jamais déborder hors du panneau (~350px). */
-.move-ply-black .move-comment-hint { left: auto; right: 0; }
 .move-ply:hover .move-comment-hint { opacity: 1; pointer-events: auto; }
 
 /* Popover photo joueur (clic sur l'anneau d'avatar) : même mécanique de positionnement en
