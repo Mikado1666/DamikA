@@ -26,6 +26,10 @@ AUCUN équivalent trouvé dans public/sound/standard/ de RoepStoep/lidraughts : 
 de son dédié à un "début de partie" dans ce dépôt (vérifié à la fois par la liste des fichiers
 et par recherche des appels `sound.xxx()` dans ui/round/src/ctrl.ts — seuls confirmation/
 genericNotify/berserk/check/move/capture/victory/defeat/draw sont déclenchés côté partie).
-Fichier PROVISOIREMENT resté celui du pack Kenney "Impact Sounds" (CC0) d'une session
-précédente, en attente d'une décision de Mickaël sur quoi utiliser à la place (aucun fichier
-Lidraughts n'a été substitué silencieusement pour cet événement précis).
+Fichier resté celui du pack Kenney "Impact Sounds" (CC0) d'une session précédente — pas
+d'équivalent Lidraughts, pas de raison de le retirer.
+
+Note (2026-09-18) : un chantier "packs de sons personnalisables" (Standard/Piano/NES) a été
+prototypé puis retiré à la demande de Mickaël avant validation finale — seul le pack
+Standard ci-dessus est conservé. Les fichiers Piano/NES téléchargés pour ce chantier ont été
+supprimés du dépôt (jamais committés).

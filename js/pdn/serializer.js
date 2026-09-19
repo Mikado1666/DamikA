@@ -36,8 +36,10 @@ function movePairs(moves) {
   return parts;
 }
 
-// { headers, moves: [moveInfo...], result }
-export function serializeToPdn({ headers = {}, moves, result = '*' }) {
+// { headers, moves: [moveInfo...] } — `result` n'est plus un paramètre séparé : source
+// unique, dérivé de `headers.Result` (jamais un champ qui pourrait diverger de lui).
+export function serializeToPdn({ headers = {}, moves }) {
+  const result = headers.Result || '*';
   const lines = [];
   const allKeys = new Set([...HEADER_ORDER, ...Object.keys(headers)]);
   for (const key of allKeys) {
@@ -60,7 +62,8 @@ export function serializeToPdn({ headers = {}, moves, result = '*' }) {
 // sont déjà des chaînes de notation ({ notation }), pas des moveInfo structurés
 // ({ from, to, type }) comme dans serializeToPdn ci-dessus — donc pas de moveInfoToNotation
 // ici, on écrit directement `notation`.
-export function serializeLibraryEntryToPdn({ headers = {}, moves = [], result = '*' }) {
+export function serializeLibraryEntryToPdn({ headers = {}, moves = [] }) {
+  const result = headers.Result || '*';
   const lines = [];
   const allKeys = new Set([...HEADER_ORDER, ...Object.keys(headers)]);
   for (const key of allKeys) {
@@ -89,7 +92,8 @@ export function serializeLibraryToPdn(library) {
   return library.map(serializeLibraryEntryToPdn).join('\n');
 }
 
-export function serializeToTxt({ headers = {}, moves, result = '*' }) {
+export function serializeToTxt({ headers = {}, moves }) {
+  const result = headers.Result || '*';
   const lines = [];
   if (headers.Event) lines.push(headers.Event);
   lines.push(`${headers.White || 'Blancs'} — ${headers.Black || 'Noirs'}`);

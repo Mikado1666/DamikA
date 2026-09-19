@@ -68,8 +68,10 @@
         <div class="sound-control" id="sound-control">
           <button id="btn-mute" class="icon-btn" title="Couper le son">🔊</button>
           <div class="sound-popover" id="sound-popover">
-            <input type="range" id="sound-volume-slider" min="0" max="100" step="1">
-            <span class="sound-volume-value" id="sound-volume-value">100%</span>
+            <div class="sound-popover-inner">
+              <input type="range" id="sound-volume-slider" min="0" max="100" step="1">
+              <span class="sound-volume-value" id="sound-volume-value">100%</span>
+            </div>
           </div>
         </div>
         <button id="btn-fullscreen" class="icon-btn" title="Plein écran">⛶</button>
@@ -117,9 +119,7 @@
       </div>
 
       <div class="score-center" id="score-center" title="Score de la partie">
-        <span class="score-center-value" id="score-black" data-side="black">—</span>
-        <span class="score-center-sep">—</span>
-        <span class="score-center-value" id="score-white" data-side="white">—</span>
+        <span class="score-center-value" id="score-value" data-field="Result" contenteditable="true" spellcheck="false">—</span>
       </div>
       <div class="player-card" data-side="white">
         <button type="button" class="player-avatar-ring" data-side-ring="white" title="Changer la photo">

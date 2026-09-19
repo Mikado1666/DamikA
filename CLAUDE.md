@@ -4,7 +4,21 @@ PWA de dames internationales 10x10 (FMJD), vanilla JS (ES modules natifs, pas de
 build step, pas de framework), rendu plateau en Canvas 2D. Voir `CAHIER_DES_CHARGES.md`
 pour la spec fonctionnelle complète et l'état d'avancement détaillé.
 
-## État du projet (dernière mise à jour : 2026-09-17)
+## État du projet (dernière mise à jour : 2026-09-18)
+
+- **Résumé de la session du 2026-09-18** (voir la section dédiée plus bas,
+  "Session 2026-09-18", pour le détail complet) : 2 bugs corrigés sur le popover du volume
+  (fermeture prématurée au survol, son bloqué par la politique autoplay du navigateur) ;
+  chantier "packs de sons personnalisables" prototypé puis retiré sur demande (seul le pack
+  Standard reste) ; réordonnancement manuel de la Bibliothèque par glisser-déposer "carte
+  physique" (implémenté à la main, pas le drag&drop HTML5 natif) ; chargement d'une partie
+  depuis la Bibliothèque rendu silencieux ; édition des champs joueurs (nom, score, Elo,
+  titre) directement sur les cartes Bloc 1 ET Bibliothèque avec synchronisation
+  bidirectionnelle — et surtout, correction d'un **bug architectural de fond** :
+  `headers` (Bloc 1) et `library[idx].headers` (Bibliothèque) étaient deux objets JS
+  distincts synchronisés manuellement (avec des trous), désormais **la même référence
+  d'objet** ; l'ancienne fonctionnalité de renommage libre ("libellé personnalisé",
+  `headers.Label`) qui permettait cette divergence a été retirée entièrement.
 
 - **Résumé de la 2ᵉ partie de la session du 2026-09-17** (voir la section dédiée plus bas,
   "Session 2026-09-17 (suite)", pour le détail complet) : correction du bug de score du
@@ -936,6 +950,130 @@ exacte documentée dans `assets/sounds/SOURCES.txt` (à relire avant de retouche
   jamais dans `refreshUI()` lui-même, qui tourne aussi lors d'une simple navigation
   (undo/redo/jump), ce qui rejouerait le son de fin de partie à chaque fois qu'on navigue
   vers la position finale déjà atteinte.
+
+## Session 2026-09-18
+
+Session longue, majoritairement centrée sur le Header (popover son) et la Bibliothèque
+(réordonnancement, édition, synchronisation avec le Bloc 1). Chaque point testé en
+navigateur réel (souvent via automatisation Claude-in-Chrome) — clics/frappe réels, pas
+seulement relecture de code — avant d'être considéré fait, y compris pour les tours où le
+retour de Mickaël disait explicitement "reproduis le bug toi-même".
+
+**1. Popover du volume (icône 🔊 du header) : 2 bugs corrigés.**
+- Le popover se fermait dès que le curseur quittait le bouton, avant d'atteindre le slider —
+  un `margin-top: 6px` créait une zone morte entre bouton et popover qui coupait le survol
+  (même piège que celui déjà documenté sur `.move-comment-hint`, cf. session du 2026-09-16).
+  Corrigé en supprimant le vrai gap (`margin-top: 0`, décalage visuel reporté sur un
+  `padding-top` du wrapper transparent) + ajout d'une classe `.sound-dragging` (posée au
+  `pointerdown` sur le slider, retirée au `pointerup` global) pour couvrir un drag qui
+  sortirait brièvement de la zone.
+- Le son ne se jouait jamais du tout dans certains cas : les fichiers audio et le code
+  étaient en fait corrects (vérifié par ffprobe/ffmpeg + test réel — le son joue bien), le
+  vrai risque est la politique autoplay du navigateur : `playSound('game-start')` peut se
+  déclencher au chargement de la page (partie partagée par lien) avant tout geste
+  utilisateur, et échoue silencieusement. Ajout d'un mécanisme de retry : le son ainsi
+  bloqué est mémorisé (`pendingUnlockSound`) et rejoué automatiquement au premier
+  `pointerdown` sur la page, où qu'il ait lieu.
+
+**2. Chantier "packs de sons personnalisables" : prototypé puis retiré à la demande de
+Mickaël avant validation finale.** Standard/Piano/NES (thèmes Lidraughts téléchargés,
+sélecteur radio dans le popover, persistance localStorage) — retiré intégralement sur
+demande explicite ("on ne va garder que le son standard Lidraughts"), fichiers Piano/NES
+supprimés (jamais committés), code de sélection de pack retiré de main.js/index.html/
+style.css. Seul le pack Standard déjà en place avant ce chantier a été conservé.
+
+**3. Réordonnancement manuel de la Bibliothèque par glisser-déposer : terminé, plusieurs
+itérations pour arriver à un vrai geste "carte physique" fiable.**
+- 1ʳᵉ version : drag & drop HTML5 natif (`draggable="true"`) sur une petite poignée dédiée
+  (`.library-item-drag`, icône "⠿"). Fonctionnait mais 2 problèmes signalés par Mickaël :
+  (a) la "ghost image" semi-transparente que le navigateur génère automatiquement pour un
+  `draggable` se superposait de façon illisible au texte de la carte survolée pendant le
+  drag ; (b) la poignée, minuscule et invisible hors survol, était trop difficile à
+  attraper avec une souris réelle ("impossible de déplacer la carte").
+- Version finale : drag & drop **implémenté à la main** via `pointerdown`/`pointermove`/
+  `pointerup` (PAS le drag&drop HTML5 natif — aucun moyen fiable de rendre sa ghost image
+  opaque ou de la supprimer). La carte déplacée devient un élément réel détaché du flux
+  (`position: fixed`, fond opaque `var(--panel)`, ombre + léger `scale(1.02)`) qui suit le
+  curseur ; un placeholder en pointillés occupe sa place dans la liste ; les autres cartes
+  se décalent avec une transition fluide (technique FLIP : positions capturées avant/après
+  le déplacement du placeholder dans le DOM, animées depuis un transform inversé vers
+  l'identité). Zone de prise étendue à **toute la carte** (pas juste la poignée, gardée
+  seulement comme indice visuel), avec un seuil de mouvement de 4px
+  (`LIBRARY_DRAG_THRESHOLD_PX`) pour distinguer un simple clic (sélection de la partie)
+  d'un vrai drag. Un flag `libraryDragJustEnded` évite que le `click` natif qui suit
+  systématiquement un relâchement de souris après un vrai drag ne resélectionne/rouvre la
+  partie au passage. Réordonnancement persisté comme tout changement de bibliothèque
+  (`moveLibraryEntryTo()`, `scheduleSave()`).
+- Piège d'automatisation rencontré en testant : les coordonnées de clic de l'outil
+  Claude-in-Chrome sont dans l'espace pixel du **screenshot renvoyé**, pas les pixels CSS
+  réels de la page (ratio ~0.82 sur cette machine, cf. piège similaire déjà documenté pour
+  la session logo/branding) — plusieurs clics ont raté leur cible avant de systématiser
+  l'usage de l'outil `find` (accessibilité) ou d'un calcul de `getBoundingClientRect()`
+  plutôt que d'estimer les coordonnées à l'œil sur un screenshot.
+
+**4. Chargement silencieux d'une partie depuis la Bibliothèque.** Cliquer sur une entrée
+pour l'ouvrir ne doit jouer aucun son (retour Mickaël) — `loadParsedGame()` accepte
+désormais une option `{ silent: true }`, utilisée uniquement par ce clic ; les sons de
+coup/prise/fin de partie pendant le jeu réel restent inchangés.
+
+**5. Édition des champs joueurs (nom, score, Elo, titre) directement sur les cartes,
+Bloc 1 ET Bibliothèque, avec synchronisation bidirectionnelle — plusieurs itérations,
+bug architectural de fond trouvé et corrigé en fin de session.**
+- Score transformé en **champ texte libre** unique (plus de split Blancs/Noirs coloré par
+  vainqueur) : un seul `contenteditable` (`#score-value`, `data-field="Result"`) lié
+  directement à `headers.Result`, accepte n'importe quel format ("0-2", "1-1 (annulé)"...).
+  CSS `.score-center` simplifié en conséquence (règles `order`/`.winner` retirées).
+- Carte Bibliothèque enrichie : nom Blancs/Noirs + score éditables au clic
+  (`renderEditableLibraryTitle()`/`buildEditableLibraryField()`), même mécanisme que les
+  champs `.player-name`/`.meta-field` du Bloc 1 (contenteditable + blur). Un essai
+  intermédiaire avait aussi ajouté une ligne Elo/Titre sous le nom sur la carte
+  Bibliothèque — **retiré** sur demande de Mickaël ("réintroduite par erreur") : Elo/Titre
+  restent éditables uniquement dans le Bloc 1, la carte Bibliothèque n'affiche que
+  noms+score et les infos meta existantes (événement...).
+- **Bug de fond découvert après plusieurs symptômes en apparence distincts** (nom
+  divergent entre Bloc 1 et Bibliothèque, score qui disparaît de la carte, coloration du
+  nom Noirs qui se perd) : `headers` (Bloc 1) et `library[idx].headers` (Bibliothèque)
+  étaient DEUX OBJETS JS DISTINCTS, synchronisés manuellement par une copie
+  (`{...headers}`) à chaque édition — mécanisme de sync avec des trous, notamment un
+  ancien renommage manuel ("libellé personnalisé", `headers.Label`, hérité d'une session
+  antérieure) qui pouvait rester figé et diverger silencieusement des vrais noms stockés
+  (résidu concret rencontré : "Kevin Machtelinck2" affiché sur la carte alors que le Bloc 1
+  affichait "Kevin Machtelinck", correctement lu depuis `headers.Black`).
+  **Corrigé à la racine, pas juste la donnée visible** : `headers` et
+  `library[libraryActiveIndex].headers` sont désormais **la même référence d'objet**
+  (`loadParsedGame()` ne copie plus `newHeaders` dans un nouvel objet — `headers =
+  newHeaders` directement ; `restoreAppState()` corrigé de la même façon, il reconstruisait
+  aussi ces deux objets séparément depuis deux textes PDN distincts au démarrage de la
+  page — même bug, deuxième occurrence). Toute édition (Bloc 1 ou carte Bibliothèque) mute
+  cet objet unique ; plus aucune fonction de "sync" (`syncActiveLibraryEntryHeaders()`
+  supprimée) n'est nécessaire pour les champs partagés — juste un appel à
+  `renderLibrary()`/`syncHeaderFieldsFromState()` pour rafraîchir l'affichage DOM après
+  mutation. Vérifié par identité d'objet (`headers === library[idx].headers` → `true`),
+  y compris après un rechargement complet de la page.
+  **La fonctionnalité de "libellé personnalisé" (renommage libre par double-clic,
+  `headers.Label`) a été retirée entièrement** : c'était elle qui permettait cette
+  divergence (un texte arbitraire remplaçant l'affichage, sans lien garanti avec les vrais
+  noms, et sans possibilité de coloration par camp sur du texte opaque — la carte perdait
+  la coloration bronze des Noirs dès qu'elle était en mode "libellé"). Le titre d'une
+  entrée de bibliothèque est maintenant *toujours* dérivé de `headers.White`/
+  `headers.Black`, comme le Bloc 1 — plus de deuxième source de vérité possible pour le
+  nom. `headers.Label` résiduel nettoyé automatiquement à chaque rendu de la Bibliothèque
+  (`delete entry.headers.Label` dans `renderLibrary()`), y compris dans les données déjà
+  persistées en localStorage.
+  Au passage, dédoublonné le champ `result` (séparé de `headers.Result`, utilisé
+  uniquement pour l'écriture du tag `[Result]` en export PDN) : `serializeToPdn()`/
+  `serializeLibraryEntryToPdn()`/`serializeToTxt()` ne prennent plus `result` en paramètre
+  séparé, il est dérivé de `headers.Result` directement (même principe : une seule source
+  pour une même donnée logique).
+- Testé exhaustivement dans les deux sens (Bloc 1 → Bibliothèque et Bibliothèque →
+  Bloc 1) sur nom/score/Elo, avec des noms contenant chiffres/caractères spéciaux/retour à
+  la ligne, comparaison littérale des deux affichages à chaque fois, et persistance
+  vérifiée après rechargement complet.
+
+**Note de fin de session (hors code)** : le serveur de dev local
+(`python -m http.server 8934`) a été tué automatiquement par l'environnement (mémoire
+système basse pendant que la session était inactive) — pas un problème du serveur
+lui-même, à relancer manuellement au besoin.
 
 ## Ce qui manque (voir CAHIER_DES_CHARGES.md pour la liste complète)
 

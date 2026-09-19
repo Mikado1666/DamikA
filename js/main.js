@@ -15,9 +15,8 @@ const renderer = new BoardRenderer(canvas);
 // move/capture/game-end : fichiers RÉELS du client Lidraughts (RoepStoep/lidraughts, thème
 // "standard", public/sound/standard/{Move,Capture,Victory}.mp3), récupérés en clair depuis
 // GitHub — voir assets/sounds/SOURCES.txt pour le détail exact (URLs, usage confirmé dans
-// ui/round/src/ctrl.ts). game-start : PAS d'équivalent dans ce dépôt (vérifié), reste
-// temporairement le fichier CC0 Kenney d'une session précédente (assets/sounds/LICENSE.txt)
-// en attendant une décision de Mickaël — jamais substitué silencieusement.
+// ui/round/src/ctrl.ts). game-start : PAS d'équivalent dans ce dépôt (vérifié), reste le
+// fichier CC0 Kenney d'une session précédente (assets/sounds/LICENSE.txt).
 // 4 événements (coup simple, capture, début/fin de partie), son distinct pour une prise —
 // pas de Web Audio API ni de librairie : de simples <audio>, largement suffisant pour des
 // sons courts joués rarement en simultané. Chaque événement a son propre pool de quelques
@@ -55,6 +54,14 @@ function applySoundVolume() {
 }
 applySoundVolume();
 
+// Un `playSound('game-start')` peut survenir dès le chargement de la page (partie partagée
+// par lien, cf. `loadSharedGameFromUrl()`), donc avant tout geste utilisateur — la politique
+// autoplay de Chrome bloque alors `play()` (NotAllowedError). Plutôt que perdre ce son
+// silencieusement, on retente une seule fois le DERNIER son ainsi bloqué dès le premier
+// geste utilisateur sur la page (le clic qui débloque l'audio n'a pas besoin d'être sur le
+// damier précisément — tout `pointerdown` compte, c'est la politique navigateur elle-même
+// qui ne distingue pas la cible du geste).
+let pendingUnlockSound = null;
 function playSound(name) {
   if (soundMuted) return;
   const entry = soundPools[name];
@@ -62,8 +69,14 @@ function playSound(name) {
   const audio = entry.pool[entry.next];
   entry.next = (entry.next + 1) % entry.pool.length;
   audio.currentTime = 0;
-  audio.play().catch(() => {}); // autoplay bloqué avant tout geste utilisateur : silencieux
+  audio.play().catch(() => { pendingUnlockSound = name; });
 }
+window.addEventListener('pointerdown', () => {
+  if (!pendingUnlockSound) return;
+  const name = pendingUnlockSound;
+  pendingUnlockSound = null;
+  playSound(name);
+}, { once: false });
 
 // --- état d'interaction -----------------------------------------------------
 let selectedSquare = null;
@@ -109,8 +122,8 @@ let libraryActiveIndex = -1;
 // vide par défaut, placeholder "Bibliothèque sans nom" géré en CSS (:empty::before). Encodé
 // dans le fichier .pdn comme un en-tête non standard `[LibraryName "..."]` PLACÉ AVANT les
 // en-têtes de la 1re partie (cf. extractLibraryName/serializeLibraryToPdnWithName plus bas) —
-// même mécanisme générique que `headers.Label` pour une entrée individuelle, mais retiré des
-// headers de la partie elle-même après lecture pour ne pas polluer son export/affichage.
+// retiré des headers de la partie elle-même après lecture pour ne pas polluer son export/
+// affichage.
 let libraryName = '';
 // true dès que `library` change sans passage par "Sauvegarder la bibliothèque" — sert de
 // garde-fou avant toute action qui remplacerait la bibliothèque active (coller, ouvrir un
@@ -198,6 +211,7 @@ const el = {
   btnRedo: document.getElementById('btn-redo'),
   btnFlip: document.getElementById('btn-flip'),
   btnMute: document.getElementById('btn-mute'),
+  soundControl: document.getElementById('sound-control'),
   soundVolumeSlider: document.getElementById('sound-volume-slider'),
   soundVolumeValue: document.getElementById('sound-volume-value'),
   btnFullscreen: document.getElementById('btn-fullscreen'),
@@ -744,6 +758,15 @@ el.soundVolumeSlider.addEventListener('input', () => {
   el.soundVolumeValue.textContent = `${el.soundVolumeSlider.value}%`;
   applySoundVolume();
 });
+// Pendant un drag du slider, le curseur peut brièvement sortir de la zone de survol
+// (`.sound-control`/`.sound-popover`) — la classe `.sound-dragging` force l'ouverture du
+// popover via CSS jusqu'au relâchement, où que la souris se trouve à ce moment-là.
+el.soundVolumeSlider.addEventListener('pointerdown', () => {
+  el.soundControl.classList.add('sound-dragging');
+});
+window.addEventListener('pointerup', () => {
+  el.soundControl.classList.remove('sound-dragging');
+});
 syncVolumeSlider();
 
 el.btnFullscreen.addEventListener('click', () => {
@@ -830,25 +853,11 @@ function syncHeaderFieldsFromState() {
   const blackTitle = document.querySelector('.meta-field[data-field="BlackTitle"]');
   if (whiteTitle) whiteTitle.textContent = headers.WhiteTitle || '—';
   if (blackTitle) blackTitle.textContent = headers.BlackTitle || '—';
-  // Score centré ENTRE les deux cartes (#score-center), aligné avec les 2 — design voulu
-  // par Mickaël. Le chiffre Noirs porte la même couleur bronze que dans la Bibliothèque
-  // (cf. #score-black:not(.winner) dans style.css) pour identifier le camp sans ambiguïté
-  // quel que soit l'ordre d'affichage ; l'ordre visuel des 2 valeurs suit le flip via CSS
-  // (order flex sur #score-black/#score-white, permuté par .players-rail.flipped).
-  const scoreBlack = document.getElementById('score-black');
-  const scoreWhite = document.getElementById('score-white');
-  const [whiteResultScore, blackResultScore] = parseResultScore(headers.Result);
-  if (scoreBlack && scoreWhite) {
-    scoreBlack.textContent = blackResultScore ?? '—';
-    scoreWhite.textContent = whiteResultScore ?? '—';
-    scoreBlack.classList.remove('winner');
-    scoreWhite.classList.remove('winner');
-    if (whiteResultScore !== null && blackResultScore !== null) {
-      const w = parseFloat(whiteResultScore);
-      const b = parseFloat(blackResultScore);
-      if (w > b) scoreWhite.classList.add('winner');
-      else if (b > w) scoreBlack.classList.add('winner');
-    }
+  // Score centré ENTRE les deux cartes (#score-center) — champ texte libre lié directement
+  // à headers.Result (cf. commentaire CSS .score-center-value), pas de split/format imposé.
+  const scoreValue = document.getElementById('score-value');
+  if (scoreValue && document.activeElement !== scoreValue) {
+    scoreValue.textContent = headers.Result && headers.Result !== '*' ? headers.Result : '—';
   }
   // WhiteUrl/BlackUrl (photo officielle Toernooibase, quand le PDN les fournit) alimentent
   // le pré-remplissage AVANT d'afficher les avatars — au même niveau de priorité que
@@ -1129,7 +1138,7 @@ function compressImageFile(file) {
   });
 }
 
-document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .meta-field[data-field], .stat-value[data-field]').forEach((elm) => {
+document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .meta-field[data-field], .stat-value[data-field], .score-center-value[data-field]').forEach((elm) => {
   elm.addEventListener('blur', () => {
     const key = elm.dataset.field;
     let val = elm.textContent.trim();
@@ -1150,25 +1159,75 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
       else delete headers[key];
     }
     syncHeaderFieldsFromState();
-    syncActiveLibraryEntryHeaders();
+    // `headers` EST déjà `library[libraryActiveIndex].headers` (même référence, cf.
+    // loadParsedGame()) quand une entrée de bibliothèque est active — aucune recopie
+    // n'est nécessaire, seulement rafraîchir l'affichage de la liste pour refléter la
+    // mutation qui vient d'avoir lieu sur cet unique objet partagé.
+    if (libraryActiveIndex >= 0) {
+      libraryDirty = true;
+      renderLibrary();
+    }
     scheduleSave();
   });
 });
 
-// Répercute une édition des champs du Bloc 1 (nom de joueur, Elo, événement...) sur
-// l'entrée de bibliothèque correspondante — sans ça, `library[libraryActiveIndex].headers`
-// restait un instantané figé au moment du chargement de la partie, jamais mis à jour par
-// ces éditions : le titre/sous-titre affichés dans l'onglet Bibliothèque ne bougeaient
-// jamais (retour Mickaël). Un renommage manuel de l'entrée (double-clic, `headers.Label`,
-// cf. startRenameLibraryEntry) est préservé — ce n'est pas un champ du Bloc 1, il n'existe
-// que côté bibliothèque.
-function syncActiveLibraryEntryHeaders() {
-  if (libraryActiveIndex < 0 || !library[libraryActiveIndex]) return;
-  const previousLabel = library[libraryActiveIndex].headers.Label;
-  library[libraryActiveIndex].headers = { ...headers };
-  if (previousLabel) library[libraryActiveIndex].headers.Label = previousLabel;
+// Édition d'un champ (nom, score...) directement depuis la carte d'UNE entrée de la
+// Bibliothèque (pas forcément l'entrée active) — pendant du bloc générique
+// `.player-name[data-field]`/etc. du Bloc 1 plus haut, avec la même normalisation de valeur
+// (trim, préfixe "Elo " retiré). Mute `entry.headers` directement : si l'entrée éditée est
+// celle actuellement chargée dans le Bloc 1 (idx === libraryActiveIndex), `entry.headers`
+// EST `headers` (même objet, même référence — cf. loadParsedGame()), donc le Bloc 1 reflète
+// déjà la mutation sans code supplémentaire ; il ne reste qu'à rafraîchir son affichage DOM.
+function setLibraryFieldValue(idx, key, rawVal) {
+  const entry = library[idx];
+  if (!entry) return;
+  let val = rawVal.trim();
+  if (key.endsWith('Elo') && /^Elo\s/.test(val)) val = val.replace(/^Elo\s*/, '').trim();
+  // Même garde-fou que le champ .player-name générique du Bloc 1 (cf. isUntouchedPlayerName
+  // plus haut) : le nom est AFFICHÉ reformaté ("Prénom Nom") mais STOCKÉ "Nom, Prénom" — un
+  // focus/blur sans vraie modification ne doit pas écraser la virgule d'origine.
+  const isUntouchedPlayerName = (key === 'White' || key === 'Black')
+    && entry.headers[key] && val === formatPlayerName(entry.headers[key]);
+  if (!isUntouchedPlayerName) {
+    if (val && val !== '—') entry.headers[key] = val;
+    else delete entry.headers[key];
+  }
   libraryDirty = true;
+  if (idx === libraryActiveIndex && !isUntouchedPlayerName) syncHeaderFieldsFromState();
   renderLibrary();
+  scheduleSave();
+}
+
+// Construit un champ éditable (nom ou score) DANS le titre d'une carte Bibliothèque — même
+// principe que les champs `.player-name`/`.score-center-value` du Bloc 1 : un simple
+// `contenteditable`, la valeur affichée est reformatée pour la lecture (formatPlayerName)
+// mais l'édition passe par setLibraryFieldValue(), qui gère la normalisation/le stockage
+// brut. La coloration (ex. `.library-item-black`) dépend uniquement de `extraClass`, fixée
+// par l'appelant selon le camp (Blancs/Noirs) — jamais du texte affiché, donc robuste à
+// n'importe quel contenu (chiffres, ponctuation, longueur...).
+function buildEditableLibraryField(key, text, extraClass, idx) {
+  const span = document.createElement('span');
+  span.className = `library-item-field${extraClass ? ` ${extraClass}` : ''}`;
+  span.contentEditable = 'true';
+  span.spellcheck = false;
+  span.dataset.field = key;
+  span.textContent = text;
+  span.addEventListener('blur', () => setLibraryFieldValue(idx, key, span.textContent));
+  return span;
+}
+
+function renderEditableLibraryTitle(entry, idx, container) {
+  container.textContent = '';
+  const whiteText = entry.headers.White ? formatPlayerName(entry.headers.White) : 'Blancs';
+  const blackText = entry.headers.Black ? formatPlayerName(entry.headers.Black) : 'Noirs';
+  const scoreText = entry.headers.Result && entry.headers.Result !== '*' ? entry.headers.Result : '—';
+  container.append(
+    buildEditableLibraryField('White', whiteText, null, idx),
+    document.createTextNode(' — '),
+    buildEditableLibraryField('Black', blackText, 'library-item-black', idx),
+    document.createTextNode(' '),
+    buildEditableLibraryField('Result', scoreText, 'library-item-score', idx),
+  );
 }
 
 // Sérialise la bibliothèque en y encodant `libraryName` (si renseigné) comme un en-tête
@@ -1242,7 +1301,20 @@ function restoreAppState() {
       if (parsed.length > 0) {
         const { game: newGame, headers: newHeaders, result } = loadGameFromPdn(parsed[0]);
         game = newGame;
-        headers = { ...newHeaders, Result: result };
+        // `state.pdnText` (la bibliothèque) et `state.currentGamePdn` (la partie active) sont
+        // DEUX chaînes PDN sérialisées séparément puis reparsées ici indépendamment — sans
+        // ce garde-fou, `headers` retomberait sur un DEUXIÈME objet distinct de
+        // `library[libraryActiveIndex].headers` à chaque rechargement de page, recréant la
+        // duplication (deux copies de "la même" donnée pouvant diverger) que ce chantier
+        // corrige justement. Quand une entrée de bibliothèque est active, elle reste la
+        // source unique : on réutilise directement sa référence plutôt que le résultat de
+        // ce second parsing (les deux représentent la même partie, sauvegardés ensemble).
+        if (libraryActiveIndex >= 0 && library[libraryActiveIndex]) {
+          headers = library[libraryActiveIndex].headers;
+        } else {
+          headers = newHeaders;
+          if (!headers.Result) headers.Result = result;
+        }
       }
     }
     renderLibrary();
@@ -1253,57 +1325,21 @@ function restoreAppState() {
 }
 
 // --- bibliothèque (import multi-parties) ----------------------------------------------
-// Titre affiché d'une entrée : `headers.Label` (renommage manuel, cf. startRenameLibraryEntry)
-// s'il existe, sinon le nom des joueurs comme avant. `Label` est un en-tête PDN non standard
-// mais serializeLibraryEntryToPdn écrit tous les en-têtes présents et parsePdn les relit
-// tous génériquement — le renommage survit donc à Sauvegarder/Ouvrir/localStorage sans
-// aucun changement de format.
+// Titre affiché d'une entrée : toujours dérivé des noms des joueurs (headers.White/Black),
+// jamais d'un libellé personnalisé figé à part — l'ancienne fonctionnalité de renommage
+// libre (`headers.Label`) a été retirée : un texte arbitraire remplaçant l'affichage cassait
+// la coloration par camp (qui dépend de la position structurelle Blancs/Noirs, pas d'un
+// texte) et pouvait diverger silencieusement des vrais noms stockés dès qu'il devenait
+// "stale" par rapport à eux (bug constaté à plusieurs reprises : "Kevin Machtelinck2" figé
+// dans un Label alors que headers.Black valait "Machtelinck, Kevin", sans "2"). headers.White
+// et headers.Black restent la SEULE source du nom, affichée à l'identique dans le Bloc 1 et
+// la Bibliothèque.
 function libraryEntryTitle(entry) {
-  const label = customLabelOf(entry);
-  if (label) return label;
   return defaultLibraryEntryTitle(entry);
 }
 
-// Titre par défaut (noms des joueurs), SANS tenir compte d'un éventuel `headers.Label` — sert
-// à détecter si un renommage n'a en fait rien changé (cf. startRenameLibraryEntry).
 function defaultLibraryEntryTitle(entry) {
   return `${formatPlayerName(entry.headers.White || 'Blancs')} — ${formatPlayerName(entry.headers.Black || 'Noirs')}`;
-}
-
-// `headers.Label`, mais SEULEMENT s'il diffère réellement du titre par défaut — auto-guérit
-// les entrées où un `Label` redondant a été figé par un ancien bug (renommage validé sans
-// changement, corrigé dans startRenameLibraryEntry, mais dont la donnée déjà enregistrée en
-// localStorage/fichier .pdn avant ce correctif restait plane pour toujours). Sans ce garde-
-// fou, une entrée déjà "polluée" perdait pour de bon la couleur Noirs + le score, même après
-// correction du bug qui l'avait créée — seules les NOUVELLES entrées en bénéficiaient.
-function customLabelOf(entry) {
-  const label = entry.headers.Label;
-  if (!label || label === defaultLibraryEntryTitle(entry)) return null;
-  return label;
-}
-
-// Version DOM du titre pour l'affichage dans la liste (contrairement à libraryEntryTitle()
-// ci-dessus, texte brut utilisé pour le renommage/la confirmation de suppression) : ordre
-// TOUJOURS Blancs — Noirs (convention [White]/[Black]), score "X-Y" (même ordre) en fin de
-// ligne — ex. "Arnaud Cordier — Kevin Machtelinck 0-2". Coloration FIXE, indépendante du
-// résultat (retour Mickaël : pas de mise en évidence dynamique du vainqueur) — seul le nom
-// des Noirs porte une couleur distincte (`.library-item-black`, même bronze que l'anneau
-// photo Noirs du Bloc 1, cf. `.player-avatar-ring[data-side-ring="black"]`), Blancs et score
-// restent en texte neutre standard.
-function renderLibraryItemTitle(entry, container) {
-  container.textContent = '';
-  const label = customLabelOf(entry);
-  if (label) { container.textContent = label; return; }
-  const whiteName = formatPlayerName(entry.headers.White || 'Blancs');
-  const blackName = formatPlayerName(entry.headers.Black || 'Noirs');
-  const [whiteScore, blackScore] = parseResultScore(entry.result);
-  const blackNameSpan = document.createElement('span');
-  blackNameSpan.className = 'library-item-black';
-  blackNameSpan.textContent = blackName;
-  container.append(document.createTextNode(whiteName), document.createTextNode(' — '), blackNameSpan);
-  if (whiteScore !== null && blackScore !== null) {
-    container.append(document.createTextNode(` ${whiteScore}-${blackScore}`));
-  }
 }
 
 // N'écrase pas le champ pendant que l'utilisateur est en train d'y taper (même précaution
@@ -1319,7 +1355,7 @@ el.libraryName.addEventListener('blur', () => {
   scheduleSave();
 });
 // Évite qu'un retour à la ligne (Entrée) n'insère un <br> dans ce contenteditable — un nom
-// de bibliothèque est une seule ligne, comme le nom d'une entrée (startRenameLibraryEntry).
+// de bibliothèque est une seule ligne.
 el.libraryName.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); el.libraryName.blur(); }
 });
@@ -1331,20 +1367,41 @@ function renderLibrary() {
   el.libraryCount.hidden = library.length === 0;
   el.libraryCount.textContent = String(library.length);
   library.forEach((entry, idx) => {
+    // Purge un `headers.Label` résiduel (ancienne fonctionnalité de renommage libre,
+    // retirée — cf. libraryEntryTitle) qui pourrait encore traîner dans une bibliothèque
+    // rechargée depuis un fichier .pdn ou un ancien localStorage : il n'est plus lu nulle
+    // part, mais on le supprime pour de bon plutôt que de le laisser polluer un futur export.
+    delete entry.headers.Label;
     const li = document.createElement('li');
     li.className = `library-item${idx === libraryActiveIndex ? ' active' : ''}`;
+
+    // Réordonnancement manuel par glisser-déposer, sur TOUTE la carte (pas seulement une
+    // petite poignée — retour Mickaël : "impossible de déplacer la carte", la zone de prise
+    // minuscule était trop difficile à attraper). Implémenté à la main via pointerdown/move/up
+    // (PAS le drag&drop HTML5 natif) : la "ghost image" semi-transparente que le navigateur
+    // génère automatiquement pour un draggable="true" se superposait de façon illisible au
+    // texte de la carte survolée (bug précédent) — aucun moyen fiable de la rendre opaque ou
+    // de la supprimer sans perdre l'aperçu de drag. Ici la carte déplacée est un élément réel
+    // (position: fixed, fond opaque) qui suit le curseur, et un placeholder occupe sa place
+    // dans le flux pendant le drag — voir startLibraryDrag(). Un seuil de mouvement (cf.
+    // DRAG_THRESHOLD_PX dans startLibraryDrag) distingue un simple clic (sélection de la
+    // partie, cf. le listener 'click' plus bas) d'un vrai drag — sans lui, poser le doigt/la
+    // souris sur la carte pour cliquer déclencherait systématiquement un micro-drag.
+    const dragHandle = document.createElement('span');
+    dragHandle.className = 'library-item-drag';
+    dragHandle.title = 'Glisser pour réordonner';
+    dragHandle.textContent = '⠿';
+    li.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest('.library-item-delete')) return;
+      startLibraryDrag(e, li, idx);
+    });
 
     const info = document.createElement('div');
     info.className = 'library-item-info';
     const title = document.createElement('div');
     title.className = 'library-item-title';
-    renderLibraryItemTitle(entry, title);
-    title.title = 'Double-cliquer pour renommer';
-    title.addEventListener('dblclick', (e) => {
-      e.preventDefault(); // évite la sélection de texte native sur double-clic
-      e.stopPropagation();
-      startRenameLibraryEntry(idx, title);
-    });
+    renderEditableLibraryTitle(entry, idx, title);
     const meta = document.createElement('div');
     meta.className = 'library-item-meta';
     meta.textContent = entry.headers.Event || '';
@@ -1359,16 +1416,15 @@ function renderLibrary() {
       deleteLibraryEntry(idx);
     });
 
-    li.append(info, deleteBtn);
-    // N'appelle PAS renderLibrary() ici : un clic simple est le premier des deux clics d'un
-    // double-clic (rename, cf. startRenameLibraryEntry) — reconstruire toute la liste à ce
-    // moment-là détruirait le nœud DOM du titre avant que le deuxième clic ne puisse s'y
-    // accrocher, et le double-clic dégénère alors en simple sélection de texte native (bug
-    // constaté en test). On se contente donc de basculer la classe .active à la main.
+    li.append(dragHandle, info, deleteBtn);
     li.addEventListener('click', () => {
+      // Un drag qui vient de se terminer déclenche quand même un 'click' natif au relâchement
+      // (même élément, même souris) — sans ce garde-fou, réordonner une entrée la sélectionnait
+      // aussi/rechargeait la partie au passage, un effet de bord non voulu.
+      if (consumeLibraryDragJustEnded()) return;
       if (libraryActiveIndex === idx) return;
       libraryActiveIndex = idx;
-      loadParsedGame(entry);
+      loadParsedGame(entry, { silent: true });
       el.libraryList.querySelectorAll('.library-item.active').forEach((n) => n.classList.remove('active'));
       li.classList.add('active');
     });
@@ -1376,37 +1432,137 @@ function renderLibrary() {
   });
 }
 
-// Renommage inline : remplace le titre par un champ texte le temps de l'édition. Stocké
-// dans headers.Label (voir libraryEntryTitle) plutôt que dans une propriété JS annexe, pour
-// que le nom survive à la sérialisation PDN (Sauvegarder/Ouvrir/persistance localStorage).
-function startRenameLibraryEntry(idx, titleElm) {
-  const entry = library[idx];
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'library-item-rename-input';
-  input.value = libraryEntryTitle(entry);
-  titleElm.replaceWith(input);
-  input.focus();
-  input.select();
-  input.addEventListener('click', (e) => e.stopPropagation());
-  const commit = () => {
-    const val = input.value.trim();
-    // Un renommage "validé" sans changement réel (double-clic puis Entrée/clic ailleurs sans
-    // rien taper) ne doit PAS figer un `headers.Label` — sinon le titre bascule silencieusement
-    // en texte brut fixe, perdant définitivement le rendu dynamique (couleur Noirs + score),
-    // même si rien n'a été personnalisé (bug constaté : confondu au départ avec un problème
-    // d'entrée "active" alors que la cause réelle était ce commit trop permissif).
-    if (val && val !== defaultLibraryEntryTitle(entry)) entry.headers.Label = val;
-    else delete entry.headers.Label;
-    libraryDirty = true;
-    renderLibrary();
-    scheduleSave();
-  };
-  input.addEventListener('blur', commit);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') input.blur();
-    else if (e.key === 'Escape') { input.value = libraryEntryTitle(entry); input.blur(); }
-  });
+// Réordonnancement manuel (glisser-déposer "carte physique", cf. le commentaire dans
+// renderLibrary() sur pourquoi ce n'est PAS le drag&drop HTML5 natif). `finalIndex` est la
+// position déjà mesurée APRÈS retrait de l'élément déplacé (cf. onPointerUp ci-dessous, qui
+// la lit directement dans l'ordre visuel du placeholder) — un simple splice/insert suffit,
+// aucun ajustement d'indice supplémentaire nécessaire ici. L'entrée active est retrouvée par
+// référence après le splice plutôt que recalculée par arithmétique d'indices (plus simple à
+// lire, aucun risque de décalage off-by-one).
+function moveLibraryEntryTo(fromIndex, finalIndex) {
+  if (!Number.isInteger(fromIndex) || fromIndex < 0 || fromIndex >= library.length) return;
+  if (finalIndex === fromIndex) return;
+  const activeEntry = libraryActiveIndex >= 0 ? library[libraryActiveIndex] : null;
+  const [item] = library.splice(fromIndex, 1);
+  library.splice(finalIndex, 0, item);
+  if (activeEntry) libraryActiveIndex = library.indexOf(activeEntry);
+  libraryDirty = true;
+  renderLibrary();
+  scheduleSave();
+}
+
+// Le drag ne "s'engage" (carte détachée + placeholder) qu'après ce seuil de mouvement en
+// pixels — en-dessous, on laisse un simple clic/double-clic se produire normalement (cf.
+// startLibraryDrag ci-dessous).
+const LIBRARY_DRAG_THRESHOLD_PX = 4;
+// Posé à true juste après un vrai drag (mouvement au-delà du seuil), pour que le 'click'
+// natif qui suit immanquablement le relâchement de la souris sur la même carte n'ouvre pas
+// aussi la partie / ne change pas la sélection — cf. consumeLibraryDragJustEnded().
+let libraryDragJustEnded = false;
+function consumeLibraryDragJustEnded() {
+  const was = libraryDragJustEnded;
+  libraryDragJustEnded = false;
+  return was;
+}
+
+// Glisser-déposer façon "carte physique" : la carte déplacée se détache du flux (position
+// fixed, suit le curseur, fond opaque + ombre + léger scale) tandis qu'un placeholder occupe
+// sa place dans la liste ; les autres cartes se décalent avec une transition fluide (FLIP —
+// First/Last/Invert/Play : on capture leurs positions avant/après le déplacement du
+// placeholder dans le DOM, puis on anime depuis la position inversée vers l'identité) chaque
+// fois que le placeholder change de créneau. Le réordonnancement réel du tableau `library`
+// n'a lieu qu'au relâchement (moveLibraryEntryTo), une fois la position finale du placeholder
+// connue — le drag lui-même ne touche qu'au DOM/CSS, jamais aux données.
+function startLibraryDrag(pointerDownEvent, li, fromIndex) {
+  const listEl = el.libraryList;
+  const startClientX = pointerDownEvent.clientX;
+  const startClientY = pointerDownEvent.clientY;
+  let engaged = false;
+  let placeholder = null;
+  let rect = null;
+  let baseTop = null;
+
+  function siblingItems() {
+    return Array.from(listEl.querySelectorAll('.library-item')).filter((n) => n !== li);
+  }
+
+  // FLIP : déplace le placeholder avant/après `targetSibling` dans le DOM, puis anime les
+  // cartes dont la position a changé depuis leur position précédente vers leur nouvelle
+  // position (transition CSS déclenchée en repartant d'un transform inversé).
+  function movePlaceholderNextTo(targetSibling, before) {
+    const currentNeighbour = before ? placeholder.nextElementSibling : placeholder.previousElementSibling;
+    if (currentNeighbour === targetSibling) return;
+    const siblings = siblingItems();
+    const oldRects = new Map(siblings.map((s) => [s, s.getBoundingClientRect()]));
+    if (before) targetSibling.before(placeholder);
+    else targetSibling.after(placeholder);
+    siblings.forEach((s) => {
+      const oldRect = oldRects.get(s);
+      const newRect = s.getBoundingClientRect();
+      const dy = oldRect.top - newRect.top;
+      if (!dy) return;
+      s.style.transition = 'none';
+      s.style.transform = `translateY(${dy}px)`;
+      requestAnimationFrame(() => {
+        s.style.transition = 'transform 150ms ease';
+        s.style.transform = '';
+      });
+    });
+  }
+
+  // N'engage le drag visuel (carte détachée, placeholder) qu'une fois le seuil de mouvement
+  // franchi — appelé depuis onPointerMove, jamais depuis pointerdown directement.
+  function engage() {
+    engaged = true;
+    rect = li.getBoundingClientRect();
+    baseTop = rect.top;
+    placeholder = document.createElement('li');
+    placeholder.className = 'library-item-placeholder';
+    placeholder.style.height = `${rect.height}px`;
+    li.before(placeholder);
+    li.classList.add('library-item-dragging');
+    li.style.position = 'fixed';
+    li.style.top = `${rect.top}px`;
+    li.style.left = `${rect.left}px`;
+    li.style.width = `${rect.width}px`;
+    li.style.margin = '0';
+    li.style.zIndex = '1000';
+  }
+
+  function onPointerMove(e) {
+    if (!engaged) {
+      const dx = e.clientX - startClientX;
+      const dy = e.clientY - startClientY;
+      if (Math.hypot(dx, dy) < LIBRARY_DRAG_THRESHOLD_PX) return;
+      engage();
+    }
+    const deltaY = e.clientY - startClientY;
+    li.style.top = `${baseTop + deltaY}px`;
+    const centerY = baseTop + deltaY + rect.height / 2;
+    const siblings = siblingItems();
+    let target = null;
+    let before = true;
+    for (const sib of siblings) {
+      const sRect = sib.getBoundingClientRect();
+      if (centerY < sRect.top + sRect.height / 2) { target = sib; before = true; break; }
+    }
+    if (!target && siblings.length) { target = siblings[siblings.length - 1]; before = false; }
+    if (target) movePlaceholderNextTo(target, before);
+  }
+
+  function onPointerUp() {
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+    if (!engaged) return; // pas de vrai drag : laisse le 'click' natif faire son travail
+    libraryDragJustEnded = true;
+    const finalIndex = Array.from(listEl.children).filter((n) => n !== li).indexOf(placeholder);
+    li.remove();
+    placeholder.remove();
+    moveLibraryEntryTo(fromIndex, finalIndex);
+  }
+
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', onPointerUp);
 }
 
 // Suppression : garde-fou confirmModal() (définitif, pas d'undo pour la bibliothèque comme
@@ -1485,15 +1641,26 @@ el.btnNewGame.addEventListener('click', startNewGame);
 el.brand.addEventListener('click', startNewGame);
 
 // --- chargement d'une partie parsée (PDN) ----------------------------------------------
-function loadParsedGame(parsedGame) {
+// `silent` : le clic sur une entrée de la Bibliothèque pour l'ouvrir ne doit jouer AUCUN son
+// (retour Mickaël) — seul le son de début de partie serait concerné ici (move/capture
+// restent inchangés, ils ne se déclenchent que pendant le jeu réel, cf. playMove()).
+function loadParsedGame(parsedGame, { silent = false } = {}) {
   stopAutoplay();
   const { game: newGame, headers: newHeaders, result, warnings, loadedMoves, totalMoves } = loadGameFromPdn(parsedGame);
   game = newGame;
-  headers = { ...newHeaders, Result: result };
+  // Pas de copie (`{...newHeaders}`) : `headers` devient la MÊME référence que
+  // `parsedGame.headers` — quand `parsedGame` est une entrée de la Bibliothèque, c'est
+  // littéralement `library[idx].headers`. Toute édition ultérieure (Bloc 1 ou carte
+  // Bibliothèque) mute cet unique objet ; les deux affichages le lisent, jamais une copie
+  // qui pourrait diverger (cf. bug "Kevin Machtelinck2" vs "Kevin Machtelinck" — deux objets
+  // séparés qu'un mécanisme de "sync" recopiait manuellement, avec le risque d'oubli que ça
+  // implique).
+  headers = newHeaders;
+  if (!headers.Result) headers.Result = result; // repli sur le résultat du movetext si l'en-tête [Result] manquait
   selectedSquare = null;
   syncHeaderFieldsFromState();
   refreshUI();
-  playSound('game-start');
+  if (!silent) playSound('game-start');
   if (warnings.length) {
     showToast(`Import partiel : ${loadedMoves}/${totalMoves} coups chargés — ${warnings[0]}`, 'error');
   } else if (loadedMoves > 0) {
@@ -1578,14 +1745,15 @@ el.libraryFileInput.addEventListener('change', async () => {
 
 // --- ajouter la partie actuellement affichée à la bibliothèque active -----------------
 // Convertit la partie en cours au même format que les entrées issues de parsePdn()
-// ({ headers, moves: [{notation}], result }) pour rester compatible avec renderLibrary()
-// et serializeLibraryToPdn() — fullMoveList(game) renvoie des moveInfo structurés
-// (from/to), pas des { notation }, d'où la conversion via moveNotation().
+// ({ headers, moves: [{notation}] }) pour rester compatible avec renderLibrary() et
+// serializeLibraryToPdn() — fullMoveList(game) renvoie des moveInfo structurés (from/to),
+// pas des { notation }, d'où la conversion via moveNotation(). Le résultat n'est PAS un
+// champ à part : il vit uniquement dans `headers.Result` (source unique, cf.
+// serializeLibraryEntryToPdn qui le lit directement depuis les headers).
 function currentGameAsLibraryEntry() {
   return {
     headers: { ...headers },
     moves: fullMoveList(game).map((m) => ({ notation: moveNotation(m), comment: m.comment || undefined })),
-    result: headers.Result || '*',
   };
 }
 
@@ -1597,6 +1765,11 @@ el.btnLibraryAddCurrent.addEventListener('click', () => {
   }
   library = library.concat([entry]);
   libraryActiveIndex = library.length - 1;
+  // `entry.headers` est une copie fraîche ({...headers}) au moment de l'ajout — sans ce
+  // rebranchement, `headers` (Bloc 1) resterait sur l'ANCIEN objet, dupliquant à nouveau
+  // les données dès la prochaine édition (cf. commentaire dans loadParsedGame() sur la
+  // référence partagée qui doit rester la source unique).
+  headers = entry.headers;
   libraryDirty = true;
   renderLibrary();
   scheduleSave();
@@ -1649,7 +1822,7 @@ window.addEventListener('drop', (e) => {
 
 // --- copier / coller (presse-papier) ---------------------------------------------------
 function currentGamePayload() {
-  return { headers, moves: fullMoveList(game), result: headers.Result || '*' };
+  return { headers, moves: fullMoveList(game) };
 }
 
 // Logique commune au bouton "Coller" et au raccourci Ctrl+V dans la zone "Coups joués"

@@ -165,7 +165,17 @@ body {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 6px;
+  margin-top: 0;
+  padding-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.sound-popover-inner {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -174,13 +184,10 @@ body {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-panel);
   padding: 10px 12px;
-  z-index: 50;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s;
 }
 .sound-control:hover .sound-popover,
-.sound-popover:hover {
+.sound-popover:hover,
+.sound-control.sound-dragging .sound-popover {
   opacity: 1;
   pointer-events: auto;
 }
@@ -471,9 +478,58 @@ body {
 .library-name:empty::before { content: attr(data-placeholder); color: var(--text-2); font-weight: 400; }
 .library-item:hover { background: var(--gold-soft); }
 .library-item.active { border-color: var(--gold); background: var(--gold-soft); }
+/* Poignée de glisser-déposer (réordonnancement manuel) : discrète comme le bouton supprimer,
+   révélée seulement au survol de la ligne — pas de rangée d'icônes permanente, même logique
+   que .library-item-delete. Curseur "grab" pour signaler l'affordance avant même le drag. */
+.library-item-drag {
+  flex-shrink: 0;
+  align-self: center;
+  width: 18px;
+  text-align: center;
+  color: var(--text-2);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s;
+  font-size: 15px;
+  line-height: 1;
+  touch-action: none; /* évite le scroll tactile pendant le drag, cf. startLibraryDrag() */
+}
+.library-item:hover .library-item-drag { opacity: 1; }
+/* Carte en cours de glissement ("carte physique" détachée du flux, cf. startLibraryDrag()
+   dans main.js) : fond OPAQUE (pas --gold-soft, une teinte translucide qui laisserait
+   transparaître la carte du dessous — c'était le bug signalé) + élévation (ombre marquée,
+   léger scale) pour bien la distinguer du reste de la liste pendant le déplacement. */
+.library-item.library-item-dragging {
+  background: var(--panel);
+  border-color: var(--gold);
+  box-shadow: var(--shadow-panel), 0 0 0 1px var(--gold);
+  transform: scale(1.02);
+  cursor: grabbing;
+  pointer-events: none;
+}
+/* Emplacement laissé par la carte pendant le drag — un simple espace en pointillés plutôt
+   qu'une carte vide, pour ne pas donner l'impression qu'une entrée existe déjà à cet endroit. */
+.library-item-placeholder {
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 3px;
+  box-sizing: border-box;
+}
 .library-item-info { min-width: 0; flex: 1; }
-.library-item-title { font-size: 15.5px; color: var(--text-0); font-weight: 600; user-select: none; }
-.library-item-title:hover { text-decoration: underline dotted; }
+.library-item-title { font-size: 15.5px; color: var(--text-0); font-weight: 600; }
+/* Champs éditables au clic directement sur la carte Bibliothèque (nom, score — synchronisés
+   avec le Bloc 1 via la MÊME référence d'objet, cf. setLibraryFieldValue()/
+   renderEditableLibraryTitle() dans main.js — pas une copie qui pourrait diverger). */
+.library-item-field {
+  user-select: text;
+  outline: none;
+  cursor: text;
+  border-radius: 4px;
+  padding: 0 3px;
+  margin: 0 -3px;
+}
+.library-item-field:hover, .library-item-field:focus { background: var(--gold-soft); color: var(--gold); }
+.library-item-score { font-weight: 700; color: var(--text-1); }
 .library-item-meta { font-size: 13px; color: var(--text-2); margin-top: 3px; }
 /* Couleur fixe pour identifier le joueur Noirs dans le titre bibliothèque — même famille
    bronze que l'anneau photo Noirs du Bloc 1 (`.player-avatar-ring[data-side-ring="black"]`),
@@ -482,17 +538,6 @@ body {
    bordure décorative, est trop peu contrasté sur le fond sombre du panneau une fois utilisé
    comme couleur de texte (retour Mickaël : "on voit mal le nom des Noirs"). */
 .library-item-black { color: #c9a06a; }
-.library-item-rename-input {
-  font: inherit;
-  font-size: 15.5px;
-  font-weight: 600;
-  width: 100%;
-  background: var(--bg-2);
-  border: 1px solid var(--gold);
-  border-radius: var(--radius-sm);
-  color: var(--text-0);
-  padding: 2px 5px;
-}
 /* Bouton de suppression discret : visible seulement au survol de la ligne (ou en focus
    clavier, pour rester accessible sans souris) — cohérent avec la densité du reste de la
    liste, pas de rangée d'icônes permanente qui alourdirait chaque ligne. */
@@ -793,31 +838,17 @@ body {
 .player-card[data-side="white"] { order: 3; }
 .players-rail.flipped .player-card[data-side="black"] { order: 3; }
 .players-rail.flipped .player-card[data-side="white"] { order: 1; }
-/* Le score lui-même (les 2 valeurs DANS .score-center) doit suivre la même permutation que
-   les cartes, sinon un chiffre resterait toujours affiché du même côté alors que la carte
-   correspondante change de position (retour Mickaël). Même mécanique `order` flex que
-   ci-dessus (le séparateur reste au milieu via son propre `order: 2` explicite plus bas).
-   Décision finale de Mickaël : sans flip, ordre BRUT du tag PDN [Result] (Blancs-Noirs,
-   donc Blancs affiché en premier/gauche) ; le flip inverse les 2, exactement comme il
-   inverse les 2 cartes ci-dessus. */
-#score-white { order: 1; }
-#score-black { order: 3; }
-.players-rail.flipped #score-white { order: 3; }
-.players-rail.flipped #score-black { order: 1; }
-
-/* Score centré ENTRE les 2 cartes joueurs, aligné avec les 2 (retour Mickaël : c'est le
-   design voulu, pas des pilules séparées sur chaque carte). Piège rencontré : une simple
-   paire "X — Y" neutre est ambiguë au premier coup d'œil — rien ne rattache visuellement un
-   chiffre à son camp, et l'ordre affiché par défaut (Noirs en premier, cartes Noirs en haut)
-   ne correspond pas à l'ordre Blancs-Noirs du tag PDN [Result], ce qui a fait croire à un
-   score inversé alors que la valeur était correcte. Levé en donnant au chiffre des Noirs la
-   MÊME couleur bronze que dans la Bibliothèque (`.library-item-black`) — la couleur, pas la
-   position, identifie sans ambiguïté le camp, quel que soit l'ordre d'affichage/le flip. */
+/* Score centré ENTRE les 2 cartes joueurs, aligné avec les 2 (design voulu par Mickaël).
+   Champ texte libre (pas de format imposé "X-Y" — un score peut se noter "2-0", "1-1",
+   "annulé"...) : un SEUL contenteditable lié directement à `headers.Result`, plus de split
+   Blancs/Noirs coloré — la coloration par camp obligeait à un format à 2 nombres, incompatible
+   avec "n'importe quel texte" (retour Mickaël). Édité via le même mécanisme générique que les
+   autres champs du Bloc 1 (cf. le querySelectorAll partagé dans main.js), donc sync
+   automatique vers/depuis la Bibliothèque comme n'importe quel autre champ. */
 .score-center {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 8px;
   padding: 2px 0 6px;
 }
 .score-center-value {
@@ -825,17 +856,12 @@ body {
   font-weight: 700;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
+  outline: none;
+  cursor: text;
+  border-radius: 5px;
+  padding: 1px 6px;
 }
-#score-black:not(.winner) { color: #c9a06a; }
-.score-center-value.winner {
-  color: var(--gold);
-  font-size: 26px;
-}
-.score-center-sep {
-  order: 2;
-  font-size: 14px;
-  color: var(--text-2);
-}
+.score-center-value:hover, .score-center-value:focus { background: var(--gold-soft); color: var(--gold); }
 
 /* Compteur de temps (théorie des finales) — déplacé de la zone entre les cartes vers la
    ligne de statut, combiné avec "Trait aux Blancs/Noirs" (retour Mickaël : son ancien
