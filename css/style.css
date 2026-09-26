@@ -261,6 +261,59 @@ body {
   font-weight: 700;
   color: var(--text-0);
 }
+/* Barre "modifications non enregistrées" (Bloc 1) : visible uniquement quand une partie
+   ISSUE de la bibliothèque a été modifiée sans passer par "Enregistrer"/Ctrl+S — cf.
+   updateUnsavedIndicator() dans main.js. Le point orange (--danger, même teinte que les
+   avertissements existants) reprend le principe du point doré des commentaires de coup
+   (.move-comment-dot) mais dans la couleur "attention" plutôt que "info". Règle jumelle
+   `[hidden] { display: none; }` obligatoire (cf. CLAUDE.md) car `display: flex` est déclaré
+   ci-dessous. */
+.unsaved-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+}
+.unsaved-bar[hidden] { display: none; }
+.unsaved-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(226, 105, 79, 0.22);
+}
+.unsaved-label {
+  flex: 1;
+  color: var(--danger);
+  font-size: 12px;
+}
+.text-btn-mini {
+  flex: none;
+  background: var(--bg-2);
+  border: 1px solid var(--panel-border);
+  color: var(--text-1);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s, color 0.15s;
+}
+.text-btn-mini:hover { background: var(--gold-soft); color: var(--gold); }
+
+/* Même point que .unsaved-dot ci-dessus, mais accolé au titre d'une entrée de bibliothèque
+   (cf. renderLibrary() dans main.js) qui est l'entrée active ET a des modifications non
+   enregistrées. */
+.library-item-unsaved-dot {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--danger);
+  font-size: 10px;
+  vertical-align: middle;
+}
+
 .meta-chip-row {
   display: flex;
   flex-wrap: wrap;

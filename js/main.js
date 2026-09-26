@@ -153,6 +153,22 @@ let libraryName = '';
 // sauvegardée dans un fichier".
 let libraryDirty = false;
 
+// true dès qu'un champ SUIVI (nom, score, Elo, titre, commentaire de coup) a été modifié sur
+// l'entrée de bibliothèque actuellement OUVERTE (`libraryActiveIndex >= 0`) sans être encore
+// enregistré via "Enregistrer"/Ctrl+S. Contrairement à `libraryDirty` (qui déclenche toujours
+// la sauvegarde auto existante, inchangée pour une "saisie pure" — aucune entrée active),
+// ce flag bloque l'écrasement silencieux de l'entrée : `headers`/`game` restent mutés en
+// direct comme avant (aucune copie de `headers`, cf. règle du 18/09), mais `saveAppState()`
+// substitue `activeEntrySnapshot` à l'entrée active tant que ce flag est vrai, pour que le
+// PDN persisté en localStorage reste figé sur la dernière version VOLONTAIREMENT enregistrée.
+let activeEntryDirty = false;
+// Instantané inerte { headers, moves } (même forme que currentGameAsLibraryEntry()) de la
+// dernière version enregistrée de l'entrée active — jamais muté partiellement, toujours
+// remplacé en bloc (au chargement, après "Enregistrer", après restauration localStorage).
+// Sert à la fois de référence pour "Annuler" et de substitut de sérialisation ci-dessus. null
+// quand aucune entrée de bibliothèque n'est active.
+let activeEntrySnapshot = null;
+
 // --- registre photos joueurs (Bloc 1) ------------------------------------------------
 // Table nom de joueur -> URL/dataURL de photo, indépendante de la partie/bibliothèque en
 // cours : une fois une photo associée à un nom (upload ou URL Toernooibase), elle
@@ -276,6 +292,9 @@ const el = {
   btnLibrarySave: document.getElementById('btn-library-save'),
   btnLibraryOpen: document.getElementById('btn-library-open'),
   btnLibraryAddCurrent: document.getElementById('btn-library-add-current'),
+  unsavedBar: document.getElementById('unsaved-bar'),
+  btnSaveEntry: document.getElementById('btn-save-entry'),
+  btnRevertEntry: document.getElementById('btn-revert-entry'),
   commentPopover: document.getElementById('move-comment-popover'),
   commentTextarea: document.getElementById('move-comment-input'),
   commentCloseBtn: document.getElementById('move-comment-close'),
@@ -498,6 +517,7 @@ function closeCommentPopover(commit) {
   if (el.commentPopover.hidden) return;
   if (commit && commentPopoverIdx != null) {
     game.setCommentAt(commentPopoverIdx, el.commentTextarea.value.trim());
+    markActiveEntryDirty();
     scheduleSave();
     renderMoveList();
   }
@@ -817,6 +837,16 @@ window.addEventListener('keydown', (e) => {
     case 'f': case 'F': toggleFlip(); break;
     default: break;
   }
+});
+
+// Ctrl+S / Cmd+S : en dehors du guard sur les éléments éditables ci-dessus (un blur avant
+// preventDefault ne suffirait pas à empêcher la boîte de dialogue "Enregistrer sous" du
+// navigateur si le focus est dans un champ du Bloc 1 pendant l'édition). saveActiveEntry()
+// ne fait rien s'il n'y a rien à enregistrer.
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+  e.preventDefault();
+  saveActiveEntry();
 });
 
 // --- toast (notifications discrètes) -------------------------------------------------
@@ -1200,9 +1230,12 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
     // `headers` EST déjà `library[libraryActiveIndex].headers` (même référence, cf.
     // loadParsedGame()) quand une entrée de bibliothèque est active — aucune recopie
     // n'est nécessaire, seulement rafraîchir l'affichage de la liste pour refléter la
-    // mutation qui vient d'avoir lieu sur cet unique objet partagé.
+    // mutation qui vient d'avoir lieu sur cet unique objet partagé. Pour une partie EXISTANTE
+    // (entrée active), on ne marque plus `libraryDirty` ici : `markActiveEntryDirty()` diffère
+    // l'écriture jusqu'à "Enregistrer"/Ctrl+S (cf. activeEntryDirty) — seule une saisie pure
+    // (aucune entrée active) continue d'auto-sauvegarder comme avant.
     if (libraryActiveIndex >= 0) {
-      libraryDirty = true;
+      markActiveEntryDirty();
       renderLibrary();
     }
     scheduleSave();
@@ -1230,8 +1263,15 @@ function setLibraryFieldValue(idx, key, rawVal) {
     if (val && val !== '—') entry.headers[key] = val;
     else delete entry.headers[key];
   }
-  libraryDirty = true;
-  if (idx === libraryActiveIndex && !isUntouchedPlayerName) syncHeaderFieldsFromState();
+  // Édition de l'entrée active depuis sa carte bibliothèque : même report que le Bloc 1
+  // (cf. markActiveEntryDirty()) — édition d'une AUTRE entrée (pas ouverte dans le Bloc 1) :
+  // reste auto-sauvegardée immédiatement comme avant, hors périmètre de cette fonctionnalité.
+  if (idx === libraryActiveIndex) {
+    markActiveEntryDirty();
+    if (!isUntouchedPlayerName) syncHeaderFieldsFromState();
+  } else {
+    libraryDirty = true;
+  }
   renderLibrary();
   scheduleSave();
 }
@@ -1301,9 +1341,30 @@ function scheduleSave() {
 }
 function saveAppState() {
   saveTimer = null;
-  const pdnText = library.length > 0 ? serializeLibraryWithName(library, libraryName) : '';
+  // Tant que l'entrée active a des modifications non enregistrées (activeEntryDirty), le PDN
+  // persisté de la BIBLIOTHÈQUE la remplace par son dernier instantané enregistré plutôt que
+  // par son état live (qui, lui, EST `library[libraryActiveIndex]` par référence — cf.
+  // loadParsedGame()) : sans cette substitution, n'importe quel autre scheduleSave() déclenché
+  // ailleurs (jouer un coup, réordonner...) écrirait quand même la modif non voulue, puisque
+  // c'est le même objet. Les autres entrées sont sérialisées telles quelles, inchangées.
+  const entriesForPersistence = (activeEntryDirty && libraryActiveIndex >= 0 && activeEntrySnapshot)
+    ? library.map((entry, idx) => (idx === libraryActiveIndex ? activeEntrySnapshot : entry))
+    : library;
+  const pdnText = entriesForPersistence.length > 0 ? serializeLibraryWithName(entriesForPersistence, libraryName) : '';
+  // `currentGamePdn` reste toujours la partie RÉELLEMENT affichée (avec ses modifications non
+  // enregistrées le cas échéant) : un F5 en cours d'édition ne doit ni les perdre, ni les
+  // valider silencieusement dans la bibliothèque — cf. activeEntryDirty/activeEntrySnapshot
+  // persistés ci-dessous, qui permettent de retrouver "Enregistrer"/"Annuler" après reload.
   const currentGamePdn = serializeToPdn(currentGamePayload());
-  saveLibraryState({ version: 1, pdnText, activeIndex: libraryActiveIndex, currentGamePdn, libraryDirty });
+  saveLibraryState({
+    version: 1,
+    pdnText,
+    activeIndex: libraryActiveIndex,
+    currentGamePdn,
+    libraryDirty,
+    activeEntryDirty,
+    activeEntrySnapshot: activeEntryDirty ? activeEntrySnapshot : null,
+  });
 }
 // Filet de sécurité contre la course debounce (400ms) / rafraîchissement immédiat de la
 // page : un F5 juste après une action (ex. "Ajouter la partie" suivi d'un refresh instantané)
@@ -1311,10 +1372,18 @@ function saveAppState() {
 // (bug constaté en direct — la bibliothèque revenait vide après un simple F5). `beforeunload`
 // se déclenche de façon synchrone avant que la page ne se décharge, y compris pour un rechargement
 // déclenché par script (`location.reload()`) — on force l'écriture immédiate d'un save en attente.
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', (e) => {
   if (saveTimer !== null) {
     clearTimeout(saveTimer);
     saveAppState();
+  }
+  // Avertissement natif du navigateur (pas un confirm() maison, donc pas de blocage JS
+  // interdit par le projet) : les modifications non enregistrées ne sont PAS perdues au
+  // reload (cf. activeEntrySnapshot persisté ci-dessus), mais fermer l'onglet reste une
+  // sortie définitive — mieux vaut prévenir.
+  if (activeEntryDirty) {
+    e.preventDefault();
+    e.returnValue = '';
   }
 });
 
@@ -1349,11 +1418,32 @@ function restoreAppState() {
         // ce second parsing (les deux représentent la même partie, sauvegardés ensemble).
         if (libraryActiveIndex >= 0 && library[libraryActiveIndex]) {
           headers = library[libraryActiveIndex].headers;
+          // `state.currentGamePdn` (la partie active) peut porter des modifications encore non
+          // enregistrées (cf. state.activeEntryDirty ci-dessous) alors que `library[idx].headers`
+          // — qu'on vient de rebrancher comme référence unique juste au-dessus — ne les porte
+          // PAS forcément (cf. saveAppState() : l'entrée active y est remplacée par son dernier
+          // instantané enregistré tant qu'elle est "dirty"). On applique donc ici les valeurs
+          // réellement affichées (`newHeaders`, issu de ce 2e parsing) SUR ce même objet
+          // partagé, plutôt que de garder deux objets `headers` distincts.
+          if (state.activeEntryDirty) {
+            Object.keys(headers).forEach((k) => delete headers[k]);
+            Object.assign(headers, newHeaders);
+          }
         } else {
           headers = newHeaders;
           if (!headers.Result) headers.Result = result;
         }
       }
+    }
+    // Restaure l'état "non enregistré" tel quel s'il y en avait un lors de la dernière
+    // sauvegarde, sinon (re)capture un instantané propre depuis l'état qui vient d'être
+    // rechargé ci-dessus (cohérent par construction, cf. commentaire juste au-dessus).
+    if (libraryActiveIndex >= 0 && state.activeEntryDirty && state.activeEntrySnapshot) {
+      activeEntrySnapshot = state.activeEntrySnapshot;
+      activeEntryDirty = true;
+      updateUnsavedIndicator();
+    } else {
+      captureActiveEntrySnapshot();
     }
     renderLibrary();
     syncHeaderFieldsFromState();
@@ -1440,6 +1530,15 @@ function renderLibrary() {
     const title = document.createElement('div');
     title.className = 'library-item-title';
     renderEditableLibraryTitle(entry, idx, title);
+    // Point "non enregistré" (cf. .unsaved-dot du Bloc 1) : seulement sur l'entrée active,
+    // et seulement si elle a des modifications en attente (activeEntryDirty).
+    if (idx === libraryActiveIndex && activeEntryDirty) {
+      const dot = document.createElement('span');
+      dot.className = 'library-item-unsaved-dot';
+      dot.title = 'Modifications non enregistrées';
+      dot.textContent = '●';
+      title.appendChild(dot);
+    }
     const meta = document.createElement('div');
     meta.className = 'library-item-meta';
     meta.textContent = entry.headers.Event || '';
@@ -1455,12 +1554,17 @@ function renderLibrary() {
     });
 
     li.append(dragHandle, info, deleteBtn);
-    li.addEventListener('click', () => {
+    li.addEventListener('click', async () => {
       // Un drag qui vient de se terminer déclenche quand même un 'click' natif au relâchement
       // (même élément, même souris) — sans ce garde-fou, réordonner une entrée la sélectionnait
       // aussi/rechargeait la partie au passage, un effet de bord non voulu.
       if (consumeLibraryDragJustEnded()) return;
       if (libraryActiveIndex === idx) return;
+      if (activeEntryDirty) {
+        const ok = await confirmModal('Des modifications de la partie affichée ne sont pas enregistrées. Ouvrir une autre partie les perdra. Continuer ?', 'Ouvrir');
+        if (!ok) return;
+        discardActiveEntryDraft();
+      }
       libraryActiveIndex = idx;
       loadParsedGame(entry, { silent: true });
       el.libraryList.querySelectorAll('.library-item.active').forEach((n) => n.classList.remove('active'));
@@ -1631,6 +1735,7 @@ async function deleteLibraryEntry(idx) {
       game = new DraughtsGame();
       headers = { Event: 'Partie libre' };
       selectedSquare = null;
+      captureActiveEntrySnapshot();
       syncHeaderFieldsFromState();
       refreshUI();
     }
@@ -1653,7 +1758,11 @@ el.tabLibrary.addEventListener('click', () => switchTab('library'));
 // à charger. Confirmation si des coups ont déjà été joués (history OU future, pour couvrir
 // le cas où on a navigué en arrière avant de cliquer) afin d'éviter une perte accidentelle.
 async function startNewGame() {
-  if (game.history.length > 0 || game.future.length > 0) {
+  if (activeEntryDirty) {
+    const ok = await confirmModal('Des modifications de la partie affichée ne sont pas enregistrées. Démarrer une nouvelle partie les perdra. Continuer ?', 'Nouvelle partie');
+    if (!ok) return;
+    discardActiveEntryDraft();
+  } else if (game.history.length > 0 || game.future.length > 0) {
     const ok = await confirmModal('Démarrer une nouvelle partie ? Les coups joués seront perdus.', 'Nouvelle partie');
     if (!ok) return;
   }
@@ -1667,6 +1776,7 @@ async function startNewGame() {
   // écraser cette entrée via syncActiveLibraryEntryHeaders() (retour Mickaël sur la
   // synchronisation Bloc 1 → Bibliothèque, cf. plus bas).
   libraryActiveIndex = -1;
+  captureActiveEntrySnapshot();
   renderLibrary();
   syncHeaderFieldsFromState();
   refreshUI();
@@ -1696,6 +1806,10 @@ function loadParsedGame(parsedGame, { silent = false } = {}) {
   headers = newHeaders;
   if (!headers.Result) headers.Result = result; // repli sur le résultat du movetext si l'en-tête [Result] manquait
   selectedSquare = null;
+  // `libraryActiveIndex` est déjà positionné par l'appelant avant ce chargement (bibliothèque,
+  // import, partage...) : capture l'instantané "dernière version enregistrée" à ce nouveau
+  // point de départ (ou le vide, en saisie pure) — cf. activeEntrySnapshot plus haut.
+  captureActiveEntrySnapshot();
   syncHeaderFieldsFromState();
   refreshUI();
   if (!silent) playSound('game-start');
@@ -1723,6 +1837,11 @@ async function importFiles(fileList, { mode = 'append' } = {}) {
   if (parsedGames.length === 0) {
     showToast('Aucune partie valide trouvée dans le fichier.', 'error');
     return;
+  }
+  if (mode !== 'replace' && activeEntryDirty) {
+    const ok = await confirmModal('Des modifications de la partie affichée ne sont pas enregistrées. Importer un fichier les perdra. Continuer ?', 'Importer');
+    if (!ok) return;
+    discardActiveEntryDraft();
   }
   if (mode === 'replace') {
     libraryName = extractLibraryName(parsedGames);
@@ -1768,7 +1887,11 @@ el.fileInput.addEventListener('change', () => {
 
 // --- ouverture d'un fichier bibliothèque (remplace la bibliothèque active) -------------
 async function openLibraryFile(fileList) {
-  if (libraryDirty && library.length > 0) {
+  if (activeEntryDirty) {
+    const ok = await confirmModal('Des modifications de la partie affichée ne sont pas enregistrées. Ouvrir une bibliothèque les perdra. Continuer ?', 'Ouvrir');
+    if (!ok) return;
+    discardActiveEntryDraft();
+  } else if (libraryDirty && library.length > 0) {
     const ok = await confirmModal('Ouvrir une bibliothèque remplacera la bibliothèque active. Les changements non sauvegardés seront perdus.', 'Ouvrir');
     if (!ok) return;
   }
@@ -1795,6 +1918,86 @@ function currentGameAsLibraryEntry() {
   };
 }
 
+// --- modifications non enregistrées sur l'entrée de bibliothèque active ----------------
+// Affiche/masque la barre du Bloc 1 et le point sur la carte active de la Bibliothèque.
+// Appelé après tout changement de `activeEntryDirty`/`libraryActiveIndex`.
+function updateUnsavedIndicator() {
+  el.unsavedBar.hidden = !(libraryActiveIndex >= 0 && activeEntryDirty);
+}
+
+// Marque un champ suivi (nom, score, Elo, titre, commentaire de coup) comme modifié sur
+// l'entrée active SANS l'enregistrer — appelé par les handlers d'édition à la place d'un
+// `libraryDirty = true` direct, pour que `saveAppState()` diffère l'écriture persistée
+// jusqu'à "Enregistrer"/Ctrl+S (cf. commentaire sur `activeEntryDirty` plus haut). Sans
+// entrée active (saisie pure), ne fait rien : le comportement d'auto-sauvegarde existant
+// reste intact pour ce cas.
+function markActiveEntryDirty() {
+  if (libraryActiveIndex < 0) return;
+  activeEntryDirty = true;
+  updateUnsavedIndicator();
+}
+
+// Prend l'état courant (`headers`/`game`) comme nouvel instantané "dernière version
+// enregistrée" — appelé au chargement d'une entrée existante et après "Enregistrer".
+function captureActiveEntrySnapshot() {
+  activeEntrySnapshot = libraryActiveIndex >= 0 ? currentGameAsLibraryEntry() : null;
+  activeEntryDirty = false;
+  updateUnsavedIndicator();
+}
+
+// Appelé juste avant d'abandonner l'entrée active pour de bon (changer de partie, nouvelle
+// partie, importer/coller/ouvrir par-dessus) APRÈS confirmation de l'utilisateur : remet
+// `headers` (mutation en place, toujours le même objet que `library[libraryActiveIndex]`) à
+// son dernier état enregistré. Indispensable même quand `library`/`libraryActiveIndex` vont
+// être réassignés juste après : l'ancienne entrée reste sinon dans `library` avec ses
+// modifications non enregistrées gravées EN DIRECT dans son objet `headers` partagé (elles ne
+// sont plus "en attente" nulle part une fois `activeEntryDirty` retombé sur la nouvelle
+// entrée) — sans ce nettoyage, le prochain saveAppState() les persisterait quand même,
+// silencieusement, à l'endroit exact que "Annuler" est censé éviter.
+function discardActiveEntryDraft() {
+  if (libraryActiveIndex >= 0 && activeEntryDirty && activeEntrySnapshot) {
+    Object.keys(headers).forEach((k) => delete headers[k]);
+    Object.assign(headers, activeEntrySnapshot.headers);
+  }
+  activeEntryDirty = false;
+}
+
+// "Enregistrer" (bouton + Ctrl+S) : `headers` est déjà `library[libraryActiveIndex].headers`
+// (même référence) et porte donc déjà les modifications en direct — il ne reste qu'à figer
+// un nouvel instantané et déclencher la persistance normale (jusque-là différée pour cette
+// entrée, cf. saveAppState()).
+function saveActiveEntry() {
+  if (libraryActiveIndex < 0 || !activeEntryDirty) return;
+  captureActiveEntrySnapshot();
+  libraryDirty = true;
+  renderLibrary();
+  scheduleSave();
+  showToast('Modifications enregistrées dans la bibliothèque.', 'success');
+}
+
+// "Annuler" : recharge les champs et les coups depuis le dernier instantané enregistré.
+// Ne réassigne jamais `headers` à un nouvel objet (mutation en place de l'objet existant,
+// partagé avec `library[libraryActiveIndex]`) — seul `game` est reconstruit, comme au
+// chargement initial de l'entrée.
+function revertActiveEntry() {
+  if (libraryActiveIndex < 0 || !activeEntryDirty || !activeEntrySnapshot) return;
+  const snapshot = activeEntrySnapshot;
+  const { game: restoredGame } = loadGameFromPdn({ headers: snapshot.headers, moves: snapshot.moves, result: snapshot.headers.Result });
+  game = restoredGame;
+  Object.keys(headers).forEach((k) => delete headers[k]);
+  Object.assign(headers, snapshot.headers);
+  selectedSquare = null;
+  activeEntryDirty = false;
+  updateUnsavedIndicator();
+  syncHeaderFieldsFromState();
+  renderLibrary();
+  refreshUI();
+  showToast('Modifications annulées.', 'info');
+}
+
+el.btnSaveEntry.addEventListener('click', saveActiveEntry);
+el.btnRevertEntry.addEventListener('click', revertActiveEntry);
+
 el.btnLibraryAddCurrent.addEventListener('click', () => {
   const entry = currentGameAsLibraryEntry();
   if (entry.moves.length === 0) {
@@ -1809,6 +2012,10 @@ el.btnLibraryAddCurrent.addEventListener('click', () => {
   // référence partagée qui doit rester la source unique).
   headers = entry.headers;
   libraryDirty = true;
+  // La partie vient d'être ajoutée : elle EST la version enregistrée, aucune modification en
+  // attente (cf. activeEntrySnapshot) — sans ça, `entry` (copie fraîche de `headers`) et
+  // l'instantané resteraient sur l'ancienne entrée précédemment active, s'ils existaient.
+  captureActiveEntrySnapshot();
   renderLibrary();
   scheduleSave();
   showToast('Partie ajoutée à la bibliothèque.', 'success');
@@ -1873,12 +2080,21 @@ async function pastePdnText(text) {
     // Un seul PDN collé n'est PAS ajouté à la bibliothèque (ni ne la remplace) — même règle
     // que l'import fichier d'une seule partie (cf. importFiles) : juste chargé comme "partie
     // en cours", il faut un clic explicite sur "Ajouter la partie" pour l'y faire entrer.
+    if (activeEntryDirty) {
+      const ok = await confirmModal('Des modifications de la partie affichée ne sont pas enregistrées. Coller une partie les perdra. Continuer ?', 'Coller');
+      if (!ok) return;
+      discardActiveEntryDraft();
+    }
     libraryActiveIndex = -1;
     renderLibrary();
     loadParsedGame(games[0]);
     return;
   }
-  if (libraryDirty && library.length > 0) {
+  if (activeEntryDirty) {
+    const ok = await confirmModal('Des modifications de la partie affichée ne sont pas enregistrées. Coller une partie les perdra. Continuer ?', 'Coller');
+    if (!ok) return;
+    discardActiveEntryDraft();
+  } else if (libraryDirty && library.length > 0) {
     const ok = await confirmModal('Coller une partie remplacera la bibliothèque active. Les changements non sauvegardés seront perdus.', 'Coller');
     if (!ok) return;
   }
