@@ -62,6 +62,27 @@ applySoundVolume();
 // damier précisément — tout `pointerdown` compte, c'est la politique navigateur elle-même
 // qui ne distingue pas la cible du geste).
 let pendingUnlockSound = null;
+// `playMove()` attend la fin de l'animation (`await renderer.animateMove(...)`) avant
+// d'appeler `playSound()` : au tout premier coup de la partie, cet appel n'a donc plus lieu
+// de façon synchrone dans le gestionnaire du clic/pointerdown qui l'a déclenché, et Chrome
+// bloque le `play()` (NotAllowedError) faute d'activation utilisateur "fraîche" — le son est
+// alors mémorisé (`pendingUnlockSound`) et ne rejoue qu'au PROCHAIN pointerdown, donc décalé
+// d'un coup. On débloque l'audio dès le tout premier pointerdown de la page, de façon
+// synchrone (capture, avant même le clic sur le damier), en tentant un `play()`/`pause()`
+// immédiat sur chaque instance du pool : cette lecture réussie pendant le geste utilisateur
+// suffit à lever la restriction autoplay pour le reste de la session, donc pour tous les
+// `playSound()` ultérieurs même appelés après un `await`.
+let audioUnlocked = false;
+function unlockAudioOnce() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  for (const { pool } of Object.values(soundPools)) {
+    for (const audio of pool) {
+      audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
+    }
+  }
+}
+window.addEventListener('pointerdown', unlockAudioOnce, { capture: true, once: true });
 function playSound(name) {
   if (soundMuted) return;
   const entry = soundPools[name];
@@ -721,6 +742,14 @@ el.btnToggleArrow.classList.toggle('active', renderer.showArrow);
 
 // --- flip / plein écran -----------------------------------------------------------
 let flipped = false;
+// Inverse "X-Y" en "Y-X" (un seul tiret séparateur, cf. `headers.Result` toujours au format
+// PDN "Blancs-Noirs") — utilisé uniquement pour l'affichage du score au flip, jamais pour
+// modifier `headers.Result` lui-même.
+function reverseScoreText(text) {
+  const idx = text.indexOf('-');
+  if (idx === -1) return text;
+  return text.slice(idx + 1) + '-' + text.slice(0, idx);
+}
 function toggleFlip() {
   flipped = !flipped;
   renderer.setFlipped(flipped);
@@ -728,6 +757,7 @@ function toggleFlip() {
   // rester cohérent avec l'orientation du plateau — uniquement visuel (`order` flex en CSS,
   // cf. .players-rail.flipped dans style.css), aucune donnée ni le DOM lui-même ne bougent.
   el.playersRail.classList.toggle('flipped', flipped);
+  syncHeaderFieldsFromState();
 }
 el.btnFlip.addEventListener('click', toggleFlip);
 
@@ -855,9 +885,13 @@ function syncHeaderFieldsFromState() {
   if (blackTitle) blackTitle.textContent = headers.BlackTitle || '—';
   // Score centré ENTRE les deux cartes (#score-center) — champ texte libre lié directement
   // à headers.Result (cf. commentaire CSS .score-center-value), pas de split/format imposé.
+  // `headers.Result` reste toujours "Blancs-Noirs" (ordre PDN) ; au flip, seul l'AFFICHAGE
+  // est inversé ("2-0" -> "0-2") pour suivre la carte qui a physiquement changé de côté
+  // (cf. `reverseScoreText()` et `toggleFlip()`) — la donnée sous-jacente ne bouge pas.
   const scoreValue = document.getElementById('score-value');
   if (scoreValue && document.activeElement !== scoreValue) {
-    scoreValue.textContent = headers.Result && headers.Result !== '*' ? headers.Result : '—';
+    const result = headers.Result && headers.Result !== '*' ? headers.Result : null;
+    scoreValue.textContent = result ? (flipped ? reverseScoreText(result) : result) : '—';
   }
   // WhiteUrl/BlackUrl (photo officielle Toernooibase, quand le PDN les fournit) alimentent
   // le pré-remplissage AVANT d'afficher les avatars — au même niveau de priorité que
@@ -1154,6 +1188,10 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
     // vraie modification écraserait `headers.Date` avec le format d'affichage inversé.
     const isUntouchedDate = key === 'Date'
       && headers[key] && val === formatPdnDate(headers[key]);
+    // Le score affiché est inversé au flip (cf. `reverseScoreText()`/`toggleFlip()`) : si
+    // l'utilisateur édite le champ pendant que le plateau est retourné, il faut ré-inverser
+    // avant d'écrire dans `headers.Result`, qui reste toujours au format PDN "Blancs-Noirs".
+    if (key === 'Result' && flipped) val = reverseScoreText(val);
     if (!isUntouchedPlayerName && !isUntouchedDate) {
       if (val && val !== '—') headers[key] = val;
       else delete headers[key];
