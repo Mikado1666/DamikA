@@ -168,6 +168,13 @@ let activeEntryDirty = false;
 // Sert à la fois de référence pour "Annuler" et de substitut de sérialisation ci-dessus. null
 // quand aucune entrée de bibliothèque n'est active.
 let activeEntrySnapshot = null;
+// true dès qu'un premier "Enregistrer"/Ctrl+S a été fait sur l'entrée active EN COURS
+// (jamais persisté, remis à zéro à chaque nouveau chargement de l'entrée — changement de
+// partie ou F5, cf. captureActiveEntrySnapshot()) : au-delà de cette première confirmation,
+// les modifications suivantes s'enregistrent directement (comme l'auto-save d'origine) tant
+// qu'on reste sur cette même partie, pour éviter de rebloquer sur le pill à chaque coup joué
+// après un premier "Enregistrer" volontaire — cf. markActiveEntryDirty().
+let activeEntryConfirmed = false;
 
 // --- registre photos joueurs (Bloc 1) ------------------------------------------------
 // Table nom de joueur -> URL/dataURL de photo, indépendante de la partie/bibliothèque en
@@ -648,8 +655,9 @@ async function playMove(action) {
   // la navigation undo()/redo() — flèches, molette, autoplay, "aller à ce coup" — qui ne
   // passe jamais par playMove()) : `_commit()` dans rules.js vide `game.future` à chaque
   // appel, que ce coup prolonge la ligne enregistrée ou en divergent. Rebuild la liste
-  // bibliothèque seulement au moment où on DEVIENT dirty, pas à chaque coup supplémentaire.
-  if (libraryActiveIndex >= 0 && !activeEntryDirty) renderLibrary();
+  // bibliothèque seulement au moment où le POINT apparaît pour la première fois (jamais en
+  // mode confirmé, cf. activeEntryConfirmed — aucun point à afficher dans ce cas).
+  if (libraryActiveIndex >= 0 && !activeEntryConfirmed && !activeEntryDirty) renderLibrary();
   markActiveEntryDirty();
 
   isAnimating = false;
@@ -1449,6 +1457,10 @@ function restoreAppState() {
     if (libraryActiveIndex >= 0 && state.activeEntryDirty && state.activeEntrySnapshot) {
       activeEntrySnapshot = state.activeEntrySnapshot;
       activeEntryDirty = true;
+      // Un F5 repart TOUJOURS de zéro sur le mode "confirmé" (cf. activeEntryConfirmed) —
+      // même si l'entrée était déjà passée en mode confirmé avant le rechargement, il faudra
+      // recliquer "Enregistrer" au moins une fois après ce reload.
+      activeEntryConfirmed = false;
       updateUnsavedIndicator();
     } else {
       captureActiveEntrySnapshot();
@@ -1941,15 +1953,28 @@ function updateUnsavedIndicator() {
 // reste intact pour ce cas.
 function markActiveEntryDirty() {
   if (libraryActiveIndex < 0) return;
+  // Mode "confirmé" (au moins un "Enregistrer" déjà fait sur CETTE partie depuis son
+  // ouverture) : chaque modification suivante s'enregistre directement, comme l'auto-save
+  // d'origine, plutôt que de rouvrir le pill à chaque coup/champ modifié. On ne repasse en
+  // mode "à confirmer" qu'en rechargeant l'entrée (changement de partie ou F5, cf.
+  // captureActiveEntrySnapshot() et le bloc dirty de restoreAppState()).
+  if (activeEntryConfirmed) {
+    activeEntrySnapshot = currentGameAsLibraryEntry();
+    libraryDirty = true;
+    scheduleSave();
+    return;
+  }
   activeEntryDirty = true;
   updateUnsavedIndicator();
 }
 
 // Prend l'état courant (`headers`/`game`) comme nouvel instantané "dernière version
-// enregistrée" — appelé au chargement d'une entrée existante et après "Enregistrer".
+// enregistrée" — appelé au chargement d'une entrée existante (jamais après "Enregistrer",
+// cf. saveActiveEntry() qui gère lui-même activeEntryConfirmed après cet appel).
 function captureActiveEntrySnapshot() {
   activeEntrySnapshot = libraryActiveIndex >= 0 ? currentGameAsLibraryEntry() : null;
   activeEntryDirty = false;
+  activeEntryConfirmed = false;
   updateUnsavedIndicator();
 }
 
@@ -1977,6 +2002,10 @@ function discardActiveEntryDraft() {
 function saveActiveEntry() {
   if (libraryActiveIndex < 0 || !activeEntryDirty) return;
   captureActiveEntrySnapshot();
+  // APRÈS captureActiveEntrySnapshot() (qui remet ce flag à false comme à tout chargement
+  // d'entrée) : ce premier "Enregistrer" volontaire sur cette partie fait entrer en mode
+  // "confirmé" — cf. markActiveEntryDirty().
+  activeEntryConfirmed = true;
   libraryDirty = true;
   renderLibrary();
   scheduleSave();
