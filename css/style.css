@@ -521,21 +521,38 @@ body {
   border-radius: var(--radius-sm);
 }
 .help-close-x:hover { background: var(--gold-soft); color: var(--gold); }
+/* Grille à 2 colonnes réelles : `.help-row` en `display: contents` efface son propre niveau
+   (il n'existe plus pour la mise en page, seuls ses 2 enfants — `.help-keys` et `span` —
+   comptent) pour que TOUTES les lignes retombent dans la MÊME grille à 2 colonnes portée par
+   `.help-shortcuts`. La 1re colonne (`auto`) se cale automatiquement sur son contenu le plus
+   large parmi TOUTES les lignes (ex. "Ctrl + S") — chaque `.help-keys`, même une seule touche,
+   hérite donc de cette même largeur et se centre dedans (`justify-self: center`) : les
+   libellés de la 2e colonne s'alignent alors tous sur le même bord gauche, quelle que soit la
+   largeur de leur touche. */
 .help-shortcuts {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  margin-bottom: 20px;
-}
-.help-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 10px;
+  column-gap: 16px;
+  row-gap: 13px;
+  margin-bottom: 4px;
 }
+.help-row { display: contents; }
 .help-row span {
   color: var(--text-1);
   font-size: 14px;
   line-height: 1.35;
+}
+.help-keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  gap: 5px;
+}
+.help-key-plus {
+  color: var(--text-2);
+  font-size: 12px;
 }
 .help-row kbd {
   flex-shrink: 0;

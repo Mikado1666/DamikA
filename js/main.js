@@ -290,7 +290,6 @@ const el = {
   shareCloseBtn: document.getElementById('share-close-btn'),
   btnHelp: document.getElementById('btn-help'),
   helpOverlay: document.getElementById('help-overlay'),
-  helpCloseBtn: document.getElementById('help-close-btn'),
   helpCloseX: document.getElementById('help-close-x'),
   tabMoves: document.getElementById('tab-moves'),
   tabLibrary: document.getElementById('tab-library'),
@@ -877,7 +876,6 @@ window.addEventListener('keydown', (e) => {
 function openHelpOverlay() { el.helpOverlay.hidden = false; }
 function closeHelpOverlay() { el.helpOverlay.hidden = true; }
 el.btnHelp.addEventListener('click', openHelpOverlay);
-el.helpCloseBtn.addEventListener('click', closeHelpOverlay);
 el.helpCloseX.addEventListener('click', closeHelpOverlay);
 // Clic sur le fond assombri (pas sur la boîte elle-même) : même geste que fermer par la croix.
 el.helpOverlay.addEventListener('click', (e) => { if (e.target === el.helpOverlay) closeHelpOverlay(); });
