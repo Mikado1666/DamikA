@@ -494,6 +494,64 @@ body {
   border-radius: var(--radius-sm);
 }
 
+/* ---------- Modale d'aide (raccourcis clavier) — même overlay .confirm-overlay que les
+   modales ci-dessus, contenu propre en deux colonnes (touche / action). Fermeture par la
+   croix, "Fermer", clic sur le fond (cf. helpOverlay dans main.js) ou Échap (raccourcis
+   clavier globaux, même bloc que "?" pour l'ouvrir). */
+.help-box { max-width: 460px; }
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.help-title {
+  color: var(--gold);
+  font-size: 17px;
+  font-weight: 700;
+}
+.help-close-x {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.help-close-x:hover { background: var(--gold-soft); color: var(--gold); }
+.help-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-bottom: 20px;
+}
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.help-row span {
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.help-row kbd {
+  flex-shrink: 0;
+  min-width: 20px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--bg-2), var(--panel));
+  border: 1px solid var(--gold-dim, #8a6b3c);
+  border-bottom-width: 2px;
+  color: var(--gold);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+}
+
 /* ---------- Panel tabs / library ---------- */
 .panel-tabs {
   display: flex;

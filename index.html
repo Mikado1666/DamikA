@@ -75,6 +75,7 @@
           </div>
         </div>
         <button id="btn-fullscreen" class="icon-btn" title="Plein écran">⛶</button>
+        <button id="btn-help" class="icon-btn" title="Raccourcis clavier (?)">?</button>
       </div>
     </div>
   </header>
@@ -265,6 +266,27 @@
       </div>
       <div class="confirm-actions">
         <button id="share-close-btn" class="text-btn">Fermer</button>
+      </div>
+    </div>
+  </div>
+  <div class="confirm-overlay" id="help-overlay" hidden>
+    <div class="confirm-box help-box">
+      <div class="help-header">
+        <div class="help-title">Raccourcis clavier</div>
+        <button type="button" class="help-close-x" id="help-close-x" title="Fermer" aria-label="Fermer">✕</button>
+      </div>
+      <div class="help-shortcuts">
+        <div class="help-row"><kbd>←</kbd><span>Coup précédent</span></div>
+        <div class="help-row"><kbd>→</kbd><span>Coup suivant</span></div>
+        <div class="help-row"><kbd>Espace</kbd><span>Lecture automatique (marche/pause)</span></div>
+        <div class="help-row"><kbd>F</kbd><span>Retourner le plateau</span></div>
+        <div class="help-row"><kbd>Ctrl</kbd><kbd>S</kbd><span>Enregistrer les modifications de la partie active</span></div>
+        <div class="help-row"><kbd>Ctrl</kbd><kbd>V</kbd><span>Coller une partie (presse-papier)</span></div>
+        <div class="help-row"><kbd>Échap</kbd><span>Fermer la fenêtre ouverte (commentaire, photo, cette aide...)</span></div>
+        <div class="help-row"><kbd>?</kbd><span>Afficher cette aide</span></div>
+      </div>
+      <div class="confirm-actions">
+        <button id="help-close-btn" class="text-btn">Fermer</button>
       </div>
     </div>
   </div>

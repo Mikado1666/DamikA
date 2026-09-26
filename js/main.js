@@ -288,6 +288,10 @@ const el = {
   shareCopyBtn: document.getElementById('share-copy-btn'),
   shareQr: document.getElementById('share-qr'),
   shareCloseBtn: document.getElementById('share-close-btn'),
+  btnHelp: document.getElementById('btn-help'),
+  helpOverlay: document.getElementById('help-overlay'),
+  helpCloseBtn: document.getElementById('help-close-btn'),
+  helpCloseX: document.getElementById('help-close-x'),
   tabMoves: document.getElementById('tab-moves'),
   tabLibrary: document.getElementById('tab-library'),
   panelMoves: document.getElementById('panel-moves'),
@@ -851,6 +855,8 @@ window.addEventListener('keydown', (e) => {
     case 'ArrowRight': e.preventDefault(); stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); break;
     case ' ': e.preventDefault(); isPlaying ? stopAutoplay() : startAutoplay(); break;
     case 'f': case 'F': toggleFlip(); break;
+    case '?': openHelpOverlay(); break;
+    case 'Escape': if (!el.helpOverlay.hidden) closeHelpOverlay(); break;
     default: break;
   }
 });
@@ -864,6 +870,17 @@ window.addEventListener('keydown', (e) => {
   e.preventDefault();
   saveActiveEntry();
 });
+
+// --- aide (raccourcis clavier) ---------------------------------------------------------
+// Fonctionnalité isolée, aucun lien avec le dirty state/sauvegarde ci-dessus : simple
+// overlay listant les raccourcis déjà existants (cf. help-overlay dans index.html).
+function openHelpOverlay() { el.helpOverlay.hidden = false; }
+function closeHelpOverlay() { el.helpOverlay.hidden = true; }
+el.btnHelp.addEventListener('click', openHelpOverlay);
+el.helpCloseBtn.addEventListener('click', closeHelpOverlay);
+el.helpCloseX.addEventListener('click', closeHelpOverlay);
+// Clic sur le fond assombri (pas sur la boîte elle-même) : même geste que fermer par la croix.
+el.helpOverlay.addEventListener('click', (e) => { if (e.target === el.helpOverlay) closeHelpOverlay(); });
 
 // --- toast (notifications discrètes) -------------------------------------------------
 let toastTimer = null;
