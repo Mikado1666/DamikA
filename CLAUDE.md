@@ -168,8 +168,9 @@ sw.js                 service worker (désactivé côté client)
   tarifs).
 - Déploiement Worker : `cd worker && npx wrangler login && npx wrangler deploy`. Si l'URL
   change, mettre à jour `TOERNOOIBASE_WORKER_URL`.
-- Déploiement du site : Wrangler CLI (upload de fichiers statiques, pas de dépôt Git
-  distant ni CI), compte Cloudflare "Shell Green", modèle "Workers + assets" (`.workers.dev`).
+- Déploiement du site : Wrangler CLI (upload de fichiers statiques, pas de CI ; le
+  dépôt GitHub public `Mikado1666/DamikA` n'est qu'un miroir du code, il ne déclenche aucun
+  déploiement), compte Cloudflare "Shell Green", modèle "Workers + assets" (`.workers.dev`).
   **Ne jamais lancer wrangler depuis le dossier des assets** (fuite de fichiers internes
   `wrangler-account.json`/worker vide ; lancer depuis un dossier de travail séparé et
   vérifier qu'ils renvoient 404).
@@ -201,7 +202,8 @@ déploiement public.
 - Worker Toernooibase bloquable à tout moment ; logique dupliquée Worker/script Node.
 - Limite connue : "Retirer la photo" compare par égalité stricte sur le nom affiché, donc
   peut ne rien faire si la photo vient d'une correspondance floue (nom de famille seul).
-- Déploiement manuel, sans CI ni dépôt distant.
+- Déploiement manuel, sans CI (dépôt GitHub public `Mikado1666/DamikA` : ne rien y commiter de
+  sensible, l'historique est lisible par tous).
 - Le serveur de dev local peut être tué par l'environnement (mémoire basse) : à relancer.
 
 ## 5. Historique
