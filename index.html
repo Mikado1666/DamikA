@@ -79,6 +79,18 @@
     </div>
   </header>
 
+  <!-- Overlay flottant "modifications non enregistrées" (entrée de bibliothèque active
+       modifiée sans "Enregistrer"/Ctrl+S) — position: fixed, en dehors du flux normal pour
+       ne jamais affecter la mise en page (contrainte "tout tient sans scroll à 100%"), visible
+       quel que soit l'onglet actif (Coups joués/Bibliothèque). Cf. updateUnsavedIndicator()
+       dans main.js. -->
+  <div class="unsaved-float" id="unsaved-bar" hidden>
+    <span class="unsaved-dot" aria-hidden="true"></span>
+    <span class="unsaved-label">Modifications non enregistrées</span>
+    <button type="button" id="btn-save-entry" class="unsaved-btn unsaved-btn-save" title="Enregistrer dans la bibliothèque (Ctrl+S)">💾 Enregistrer</button>
+    <button type="button" id="btn-revert-entry" class="unsaved-btn unsaved-btn-revert" title="Annuler les modifications, revenir à la dernière version enregistrée">↺ Annuler</button>
+  </div>
+
   <main class="layout">
     <aside class="players-rail">
       <div class="game-meta-card" id="game-meta-bar">
@@ -89,12 +101,6 @@
           <span class="meta-chip" data-field="Date" contenteditable="true" title="Date">—</span>
           <span class="meta-sep">·</span>
           <span class="meta-chip" data-field="Round" contenteditable="true" title="Ronde">—</span>
-        </div>
-        <div class="unsaved-bar" id="unsaved-bar" hidden>
-          <span class="unsaved-dot" aria-hidden="true"></span>
-          <span class="unsaved-label">Modifications non enregistrées</span>
-          <button type="button" id="btn-save-entry" class="text-btn-mini" title="Enregistrer dans la bibliothèque (Ctrl+S)">💾 Enregistrer</button>
-          <button type="button" id="btn-revert-entry" class="text-btn-mini" title="Annuler les modifications, revenir à la dernière version enregistrée">↺ Annuler</button>
         </div>
       </div>
 
