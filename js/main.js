@@ -644,6 +644,14 @@ async function playMove(action) {
   if (action.type === 'capture') game.playCaptureSequence(action.seq);
   else game.playSimpleMove(action.move);
 
+  // Seul point d'entrée d'un VRAI changement de contenu (nouveau coup joué, par opposition à
+  // la navigation undo()/redo() — flèches, molette, autoplay, "aller à ce coup" — qui ne
+  // passe jamais par playMove()) : `_commit()` dans rules.js vide `game.future` à chaque
+  // appel, que ce coup prolonge la ligne enregistrée ou en divergent. Rebuild la liste
+  // bibliothèque seulement au moment où on DEVIENT dirty, pas à chaque coup supplémentaire.
+  if (libraryActiveIndex >= 0 && !activeEntryDirty) renderLibrary();
+  markActiveEntryDirty();
+
   isAnimating = false;
   refreshUI();
   playSound(action.type === 'capture' ? 'capture' : 'move');
