@@ -2582,48 +2582,33 @@ function exportGamePdf() {
   y += 22;
 
   // --- notation --------------------------------------------------------------------------
-  // Vraie table à colonnes indépendantes (façon journal : colonne 1 de haut en bas, puis
-  // colonne 2 reprend en haut de page à côté) — une paire annotée fait grandir SA ligne
-  // (commentaire/diagramme insérés dessous, dans la largeur de SA colonne) sans jamais
-  // décaler les autres colonnes : chaque colonne garde son propre curseur vertical
-  // indépendant (retour Mickaël — un décalage vertical par-dessus les colonnes voisines
-  // cassait leur alignement avec le reste de la grille).
-  const pairs = [];
-  for (let i = 0; i < moves.length; i += 2) pairs.push([moves[i], moves[i + 1]]);
+  // Structure de base : 2 colonnes Blancs/Noirs, "N.  coup-blancs   coup-noirs", un seul
+  // flux vertical (plus de blocs de colonnes multiples façon journal — retour Mickaël, ça
+  // cassait la lecture chronologique). Exception : dès qu'un coup (Blancs OU Noirs) a un
+  // commentaire/diagramme, sa ligne n'affiche QUE ce coup seul dans sa colonne d'origine —
+  // le commentaire/diagramme suit pleine largeur — et son vis-à-vis (l'autre coup de la
+  // même paire, pas encore affiché) est REPORTÉ : il réapparaît sur la ligne suivante,
+  // apparié avec le prochain coup disponible de l'autre couleur, plutôt que d'être perdu ou
+  // laissé orphelin. Implémenté comme la fusion de 2 files indépendantes (coups Blancs,
+  // coups Noirs) plutôt qu'un simple parcours par paire figée.
+  const whiteEntries = [];
+  const blackEntries = [];
+  moves.forEach((mv, idx) => {
+    const ply = idx + 1;
+    (ply % 2 === 1 ? whiteEntries : blackEntries).push({ mv, ply });
+  });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(ACCENT);
   doc.text('NOTATION', margin, y);
-  y += 16;
+  y += 18;
 
-  // Palier (nb de paires de coups) -> colonnes/police : plus la partie est longue, plus on
-  // resserre, jusqu'à un plancher de lisibilité à 7pt.
-  const tiers = [
-    { max: 20, cols: 2, font: 10.5 },
-    { max: 32, cols: 3, font: 10 },
-    { max: 48, cols: 4, font: 9 },
-    { max: 70, cols: 5, font: 8 },
-    { max: Infinity, cols: 6, font: 7.5 },
-  ];
-  const tier = tiers.find((t) => pairs.length <= t.max);
-  const cols = tier.cols;
-  const fontSize = tier.font;
-  const lineH = fontSize + 4;
-  const colW = contentW / cols;
-  const rowsPerCol = Math.ceil(pairs.length / cols);
-  const notationTop = y;
-  const colY = new Array(cols).fill(notationTop);
+  const fontSize = 10.5;
+  const lineH = fontSize + 5;
 
-  // Saut de page EN BLOC (toutes les colonnes reprennent ensemble en haut de la page
-  // suivante) dès que la colonne courante manque de place — plus simple et plus lisible
-  // qu'un débordement colonne par colonne, acceptable vu que les annotations restent rares.
-  function ensureSpace(c, neededH) {
-    if (colY[c] + neededH > pageH - margin) {
-      doc.addPage();
-      fillPage();
-      for (let k = 0; k < cols; k++) colY[k] = margin;
-    }
+  function ensureSpace(neededH) {
+    if (y + neededH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
   }
 
   // Pastille + "Trait aux Blancs/Noirs" centrés sous un diagramme.
@@ -2645,76 +2630,94 @@ function exportGamePdf() {
     doc.text(label, groupX + dotR * 2 + dotGap, baselineY);
   }
 
-  // Commentaire (+ diagramme éventuel) inséré SOUS le coup, dans la largeur de la colonne `c`
-  // (jamais pleine page — déborderait sur la colonne voisine). `ply` = numéro 1-indexé ;
+  // Commentaire (+ diagramme éventuel) inséré juste SOUS le coup, pleine largeur (une seule
+  // colonne, plus de contrainte de largeur voisine) — `ply` = numéro 1-indexé ;
   // boardImageDataUrlAtPly() attend l'index "dernier coup joué" façon jumpToPly (ply - 1).
-  function renderAnnotation(c, x, ply, moveInfo) {
+  function renderAnnotation(ply, moveInfo) {
     const withDiagram = hasDiagramMarker(moveInfo.comment);
     const text = withDiagram ? stripDiagramMarker(moveInfo.comment) : moveInfo.comment;
-    const annFont = Math.max(7, fontSize - 1.5);
-    const annLineH = annFont + 2.5;
     doc.setFont('helvetica', 'italic');
-    doc.setFontSize(annFont);
-    const wrapped = text ? doc.splitTextToSize(text, colW - 16) : [];
+    doc.setFontSize(9);
+    const wrapped = text ? doc.splitTextToSize(text, contentW - 16) : [];
     for (const wline of wrapped) {
-      ensureSpace(c, annLineH);
+      ensureSpace(13);
       doc.setTextColor(INK_MUTED);
-      doc.text(wline, x + 10, colY[c]);
-      colY[c] += annLineH;
+      doc.text(wline, margin + 14, y);
+      y += 13;
     }
     if (withDiagram) {
-      const diagramSize = Math.max(70, Math.min(colW - 18, 150));
-      const labelFont = Math.max(6.5, fontSize - 2);
-      colY[c] += 4;
-      ensureSpace(c, diagramSize + 10 + labelFont + 8 + 20);
-      const dx = x + (colW - diagramSize) / 2;
+      const diagramSize = Math.min(170, contentW);
+      y += 4;
+      ensureSpace(diagramSize + 10 + 9 + 8 + 20);
+      const dx = (pageW - diagramSize) / 2;
       const durl = boardImageDataUrlAtPly(ply - 1);
-      doc.addImage(durl, 'PNG', dx, colY[c], diagramSize, diagramSize);
+      doc.addImage(durl, 'PNG', dx, y, diagramSize, diagramSize);
       doc.setDrawColor(RULE);
       doc.setLineWidth(1);
-      doc.rect(dx, colY[c], diagramSize, diagramSize);
-      colY[c] += diagramSize + 12;
+      doc.rect(dx, y, diagramSize, diagramSize);
+      y += diagramSize + 12;
       const sideToMoveHere = ply % 2 === 0 ? WHITE : BLACK;
-      renderTurnLabel(x + colW / 2, colY[c], sideToMoveHere, labelFont);
+      renderTurnLabel(pageW / 2, y, sideToMoveHere, 9);
       // Espace généreux après un diagramme (contre un coup suivant perçu "collé", retour
       // Mickaël) ; plus modeste pour un commentaire texte seul.
-      colY[c] += 22;
+      y += 22;
     } else {
-      colY[c] += 8;
+      y += 8;
     }
   }
 
-  pairs.forEach(([white, black], i) => {
-    const n = i + 1;
-    const c = Math.floor(i / rowsPerCol);
-    const x = margin + c * colW;
-    const whiteAnnotated = !!(white && white.comment);
-    const blackAnnotated = !!(black && black.comment);
+  let wi = 0;
+  let bi = 0;
+  let rowNum = 0;
+  while (wi < whiteEntries.length || bi < blackEntries.length) {
+    rowNum += 1;
+    const wEntry = whiteEntries[wi];
+    const bEntry = blackEntries[bi];
+    const wAnnotated = !!(wEntry && wEntry.mv.comment);
+    const bAnnotated = !!(bEntry && bEntry.mv.comment);
 
-    // La ligne "N. blancs   noirs" reste TOUJOURS complète, quelle que soit l'annotation —
-    // un tableau où une ligne = un numéro de coup + Blancs (colonne gauche) + Noirs (colonne
-    // droite), jamais scindée (retour Mickaël : les noirs remontaient sinon au-dessus de leur
-    // propre numéro de coup dès que les blancs étaient annotés). Le(s) commentaire(s)/
-    // diagramme(s) s'insèrent TOUJOURS après cette ligne complète, jamais entre les deux
-    // couleurs.
-    ensureSpace(c, lineH);
+    ensureSpace(lineH);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontSize);
     doc.setTextColor(INK_MUTED);
-    doc.text(`${n}.`, x, colY[c]);
-    doc.setTextColor(WHITE_MOVE);
-    doc.text(moveNotation(white), x + 20, colY[c]);
-    if (black) {
+    doc.text(`${rowNum}.`, margin, y);
+
+    if (wAnnotated) {
+      // Blancs annoté : ligne SEULE (colonne Noirs vide), les Noirs de cette paire (pas
+      // encore consommés) restent en file d'attente pour la ligne suivante.
+      doc.setTextColor(WHITE_MOVE);
+      doc.text(moveNotation(wEntry.mv), margin + 24, y);
+      y += lineH;
+      renderAnnotation(wEntry.ply, wEntry.mv);
+      wi += 1;
+    } else if (bAnnotated) {
+      // Noirs annoté (et Blancs courant pas lui-même annoté) : ligne SEULE côté Noirs,
+      // colonne Blancs vide — le prochain coup Blancs en attente reste en file.
       doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(black), x + colW * 0.58, colY[c]);
+      doc.text(moveNotation(bEntry.mv), margin + 110, y);
+      y += lineH;
+      renderAnnotation(bEntry.ply, bEntry.mv);
+      bi += 1;
+    } else {
+      // Ligne standard : prochain coup Blancs disponible + prochain coup Noirs disponible,
+      // appariés sur la même ligne qu'ils appartiennent ou non à la même paire d'origine
+      // (cf. exemple Mickaël : le coup 2 Blancs annoté seul, puis "3." apparie le coup 3
+      // Blancs avec le coup 2 Noirs resté en attente).
+      if (wEntry) {
+        doc.setTextColor(WHITE_MOVE);
+        doc.text(moveNotation(wEntry.mv), margin + 24, y);
+        wi += 1;
+      }
+      if (bEntry) {
+        doc.setTextColor(BLACK_MOVE);
+        doc.text(moveNotation(bEntry.mv), margin + 110, y);
+        bi += 1;
+      }
+      y += lineH;
     }
-    colY[c] += lineH;
+  }
 
-    if (whiteAnnotated) renderAnnotation(c, x, n * 2 - 1, white);
-    if (blackAnnotated) renderAnnotation(c, x, n * 2, black);
-  });
-
-  y = Math.max(...colY) + 6;
+  y += 6;
 
   // Plus de diagramme de position finale automatique : seuls les diagrammes explicitement
   // insérés par l'utilisateur sur des coups précis apparaissent dans ce PDF (retour Mickaël).
