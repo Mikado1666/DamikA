@@ -2473,7 +2473,15 @@ function boardImageDataUrlAtFinalPosition() {
   const originalIdx = game.history.length - 1;
   const finalIdx = fullMoveList(game).length - 1;
   if (finalIdx !== originalIdx) jumpToPly(finalIdx);
+  // Flèche du dernier coup masquée ici aussi (export "propre", sans annotation, même
+  // demande que pour l'export Image — retour Mickaël) : basculée le temps de la capture,
+  // restaurée juste après, comme dans exportBoardImage().
+  const originalShowArrow = renderer.showArrow;
+  renderer.showArrow = false;
+  renderer.render();
   const dataUrl = renderer.canvas.toDataURL('image/png');
+  renderer.showArrow = originalShowArrow;
+  renderer.render();
   if (finalIdx !== originalIdx) jumpToPly(originalIdx);
   return dataUrl;
 }
@@ -2482,6 +2490,11 @@ function boardImageDataUrlAtFinalPosition() {
 // inclus) + diagramme de la position finale. Thème sombre bronze/doré cohérent avec l'appli
 // (jsPDF ne fournit pas de fond de page global : on redessine un rectangle plein sur CHAQUE
 // page, cf. `paintPageBackground()` appelé après chaque `addPage()`).
+// PDF pensé comme un document imprimable/partageable — fond clair papier, PAS le thème
+// sombre de l'app (retour Mickaël : un export "brut de l'interface" ne se lit ni ne
+// s'imprime bien). Tout tient sur UNE page : en-tête compact, notation en grille resserrée,
+// diagramme de la position finale équilibré dans l'espace restant (centré verticalement
+// plutôt que collé en haut avec un grand vide en dessous — l'ancien symptôme).
 function exportGamePdf() {
   // Figée ICI, avant tout autre traitement : la notation ET le diagramme (position finale,
   // cf. boardImageDataUrlAtFinalPosition()) dérivent tous les deux de cette même liste,
@@ -2492,61 +2505,67 @@ function exportGamePdf() {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const margin = 48;
-  const BG = '#100c09';
-  const GOLD = '#d4af69';
-  const TEXT_1 = '#c9bba0';
-  const TEXT_2 = '#8c7c63';
-  const BLACK_BRONZE = '#c9a06a';
+  const margin = 42;
+  const contentW = pageW - margin * 2;
 
-  function paintPageBackground() {
-    doc.setFillColor(BG);
-    doc.rect(0, 0, pageW, pageH, 'F');
-  }
+  // Palette "papier" dédiée à ce document — indépendante du thème (clair/sombre) de
+  // l'interface : un export destiné à être imprimé/partagé doit rester lisible et neutre
+  // quel que soit le thème choisi dans l'app au moment de l'export.
+  const PAPER = '#fdfbf6';
+  const INK = '#241a10';
+  const INK_MUTED = '#6b5d47';
+  const ACCENT = '#9a6b1f';
+  const RULE = '#d8cbb0';
+  const WHITE_MOVE = INK;
+  const BLACK_MOVE = '#7a3418';
+
+  doc.setFillColor(PAPER);
+  doc.rect(0, 0, pageW, pageH, 'F');
 
   const meta = matchMetaLines();
 
-  // --- page de garde ---
-  paintPageBackground();
-  doc.setTextColor(GOLD);
+  // --- en-tête compact : noms/Elo, tournoi/ronde/date, score --------------------------------
+  let y = margin + 4;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.text(`${meta.white}  —  ${meta.black}`, pageW / 2, 140, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(13);
-  doc.setTextColor(TEXT_1);
+  doc.setFontSize(17);
+  doc.setTextColor(INK);
+  doc.text(`${meta.white}  —  ${meta.black}`, pageW / 2, y, { align: 'center' });
+  y += 18;
+
   const eloLine = [
     meta.whiteElo ? `${meta.white} : Elo ${meta.whiteElo}` : null,
     meta.blackElo ? `${meta.black} : Elo ${meta.blackElo}` : null,
   ].filter(Boolean).join('   ·   ');
-  let coverY = 180;
-  if (eloLine) { doc.text(eloLine, pageW / 2, coverY, { align: 'center' }); coverY += 22; }
-  if (meta.tournamentLine) { doc.text(meta.tournamentLine, pageW / 2, coverY, { align: 'center' }); coverY += 22; }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.5);
+  doc.setTextColor(INK_MUTED);
+  if (eloLine) { doc.text(eloLine, pageW / 2, y, { align: 'center' }); y += 15; }
+  if (meta.tournamentLine) { doc.text(meta.tournamentLine, pageW / 2, y, { align: 'center' }); y += 15; }
   if (meta.scoreLine) {
-    doc.setTextColor(GOLD);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text(meta.scoreLine, pageW / 2, coverY + 10, { align: 'center' });
+    doc.setFontSize(13);
+    doc.setTextColor(ACCENT);
+    y += 4;
+    doc.text(meta.scoreLine, pageW / 2, y, { align: 'center' });
+    y += 10;
   }
+  y += 10;
+  doc.setDrawColor(RULE);
+  doc.setLineWidth(0.75);
+  doc.line(margin, y, pageW - margin, y);
+  y += 22;
 
-  // --- notation + diagramme de la position finale, condensés sur UNE SEULE page ----------
-  // Grille de coups en plusieurs colonnes (pas 2 colonnes Blancs/Noirs pleine largeur comme
-  // avant) avec police/interligne réduits selon la longueur de la partie, pour laisser assez
-  // de place au diagramme EN DESSOUS sans déborder sur une 2e page (retour Mickaël : la
-  // notation à elle seule remplissait toute la page et repoussait le diagramme). Un
-  // débordement reste possible pour une partie extrêmement longue et/ou très commentée — le
-  // diagramme part alors sur la page suivante plutôt que d'être rendu illisible.
-  doc.addPage();
-  paintPageBackground();
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(GOLD);
-  doc.text('Notation', margin, margin);
-
+  // --- notation : grille en plusieurs colonnes, resserrée selon la longueur de la partie --
   const pairs = [];
   for (let i = 0; i < moves.length; i += 2) pairs.push([moves[i], moves[i + 1]]);
   const comments = [];
   moves.forEach((mv, idx) => { if (mv.comment) comments.push({ n: idx + 1, text: mv.comment }); });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(ACCENT);
+  doc.text('NOTATION', margin, y);
+  y += 16;
 
   // Palier (nb de paires de coups) -> colonnes/police : plus la partie est longue, plus on
   // resserre, jusqu'à un plancher de lisibilité à 7pt. Choisi empiriquement pour qu'une
@@ -2563,11 +2582,9 @@ function exportGamePdf() {
   const cols = tier.cols;
   const fontSize = tier.font;
   const lineH = fontSize + 4;
-
-  const notationTop = margin + 26;
-  const contentW = pageW - margin * 2;
   const colW = contentW / cols;
   const rowsPerCol = Math.ceil(pairs.length / cols);
+  const notationTop = y;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(fontSize);
@@ -2575,17 +2592,17 @@ function exportGamePdf() {
     const col = Math.floor(i / rowsPerCol);
     const row = i % rowsPerCol;
     const x = margin + col * colW;
-    const y = notationTop + row * lineH;
-    doc.setTextColor(TEXT_2);
-    doc.text(`${i + 1}.`, x, y);
-    doc.setTextColor(TEXT_1);
-    doc.text(moveNotation(white), x + 20, y);
+    const rowY = notationTop + row * lineH;
+    doc.setTextColor(INK_MUTED);
+    doc.text(`${i + 1}.`, x, rowY);
+    doc.setTextColor(WHITE_MOVE);
+    doc.text(moveNotation(white), x + 20, rowY);
     if (black) {
-      doc.setTextColor(BLACK_BRONZE);
-      doc.text(moveNotation(black), x + colW * 0.58, y);
+      doc.setTextColor(BLACK_MOVE);
+      doc.text(moveNotation(black), x + colW * 0.58, rowY);
     }
   });
-  let y = notationTop + rowsPerCol * lineH + 6;
+  y = notationTop + rowsPerCol * lineH + 8;
 
   // Commentaires éventuels : liste compacte "n. texte" sous la grille plutôt qu'indentés
   // sous chaque coup (incompatible avec une grille multi-colonnes) — reste lisible et garde
@@ -2593,31 +2610,53 @@ function exportGamePdf() {
   if (comments.length) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8.5);
-    doc.setTextColor(TEXT_2);
+    doc.setTextColor(INK_MUTED);
     for (const { n, text } of comments) {
       const wrapped = doc.splitTextToSize(`${n}. ${text}`, contentW);
       for (const wline of wrapped) {
-        if (y > pageH - margin - 20) { doc.addPage(); paintPageBackground(); y = margin; }
         doc.text(wline, margin, y);
         y += 11;
       }
     }
-    y += 8;
+    y += 6;
   }
 
-  // --- diagramme de la position finale : occupe l'espace restant sur cette page (ou la
-  // suivante si la notation/les commentaires ont tout pris) ---
-  const diagramGap = 26;
-  const availableForDiagram = pageH - margin - y - diagramGap;
-  if (availableForDiagram < 140) { doc.addPage(); paintPageBackground(); y = margin; }
+  // --- diagramme de la position finale -----------------------------------------------------
+  // Footer ancré en bas de page (marque + date), qui réserve sa propre place : évite qu'un
+  // grand vide résiduel s'accumule tout en bas de la page sous le diagramme.
+  const footerH = 26;
+  const footerY = pageH - margin + 6;
+  const diagramZoneTop = y + 10;
+  const diagramZoneBottom = pageH - margin - footerH;
+  const diagramZoneH = Math.max(80, diagramZoneBottom - diagramZoneTop);
+  const labelH = 18;
+  // Taille carrée = tout ce qui reste en hauteur (moins la place du label), plafonnée par la
+  // largeur de contenu — jamais collée en haut de sa zone : centrée verticalement dans
+  // l'espace disponible, pour que le "surplus" éventuel (partie courte, peu de coups) se
+  // répartisse en marge au-dessus ET en dessous plutôt qu'en un seul grand vide (l'ancien
+  // symptôme, aggravé par le fond sombre qui le rendait très visible).
+  const diagramSize = Math.max(120, Math.min(contentW, diagramZoneH - labelH));
+  const blockH = labelH + diagramSize;
+  const blockTop = diagramZoneTop + Math.max(0, (diagramZoneH - blockH) / 2);
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(GOLD);
-  doc.text('Position finale', pageW / 2, y + diagramGap - 8, { align: 'center' });
+  doc.setFontSize(10.5);
+  doc.setTextColor(ACCENT);
+  doc.text('Position finale', pageW / 2, blockTop + 11, { align: 'center' });
   const diagramDataUrl = boardImageDataUrlAtFinalPosition();
-  const diagramMaxH = pageH - margin - (y + diagramGap);
-  const diagramSize = Math.max(120, Math.min(contentW, diagramMaxH));
-  doc.addImage(diagramDataUrl, 'PNG', (pageW - diagramSize) / 2, y + diagramGap, diagramSize, diagramSize);
+  const diagramX = (pageW - diagramSize) / 2;
+  const diagramY = blockTop + labelH;
+  doc.addImage(diagramDataUrl, 'PNG', diagramX, diagramY, diagramSize, diagramSize);
+  doc.setDrawColor(RULE);
+  doc.setLineWidth(1);
+  doc.rect(diagramX, diagramY, diagramSize, diagramSize);
+
+  // --- pied de page ---
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(INK_MUTED);
+  const exportDate = new Date().toLocaleDateString('fr-FR');
+  doc.text(`DamikA — exporté le ${exportDate}`, pageW / 2, footerY, { align: 'center' });
 
   return doc.output('blob');
 }
