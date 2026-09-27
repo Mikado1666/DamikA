@@ -2639,10 +2639,29 @@ function exportGamePdf() {
   const blockH = labelH + diagramSize;
   const blockTop = diagramZoneTop + Math.max(0, (diagramZoneH - blockH) / 2);
 
+  // Label "Trait aux Blancs/Noirs" plutôt que "Position finale" : indique à qui de jouer
+  // dans cette position, avec une petite pastille de la couleur au trait pour que ce soit un
+  // vrai élément visuel mis en valeur, pas juste du texte (retour Mickäel). Parité du nombre
+  // de coups joués : les Blancs ouvrent toujours la partie, donc un nombre pair de demi-coups
+  // ramène le trait aux Blancs.
+  const finalSideToMove = moves.length % 2 === 0 ? WHITE : BLACK;
+  const turnLabel = `Trait aux ${finalSideToMove === WHITE ? 'Blancs' : 'Noirs'}`;
+  const labelBaseline = blockTop + 11;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
+  const dotR = 4.5;
+  const dotGap = 7;
+  const labelW = doc.getTextWidth(turnLabel);
+  const groupX = pageW / 2 - (dotR * 2 + dotGap + labelW) / 2;
+  const dotCx = groupX + dotR;
+  const dotCy = labelBaseline - 3.5;
+  doc.setDrawColor(INK);
+  doc.setLineWidth(0.8);
+  if (finalSideToMove === WHITE) doc.setFillColor('#ffffff');
+  else doc.setFillColor(INK);
+  doc.circle(dotCx, dotCy, dotR, 'FD');
   doc.setTextColor(ACCENT);
-  doc.text('Position finale', pageW / 2, blockTop + 11, { align: 'center' });
+  doc.text(turnLabel, groupX + dotR * 2 + dotGap, labelBaseline);
   const diagramDataUrl = boardImageDataUrlAtFinalPosition();
   const diagramX = (pageW - diagramSize) / 2;
   const diagramY = blockTop + labelH;
