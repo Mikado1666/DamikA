@@ -290,6 +290,9 @@ const el = {
   btnExportTxt: document.getElementById('btn-export-txt'),
   btnExportImage: document.getElementById('btn-export-image'),
   btnExportPdf: document.getElementById('btn-export-pdf'),
+  exportImageOverlay: document.getElementById('export-image-overlay'),
+  exportImageOk: document.getElementById('export-image-ok'),
+  exportImageCancel: document.getElementById('export-image-cancel'),
   btnShare: document.getElementById('btn-share'),
   shareOverlay: document.getElementById('share-overlay'),
   shareWarning: document.getElementById('share-warning'),
@@ -2329,10 +2332,9 @@ el.btnExportTxt.addEventListener('click', async () => {
   showToast('Export TXT téléchargé.', 'success');
 });
 
-// --- export image (PNG) / PDF ------------------------------------------------------------
-// Téléchargement direct (pas de fenêtre "Enregistrer sous" ici, contrairement au PDN/TXT —
-// demande explicite de Mickaël pour ces 2 formats) : même mécanique que downloadText() mais
-// pour un Blob binaire (image/PDF) plutôt qu'un texte.
+// --- export image (PNG/JPEG) / PDF --------------------------------------------------------
+// Repli de saveBlobWithPicker() ci-dessous (API absente, ou toute erreur autre qu'une
+// annulation) : même mécanique que downloadText() mais pour un Blob binaire (image/PDF).
 function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2342,6 +2344,53 @@ function downloadBlob(filename, blob) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Variante Blob de saveTextWithPicker() (fenêtre système "Enregistrer sous") — même
+// comportement : repli sur downloadBlob() si l'API est absente, et une annulation
+// (AbortError) n'écrit rien nulle part plutôt que de retomber quand même sur le
+// téléchargement direct. Utilisée par l'export Image (PNG/JPEG) et PDF pour rester
+// cohérente avec le choix du dossier déjà offert à l'export PDN/TXT (retour Mickaël).
+async function saveBlobWithPicker(suggestedName, blob, mime, extension) {
+  if (typeof window.showSaveFilePicker !== 'function') {
+    downloadBlob(suggestedName, blob);
+    return true;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName,
+      types: [{ description: `Fichier ${extension.replace('.', '').toUpperCase()}`, accept: { [mime]: [extension] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  } catch (err) {
+    if (err && err.name === 'AbortError') return false; // annulé par l'utilisateur
+    downloadBlob(suggestedName, blob);
+    return true;
+  }
+}
+
+// Petite modale de choix PNG/JPEG avant d'ouvrir la fenêtre "Enregistrer sous" — résout
+// null si l'utilisateur annule, sinon 'png'/'jpeg' (même pattern Promise que confirmModal()).
+function chooseImageFormat() {
+  return new Promise((resolve) => {
+    el.exportImageOverlay.hidden = false;
+    const cleanup = (result) => {
+      el.exportImageOverlay.hidden = true;
+      el.exportImageOk.removeEventListener('click', onOk);
+      el.exportImageCancel.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onOk = () => {
+      const checked = el.exportImageOverlay.querySelector('input[name="export-image-format"]:checked');
+      cleanup(checked ? checked.value : 'png');
+    };
+    const onCancel = () => cleanup(null);
+    el.exportImageOk.addEventListener('click', onOk);
+    el.exportImageCancel.addEventListener('click', onCancel);
+  });
 }
 
 // Infos de match communes aux 2 exports (légende image + page de garde PDF) — un seul
@@ -2370,7 +2419,12 @@ function matchMetaLines() {
 // on compose directement une légende sous une copie de son image bitmap. Couleurs alignées
 // sur les variables CSS du thème (--bg-0/--gold/--text-1, cf. :root dans style.css) pour ne
 // pas produire une image au fond clair générique dans une appli par ailleurs 100% sombre.
-async function exportBoardImage() {
+// `format` : 'png' (défaut) ou 'jpeg' — pilote le mime/l'extension côté appelant, cf.
+// el.btnExportImage plus bas. Flèche du dernier coup TOUJOURS masquée sur cet export (export
+// "propre", sans annotation, retour Mickaël) : on bascule `renderer.showArrow` juste le temps
+// de capturer le bitmap, puis on restaure sa valeur d'origine (préférence utilisateur en
+// direct, cf. btnToggleArrow) et on redessine — aucun changement visible côté UI.
+async function exportBoardImage(format = 'png') {
   const boardCanvas = renderer.canvas;
   const dpr = renderer.dpr || 1;
   const meta = matchMetaLines();
@@ -2388,7 +2442,12 @@ async function exportBoardImage() {
   const ctx = out.getContext('2d');
   ctx.fillStyle = '#100c09'; // --bg-0
   ctx.fillRect(0, 0, out.width, out.height);
+  const originalShowArrow = renderer.showArrow;
+  renderer.showArrow = false;
+  renderer.render();
   ctx.drawImage(boardCanvas, 0, 0);
+  renderer.showArrow = originalShowArrow;
+  renderer.render();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   let y = boardCanvas.height + padding + lineHeight / 2;
@@ -2399,8 +2458,8 @@ async function exportBoardImage() {
     y += lineHeight;
   });
 
-  const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
-  downloadBlob(`${safeFilename()}_coup${game.history.length}.png`, blob);
+  const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+  return new Promise((resolve) => out.toBlob(resolve, mime, format === 'jpeg' ? 0.92 : undefined));
 }
 
 // Capture le damier à la position FINALE de la partie (toutes les prises/coups joués),
@@ -2424,6 +2483,11 @@ function boardImageDataUrlAtFinalPosition() {
 // (jsPDF ne fournit pas de fond de page global : on redessine un rectangle plein sur CHAQUE
 // page, cf. `paintPageBackground()` appelé après chaque `addPage()`).
 function exportGamePdf() {
+  // Figée ICI, avant tout autre traitement : la notation ET le diagramme (position finale,
+  // cf. boardImageDataUrlAtFinalPosition()) dérivent tous les deux de cette même liste,
+  // reflétant l'état de `game` en mémoire au moment de l'export — sauvegardée ou non, quelle
+  // que soit la position actuellement naviguée/affichée (retour Mickaël).
+  const moves = fullMoveList(game);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -2479,7 +2543,6 @@ function exportGamePdf() {
   const colNum = margin;
   const colWhite = margin + 46;
   const colBlack = margin + 190;
-  const moves = fullMoveList(game);
   for (let i = 0; i < moves.length; i += 2) {
     if (y > pageH - margin) {
       doc.addPage();
@@ -2528,17 +2591,32 @@ function exportGamePdf() {
   const diagramSize = Math.min(pageW - margin * 2, pageH - margin * 2 - 40);
   doc.addImage(diagramDataUrl, 'PNG', (pageW - diagramSize) / 2, margin + 30, diagramSize, diagramSize);
 
-  doc.save(`${safeFilename()}.pdf`);
+  return doc.output('blob');
 }
 
 el.btnExportImage.addEventListener('click', async () => {
   el.exportMenu.hidden = true;
-  await exportBoardImage();
+  const format = await chooseImageFormat();
+  if (!format) return; // dialogue de format annulé
+  // Lecture auto en cours pendant l'export : pas d'interférence possible avec la capture
+  // elle-même (tout se joue de façon synchrone, cf. exportBoardImage()), mais un coup qui
+  // s'enchaînerait juste après changerait la partie sous les pieds de l'utilisateur pendant
+  // qu'il choisit où enregistrer le fichier (fenêtre "Enregistrer sous" en attente) — coupée
+  // par précaution, comme n'importe quelle autre action qui modifie la partie affichée.
+  stopAutoplay();
+  const blob = await exportBoardImage(format);
+  const ext = format === 'jpeg' ? '.jpg' : '.png';
+  const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+  const saved = await saveBlobWithPicker(`${safeFilename()}_coup${game.history.length}${ext}`, blob, mime, ext);
+  if (!saved) return; // fenêtre "Enregistrer sous" annulée par l'utilisateur
   showToast('Image exportée.', 'success');
 });
-el.btnExportPdf.addEventListener('click', () => {
+el.btnExportPdf.addEventListener('click', async () => {
   el.exportMenu.hidden = true;
-  exportGamePdf();
+  stopAutoplay(); // même précaution que l'export image ci-dessus
+  const blob = exportGamePdf();
+  const saved = await saveBlobWithPicker(`${safeFilename()}.pdf`, blob, 'application/pdf', '.pdf');
+  if (!saved) return;
   showToast('PDF exporté.', 'success');
 });
 
