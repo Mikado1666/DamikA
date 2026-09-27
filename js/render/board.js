@@ -46,6 +46,11 @@ export class BoardRenderer {
     this.mandatorySquares = new Set();
     this.lastMove = null; // { squares: [depart, ...étapes..., arrivée] }
     this.showArrow = true;
+    // Distinct du toggle on/off ci-dessus (showArrow) : bascule temporaire posée par le
+    // minuteur de durée d'affichage (cf. main.js), remise à false à chaque nouveau coup/
+    // navigation — showArrow reste la préférence permanente de l'utilisateur, jamais modifiée
+    // par le minuteur.
+    this.arrowHiddenByTimer = false;
     this.showCoords = true;
     this.boardTheme = DEFAULT_BOARD_THEME;
     this.pieceStyle = DEFAULT_PIECE_STYLE;
@@ -290,7 +295,7 @@ export class BoardRenderer {
     this._drawSquares();
     if (this.showCoords) this._drawCoords();
     this._drawHighlights();
-    if (this.showArrow && this.lastMove) this._drawLastMoveArrow();
+    if (this.showArrow && !this.arrowHiddenByTimer && this.lastMove) this._drawLastMoveArrow();
     this._drawPieces();
     if (this.selectedSquare != null) this._drawSelection();
   }

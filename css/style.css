@@ -320,6 +320,51 @@ body {
   text-align: right;
 }
 
+/* Popover de durée de la flèche, révélé au survol de l'icône ➜ — même mécanique que
+   .sound-control/.sound-popover, mais ouvert vers le HAUT (bottom: 100%) : cette barre de
+   contrôle est en bas du plateau, un popover vers le bas déborderait sous le viewport. */
+.arrow-control { position: relative; }
+.arrow-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-bottom: 6px;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.arrow-popover-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+.arrow-control:hover .arrow-popover,
+.arrow-popover:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+.arrow-popover-label { font-size: 12px; color: var(--text-2); margin-right: 2px; }
+.arrow-duration-btn {
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.arrow-duration-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold); }
+.arrow-duration-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
+
 .dropdown { position: relative; }
 .dropdown-menu {
   position: absolute;
