@@ -218,8 +218,14 @@
           <button id="btn-library-save" class="text-btn" title="Enregistrer TOUTE la bibliothèque active dans un fichier .pdn">💾 Sauvegarder la bibliothèque</button>
           <button id="btn-library-open" class="text-btn" title="Charger un fichier bibliothèque .pdn (remplace la bibliothèque active)">📁 Ouvrir une bibliothèque</button>
         </div>
+        <div class="library-filters" id="library-filters">
+          <button class="library-filter-btn active" id="library-filter-all" data-filter="all">Toutes</button>
+          <button class="library-filter-btn" id="library-filter-recent" data-filter="recent">🕒 Récentes</button>
+          <button class="library-filter-btn" id="library-filter-favorites" data-filter="favorites">★ Favoris</button>
+        </div>
         <ul class="library-list" id="library-list"></ul>
         <div class="library-empty" id="library-empty">Aucune partie importée pour l'instant.</div>
+        <div class="library-empty" id="library-filter-empty" hidden>Aucune partie dans ce filtre.</div>
       </div>
     </aside>
   </main>
