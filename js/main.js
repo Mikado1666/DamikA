@@ -2691,6 +2691,12 @@ function exportGamePdf() {
     const whiteAnnotated = !!(white && white.comment);
     const blackAnnotated = !!(black && black.comment);
 
+    // La ligne "N. blancs   noirs" reste TOUJOURS complète, quelle que soit l'annotation —
+    // un tableau où une ligne = un numéro de coup + Blancs (colonne gauche) + Noirs (colonne
+    // droite), jamais scindée (retour Mickaël : les noirs remontaient sinon au-dessus de leur
+    // propre numéro de coup dès que les blancs étaient annotés). Le(s) commentaire(s)/
+    // diagramme(s) s'insèrent TOUJOURS après cette ligne complète, jamais entre les deux
+    // couleurs.
     ensureSpace(c, lineH);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontSize);
@@ -2698,24 +2704,13 @@ function exportGamePdf() {
     doc.text(`${n}.`, x, colY[c]);
     doc.setTextColor(WHITE_MOVE);
     doc.text(moveNotation(white), x + 20, colY[c]);
-    // Noirs affichés avec les blancs sur la même ligne uniquement si les blancs ne sont pas
-    // annotés (sinon l'annotation des blancs doit s'intercaler AVANT les noirs, cf. plus bas).
-    if (black && !whiteAnnotated) {
+    if (black) {
       doc.setTextColor(BLACK_MOVE);
       doc.text(moveNotation(black), x + colW * 0.58, colY[c]);
     }
     colY[c] += lineH;
 
     if (whiteAnnotated) renderAnnotation(c, x, n * 2 - 1, white);
-    if (whiteAnnotated && black) {
-      // Noirs n'ont pas pu tenir sur la ligne de départ : leur propre ligne, dans la colonne.
-      ensureSpace(c, lineH);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(fontSize);
-      doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(black), x + 20, colY[c]);
-      colY[c] += lineH;
-    }
     if (blackAnnotated) renderAnnotation(c, x, n * 2, black);
   });
 
