@@ -373,8 +373,8 @@ export class DraughtsGame {
     });
   }
 
-  _commit(newBoard, moveInfo, comment = null) {
-    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: moveInfo, comment });
+  _commit(newBoard, moveInfo, comment = null, annotation = null) {
+    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: moveInfo, comment, annotation });
     this.future = [];
     this.board = newBoard;
     this.sideToMove = opponent(this.sideToMove);
@@ -383,7 +383,9 @@ export class DraughtsGame {
   undo() {
     if (this.history.length === 0) return false;
     const prev = this.history.pop();
-    this.future.push({ board: this.board, sideToMove: this.sideToMove, move: prev.move, comment: prev.comment });
+    this.future.push({
+      board: this.board, sideToMove: this.sideToMove, move: prev.move, comment: prev.comment, annotation: prev.annotation,
+    });
     this.board = prev.board;
     this.sideToMove = prev.sideToMove;
     return true;
@@ -392,17 +394,19 @@ export class DraughtsGame {
   redo() {
     if (this.future.length === 0) return false;
     const next = this.future.pop();
-    this.history.push({ board: this.board, sideToMove: this.sideToMove, move: next.move, comment: next.comment });
+    this.history.push({
+      board: this.board, sideToMove: this.sideToMove, move: next.move, comment: next.comment, annotation: next.annotation,
+    });
     this.board = next.board;
     this.sideToMove = next.sideToMove;
     return true;
   }
 
-  // Commentaire libre associé à un coup, adressé par sa position dans la liste complète et
-  // chronologique des coups (mêmes indices que fullMoveList() côté UI : history puis future
-  // inversé) — pas une Map externe indexée par ply, pour que le commentaire voyage tout seul
-  // avec son entrée d'historique au fil des undo()/redo() sans structure parallèle à
-  // resynchroniser.
+  // Commentaire libre / symbole d'annotation (!, ?, !!, ??) associés à un coup, adressés par
+  // sa position dans la liste complète et chronologique des coups (mêmes indices que
+  // fullMoveList() côté UI : history puis future inversé) — pas une Map externe indexée par
+  // ply, pour que ces deux attributs voyagent tout seuls avec leur entrée d'historique au fil
+  // des undo()/redo() sans structure parallèle à resynchroniser.
   _resolveMoveEntry(idx) {
     if (idx < 0) return null;
     if (idx < this.history.length) return this.history[idx];
@@ -418,6 +422,17 @@ export class DraughtsGame {
     const entry = this._resolveMoveEntry(idx);
     if (!entry) return false;
     entry.comment = text || null;
+    return true;
+  }
+
+  getAnnotationAt(idx) {
+    return this._resolveMoveEntry(idx)?.annotation || null;
+  }
+
+  setAnnotationAt(idx, symbol) {
+    const entry = this._resolveMoveEntry(idx);
+    if (!entry) return false;
+    entry.annotation = symbol || null;
     return true;
   }
 }

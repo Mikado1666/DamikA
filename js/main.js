@@ -373,6 +373,7 @@ const el = {
   btnSaveEntry: document.getElementById('btn-save-entry'),
   btnRevertEntry: document.getElementById('btn-revert-entry'),
   commentPopover: document.getElementById('move-comment-popover'),
+  annotationRow: document.getElementById('move-annotation-row'),
   commentTextarea: document.getElementById('move-comment-input'),
   commentDiagramCheckbox: document.getElementById('move-comment-diagram'),
   commentCloseBtn: document.getElementById('move-comment-close'),
@@ -406,10 +407,13 @@ el.libraryFilterFavorites.addEventListener('click', () => setLibraryFilter('favo
 
 // --- notation d'un coup --------------------------------------------------------
 function moveNotation(moveInfo) {
-  if (moveInfo.type === 'simple') return `${moveInfo.from}-${moveInfo.to}`;
-  // Notation FMJD : seules les cases de départ et d'arrivée sont notées pour une rafle,
-  // pas les étapes intermédiaires (ex. 30x19x28 s'écrit 30x28).
-  return `${moveInfo.from}x${moveInfo.to}`;
+  const base = moveInfo.type === 'simple' ? `${moveInfo.from}-${moveInfo.to}`
+    // Notation FMJD : seules les cases de départ et d'arrivée sont notées pour une rafle,
+    // pas les étapes intermédiaires (ex. 30x19x28 s'écrit 30x28).
+    : `${moveInfo.from}x${moveInfo.to}`;
+  // Symbole d'annotation (!, ?, !!, ??) collé directement après la notation, convention
+  // standard (échecs/dames) — jamais dans le commentaire {entre accolades}.
+  return moveInfo.annotation ? `${base}${moveInfo.annotation}` : base;
 }
 
 // Liste complète des coups de la partie (déjà joués + à venir via redo), dans l'ordre
@@ -419,8 +423,8 @@ function moveNotation(moveInfo) {
 // sérialisation PDN y aient accès sans repasser par game.getCommentAt(idx).
 function fullMoveList(g) {
   return [
-    ...g.history.map((h) => ({ ...h.move, comment: h.comment })),
-    ...[...g.future].reverse().map((f) => ({ ...f.move, comment: f.comment })),
+    ...g.history.map((h) => ({ ...h.move, comment: h.comment, annotation: h.annotation })),
+    ...[...g.future].reverse().map((f) => ({ ...f.move, comment: f.comment, annotation: f.annotation })),
   ];
 }
 
@@ -590,11 +594,24 @@ const DIAGRAM_MARKER = '\n[diagramme]';
 function stripDiagramMarker(text) { return text.endsWith(DIAGRAM_MARKER) ? text.slice(0, -DIAGRAM_MARKER.length) : text; }
 function hasDiagramMarker(text) { return !!text && text.endsWith(DIAGRAM_MARKER); }
 
+// Symbole d'annotation en cours d'édition dans le popover ouvert (null si aucun) — appliqué
+// au moteur seulement à la fermeture (closeCommentPopover), comme le texte du commentaire :
+// un Escape annule les deux d'un coup plutôt que de committer l'annotation à part.
+let commentPopoverAnnotation = null;
+
+function syncAnnotationButtons() {
+  el.annotationRow.querySelectorAll('.move-annotation-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.symbol === commentPopoverAnnotation);
+  });
+}
+
 function openCommentPopover(idx, anchorEl) {
   commentPopoverIdx = idx;
   const raw = game.getCommentAt(idx) || '';
   el.commentTextarea.value = stripDiagramMarker(raw);
   el.commentDiagramCheckbox.checked = hasDiagramMarker(raw);
+  commentPopoverAnnotation = game.getAnnotationAt(idx);
+  syncAnnotationButtons();
   el.commentPopover.hidden = false;
   const rect = anchorEl.getBoundingClientRect();
   const popRect = el.commentPopover.getBoundingClientRect();
@@ -613,13 +630,24 @@ function closeCommentPopover(commit) {
     const text = el.commentTextarea.value.trim();
     const comment = el.commentDiagramCheckbox.checked ? `${text}${DIAGRAM_MARKER}` : text;
     game.setCommentAt(commentPopoverIdx, comment);
+    game.setAnnotationAt(commentPopoverIdx, commentPopoverAnnotation);
     markActiveEntryDirty();
     scheduleSave();
     renderMoveList();
   }
   el.commentPopover.hidden = true;
   commentPopoverIdx = null;
+  commentPopoverAnnotation = null;
 }
+
+el.annotationRow.querySelectorAll('.move-annotation-btn').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    commentPopoverAnnotation = commentPopoverAnnotation === btn.dataset.symbol ? null : btn.dataset.symbol;
+    syncAnnotationButtons();
+    el.commentTextarea.focus();
+  });
+});
 
 el.commentTextarea.addEventListener('keydown', (e) => {
   // Ne jamais laisser les raccourcis clavier globaux (Espace = lecture auto, flèches =
