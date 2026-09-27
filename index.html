@@ -22,12 +22,15 @@
         <span class="brand-icon" aria-hidden="true">
           <svg viewBox="0 0 100 100" width="36" height="36">
             <defs>
+              <!-- Couleurs pilotées par CSS (classes brand-c1..5, cf. --brand-c1..5 dans
+                   style.css) plutôt que stop-color en dur : ce dégradé doit rester synchronisé
+                   avec celui du wordmark (.brand-name) par thème sombre/clair. -->
               <linearGradient id="brandGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#ffe9c2" />
-                <stop offset="35%" stop-color="#e0ab5c" />
-                <stop offset="55%" stop-color="#8a5a24" />
-                <stop offset="62%" stop-color="#f0c887" />
-                <stop offset="100%" stop-color="#4a2f10" />
+                <stop offset="0%" class="brand-c1" />
+                <stop offset="35%" class="brand-c2" />
+                <stop offset="55%" class="brand-c3" />
+                <stop offset="62%" class="brand-c4" />
+                <stop offset="100%" class="brand-c5" />
               </linearGradient>
             </defs>
             <polygon points="50,8 92,50 50,92 8,50" fill="url(#brandGrad)" />
