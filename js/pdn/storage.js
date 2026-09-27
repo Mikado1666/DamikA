@@ -32,3 +32,33 @@ export function clearLibraryState() {
     // rien à faire si localStorage est indisponible
   }
 }
+
+// --- fichiers récents + favoris de la Bibliothèque -------------------------------------
+// Clé séparée de STORAGE_KEY : ces deux listes ne décrivent pas le CONTENU de la
+// bibliothèque (headers/coups, déjà source unique via `library`/`headers` partagés, cf.
+// CLAUDE.md) mais des méta-données annexes qui lui survivent indépendamment (identifiées par
+// empreinte de contenu, cf. gameFingerprint() dans main.js, jamais par index — un index
+// devient faux dès qu'une entrée est supprimée ou réordonnée).
+const EXTRAS_KEY = 'damika:library-extras';
+
+export function loadLibraryExtras() {
+  try {
+    const raw = localStorage.getItem(EXTRAS_KEY);
+    if (!raw) return { favorites: [], recent: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      favorites: Array.isArray(parsed.favorites) ? parsed.favorites : [],
+      recent: Array.isArray(parsed.recent) ? parsed.recent : [],
+    };
+  } catch {
+    return { favorites: [], recent: [] };
+  }
+}
+
+export function saveLibraryExtras(extras) {
+  try {
+    localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras));
+  } catch {
+    // localStorage indisponible ou quota dépassé : on continue sans persistance.
+  }
+}

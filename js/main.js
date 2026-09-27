@@ -4,8 +4,8 @@ import {
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES } from './render/board.js';
 import { parsePdn } from './pdn/parser.js';
 import { loadGameFromPdn } from './pdn/loader.js';
-import { serializeToPdn, serializeToTxt, serializeLibraryToPdn } from './pdn/serializer.js';
-import { saveLibraryState, loadLibraryState } from './pdn/storage.js';
+import { serializeToPdn, serializeToTxt, serializeLibraryToPdn, serializeLibraryEntryToPdn } from './pdn/serializer.js';
+import { saveLibraryState, loadLibraryState, saveLibraryExtras, loadLibraryExtras } from './pdn/storage.js';
 
 // --- thème d'interface (clair/sombre, toggle) -------------------------------------------
 // Persisté en localStorage ; appliqué AVANT la construction du BoardRenderer pour que sa
@@ -148,6 +148,58 @@ function formatPlayerName(name) {
 }
 let library = []; // parties parsées disponibles (import multi-parties)
 let libraryActiveIndex = -1;
+// Récents/Favoris de la Bibliothèque : identifiés par empreinte de contenu (cf.
+// gameFingerprint()), jamais par index — un index devient faux dès qu'une entrée est
+// supprimée ou réordonnée. Persistance séparée de `damika:library-state` (cf. storage.js) :
+// ce ne sont pas des données de partie, elles survivent indépendamment du contenu de la
+// bibliothèque active. `libraryFavorites` : Set d'empreintes. `libraryRecent` : tableau
+// d'empreintes, plus récent en premier, plafonné à LIBRARY_RECENT_LIMIT.
+const LIBRARY_RECENT_LIMIT = 8;
+let libraryFavorites = new Set();
+let libraryRecent = [];
+let libraryFilter = 'all'; // 'all' | 'recent' | 'favorites'
+{
+  const extras = loadLibraryExtras();
+  libraryFavorites = new Set(extras.favorites);
+  libraryRecent = extras.recent;
+}
+function saveLibraryExtrasState() {
+  saveLibraryExtras({ favorites: [...libraryFavorites], recent: libraryRecent });
+}
+// Empreinte stable d'une entrée de bibliothèque, dérivée uniquement de son contenu PDN
+// (en-têtes + coups) : pas d'identifiant synthétique ajouté aux headers, qui polluerait tout
+// export/partage (fichier .pdn, lien) d'un header interne inutile ailleurs — même principe
+// que le matching des photos joueurs par nom plutôt que par un id dédié.
+function gameFingerprint(entry) {
+  const text = serializeLibraryEntryToPdn(entry);
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (Math.imul(31, hash) + text.charCodeAt(i)) | 0;
+  }
+  return String(hash);
+}
+function recordLibraryRecent(entry) {
+  const fp = gameFingerprint(entry);
+  libraryRecent = [fp, ...libraryRecent.filter((f) => f !== fp)].slice(0, LIBRARY_RECENT_LIMIT);
+  saveLibraryExtrasState();
+}
+function toggleLibraryFavorite(entry) {
+  const fp = gameFingerprint(entry);
+  if (libraryFavorites.has(fp)) libraryFavorites.delete(fp);
+  else libraryFavorites.add(fp);
+  saveLibraryExtrasState();
+  renderLibrary();
+}
+function setLibraryFilter(filter) {
+  libraryFilter = filter;
+  el.libraryFilterAll.classList.toggle('active', filter === 'all');
+  el.libraryFilterRecent.classList.toggle('active', filter === 'recent');
+  el.libraryFilterFavorites.classList.toggle('active', filter === 'favorites');
+  renderLibrary();
+}
+el.libraryFilterAll.addEventListener('click', () => setLibraryFilter('all'));
+el.libraryFilterRecent.addEventListener('click', () => setLibraryFilter('recent'));
+el.libraryFilterFavorites.addEventListener('click', () => setLibraryFilter('favorites'));
 // Nom de la bibliothèque elle-même (distinct du nom de chaque partie qu'elle contient) —
 // vide par défaut, placeholder "Bibliothèque sans nom" géré en CSS (:empty::before). Encodé
 // dans le fichier .pdn comme un en-tête non standard `[LibraryName "..."]` PLACÉ AVANT les
@@ -309,7 +361,12 @@ const el = {
   panelMoves: document.getElementById('panel-moves'),
   panelLibrary: document.getElementById('panel-library'),
   libraryList: document.getElementById('library-list'),
+  libraryFilters: document.getElementById('library-filters'),
   libraryEmpty: document.getElementById('library-empty'),
+  libraryFilterEmpty: document.getElementById('library-filter-empty'),
+  libraryFilterAll: document.getElementById('library-filter-all'),
+  libraryFilterRecent: document.getElementById('library-filter-recent'),
+  libraryFilterFavorites: document.getElementById('library-filter-favorites'),
   libraryName: document.getElementById('library-name'),
   libraryCount: document.getElementById('library-count'),
   btnLibrarySave: document.getElementById('btn-library-save'),
@@ -1628,7 +1685,27 @@ function renderLibrary() {
   el.libraryEmpty.hidden = library.length > 0;
   el.libraryCount.hidden = library.length === 0;
   el.libraryCount.textContent = String(library.length);
+  el.libraryFilters.hidden = library.length === 0;
+
+  const visibleIndexes = library.map((entry, idx) => idx).filter((idx) => {
+    if (libraryFilter === 'favorites') return libraryFavorites.has(gameFingerprint(library[idx]));
+    if (libraryFilter === 'recent') return libraryRecent.includes(gameFingerprint(library[idx]));
+    return true;
+  });
+  // Ordre "Récentes" : le plus récemment ouvert en premier (pas l'ordre de la bibliothèque).
+  if (libraryFilter === 'recent') {
+    visibleIndexes.sort((a, b) => (
+      libraryRecent.indexOf(gameFingerprint(library[a])) - libraryRecent.indexOf(gameFingerprint(library[b]))
+    ));
+  }
+  el.libraryFilterEmpty.hidden = library.length === 0 || visibleIndexes.length > 0;
+  // Réordonnancement manuel réservé à la vue "Toutes" (cf. startLibraryDrag()/moveLibraryEntryTo()
+  // : la position finale y est calculée depuis l'ordre DOM de TOUTE la liste, ce qui serait faux
+  // sur une vue filtrée qui n'affiche qu'un sous-ensemble des cartes).
+  const dragEnabled = libraryFilter === 'all';
+
   library.forEach((entry, idx) => {
+    if (!visibleIndexes.includes(idx)) return;
     // Purge un `headers.Label` résiduel (ancienne fonctionnalité de renommage libre,
     // retirée — cf. libraryEntryTitle) qui pourrait encore traîner dans une bibliothèque
     // rechargée depuis un fichier .pdn ou un ancien localStorage : il n'est plus lu nulle
@@ -1653,11 +1730,14 @@ function renderLibrary() {
     dragHandle.className = 'library-item-drag';
     dragHandle.title = 'Glisser pour réordonner';
     dragHandle.textContent = '⠿';
-    li.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      if (e.target.closest('.library-item-delete')) return;
-      startLibraryDrag(e, li, idx);
-    });
+    dragHandle.hidden = !dragEnabled;
+    if (dragEnabled) {
+      li.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('.library-item-delete') || e.target.closest('.library-item-star')) return;
+        startLibraryDrag(e, li, idx);
+      });
+    }
 
     const info = document.createElement('div');
     info.className = 'library-item-info';
@@ -1678,6 +1758,16 @@ function renderLibrary() {
     meta.textContent = entry.headers.Event || '';
     info.append(title, meta);
 
+    const isFavorite = libraryFavorites.has(gameFingerprint(entry));
+    const starBtn = document.createElement('button');
+    starBtn.className = `library-item-star${isFavorite ? ' is-favorite' : ''}`;
+    starBtn.title = isFavorite ? 'Retirer des favoris' : 'Marquer comme favori';
+    starBtn.textContent = isFavorite ? '★' : '☆';
+    starBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleLibraryFavorite(entry);
+    });
+
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'library-item-delete';
     deleteBtn.title = 'Supprimer cette partie de la bibliothèque';
@@ -1687,7 +1777,7 @@ function renderLibrary() {
       deleteLibraryEntry(idx);
     });
 
-    li.append(dragHandle, info, deleteBtn);
+    li.append(dragHandle, info, starBtn, deleteBtn);
     li.addEventListener('click', async () => {
       // Un drag qui vient de se terminer déclenche quand même un 'click' natif au relâchement
       // (même élément, même souris) — sans ce garde-fou, réordonner une entrée la sélectionnait
@@ -1701,6 +1791,7 @@ function renderLibrary() {
       }
       libraryActiveIndex = idx;
       loadParsedGame(entry, { silent: true });
+      recordLibraryRecent(entry);
       el.libraryList.querySelectorAll('.library-item.active').forEach((n) => n.classList.remove('active'));
       li.classList.add('active');
     });

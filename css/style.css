@@ -871,6 +871,57 @@ body {
 }
 .library-empty[hidden] { display: none; }
 
+/* Filtres Toutes/Récentes/Favoris : mêmes pastilles que .panel-tab (fond --gold-soft, texte
+   --gold à l'état actif), en plus compact pour tenir sur une seule ligne dans le panneau. */
+.library-filters {
+  display: flex;
+  gap: 6px;
+  padding: 0 7px 8px;
+  flex-shrink: 0;
+}
+.library-filters[hidden] { display: none; }
+.library-filter-btn {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.library-filter-btn:hover:not(.active) { color: var(--text-0); }
+.library-filter-btn.active { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
+
+/* Étoile favori : même discrétion que .library-item-delete (visible seulement au survol de
+   la carte), sauf quand la partie est déjà marquée favorite (toujours visible, pleine). */
+.library-item-star {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.library-item:hover .library-item-star,
+.library-item-star:focus-visible,
+.library-item-star.is-favorite {
+  opacity: 1;
+}
+.library-item-star:hover { color: var(--gold); }
+.library-item-star.is-favorite { color: var(--gold); }
+
 /* ---------- Layout ---------- */
 .layout {
   flex: 1;
