@@ -2586,17 +2586,15 @@ function exportGamePdf() {
   // flux vertical (plus de blocs de colonnes multiples façon journal — retour Mickaël, ça
   // cassait la lecture chronologique). Exception : dès qu'un coup (Blancs OU Noirs) a un
   // commentaire/diagramme, sa ligne n'affiche QUE ce coup seul dans sa colonne d'origine —
-  // le commentaire/diagramme suit pleine largeur — et son vis-à-vis (l'autre coup de la
-  // même paire, pas encore affiché) est REPORTÉ : il réapparaît sur la ligne suivante,
-  // apparié avec le prochain coup disponible de l'autre couleur, plutôt que d'être perdu ou
-  // laissé orphelin. Implémenté comme la fusion de 2 files indépendantes (coups Blancs,
-  // coups Noirs) plutôt qu'un simple parcours par paire figée.
-  const whiteEntries = [];
-  const blackEntries = [];
-  moves.forEach((mv, idx) => {
-    const ply = idx + 1;
-    (ply % 2 === 1 ? whiteEntries : blackEntries).push({ mv, ply });
-  });
+  // le commentaire/diagramme suit pleine largeur — puis son vis-à-vis (l'autre coup de LA
+  // MÊME paire) s'affiche juste en dessous, sur sa propre ligne sans numéro visible, avant
+  // de reprendre la numérotation normale au coup suivant. Chaque coup Noirs reste TOUJOURS
+  // associé à son propre numéro de coup d'origine (retour Mickaël : pas de report/fusion
+  // avec la paire suivante, pas de décalage permanent de la numérotation).
+  const pairs = [];
+  for (let idx = 0; idx < moves.length; idx += 2) {
+    pairs.push({ n: idx / 2 + 1, white: moves[idx], black: moves[idx + 1] });
+  }
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
@@ -2666,56 +2664,45 @@ function exportGamePdf() {
     }
   }
 
-  let wi = 0;
-  let bi = 0;
-  let rowNum = 0;
-  while (wi < whiteEntries.length || bi < blackEntries.length) {
-    rowNum += 1;
-    const wEntry = whiteEntries[wi];
-    const bEntry = blackEntries[bi];
-    const wAnnotated = !!(wEntry && wEntry.mv.comment);
-    const bAnnotated = !!(bEntry && bEntry.mv.comment);
+  pairs.forEach(({ n, white, black }) => {
+    const whitePly = n * 2 - 1;
+    const blackPly = n * 2;
+    const whiteAnnotated = !!(white && white.comment);
+    const blackAnnotated = !!(black && black.comment);
 
     ensureSpace(lineH);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontSize);
     doc.setTextColor(INK_MUTED);
-    doc.text(`${rowNum}.`, margin, y);
-
-    if (wAnnotated) {
-      // Blancs annoté : ligne SEULE (colonne Noirs vide), les Noirs de cette paire (pas
-      // encore consommés) restent en file d'attente pour la ligne suivante.
-      doc.setTextColor(WHITE_MOVE);
-      doc.text(moveNotation(wEntry.mv), margin + 24, y);
-      y += lineH;
-      renderAnnotation(wEntry.ply, wEntry.mv);
-      wi += 1;
-    } else if (bAnnotated) {
-      // Noirs annoté (et Blancs courant pas lui-même annoté) : ligne SEULE côté Noirs,
-      // colonne Blancs vide — le prochain coup Blancs en attente reste en file.
+    doc.text(`${n}.`, margin, y);
+    doc.setTextColor(WHITE_MOVE);
+    doc.text(moveNotation(white), margin + 24, y);
+    if (black && !whiteAnnotated) {
+      // Cas normal : les Noirs de CETTE paire s'affichent sur la même ligne que les
+      // Blancs. Si les Blancs sont annotés, les Noirs sont reportés juste en dessous
+      // (cf. plus bas) plutôt qu'affichés ici, pour ne jamais les mélanger à la paire
+      // suivante.
       doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(bEntry.mv), margin + 110, y);
-      y += lineH;
-      renderAnnotation(bEntry.ply, bEntry.mv);
-      bi += 1;
-    } else {
-      // Ligne standard : prochain coup Blancs disponible + prochain coup Noirs disponible,
-      // appariés sur la même ligne qu'ils appartiennent ou non à la même paire d'origine
-      // (cf. exemple Mickaël : le coup 2 Blancs annoté seul, puis "3." apparie le coup 3
-      // Blancs avec le coup 2 Noirs resté en attente).
-      if (wEntry) {
-        doc.setTextColor(WHITE_MOVE);
-        doc.text(moveNotation(wEntry.mv), margin + 24, y);
-        wi += 1;
-      }
-      if (bEntry) {
-        doc.setTextColor(BLACK_MOVE);
-        doc.text(moveNotation(bEntry.mv), margin + 110, y);
-        bi += 1;
-      }
+      doc.text(moveNotation(black), margin + 110, y);
+    }
+    y += lineH;
+
+    if (whiteAnnotated) renderAnnotation(whitePly, white);
+
+    if (whiteAnnotated && black) {
+      // Réponse des Noirs à CE coup Blancs annoté : sur sa propre ligne, sans numéro
+      // affiché, mais toujours rattachée à la paire n (retour Mickaël — jamais accrochée
+      // au numéro de la paire suivante).
+      ensureSpace(lineH);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(fontSize);
+      doc.setTextColor(BLACK_MOVE);
+      doc.text(moveNotation(black), margin + 110, y);
       y += lineH;
     }
-  }
+
+    if (blackAnnotated) renderAnnotation(blackPly, black);
+  });
 
   y += 6;
 
