@@ -197,9 +197,6 @@ function setLibraryFilter(filter) {
   el.libraryFilterFavorites.classList.toggle('active', filter === 'favorites');
   renderLibrary();
 }
-el.libraryFilterAll.addEventListener('click', () => setLibraryFilter('all'));
-el.libraryFilterRecent.addEventListener('click', () => setLibraryFilter('recent'));
-el.libraryFilterFavorites.addEventListener('click', () => setLibraryFilter('favorites'));
 // Nom de la bibliothèque elle-même (distinct du nom de chaque partie qu'elle contient) —
 // vide par défaut, placeholder "Bibliothèque sans nom" géré en CSS (:empty::before). Encodé
 // dans le fichier .pdn comme un en-tête non standard `[LibraryName "..."]` PLACÉ AVANT les
@@ -402,6 +399,10 @@ const el = {
   photoRemoveBtn: document.getElementById('player-photo-remove'),
   photoCloseBtn: document.getElementById('player-photo-close'),
 };
+
+el.libraryFilterAll.addEventListener('click', () => setLibraryFilter('all'));
+el.libraryFilterRecent.addEventListener('click', () => setLibraryFilter('recent'));
+el.libraryFilterFavorites.addEventListener('click', () => setLibraryFilter('favorites'));
 
 // --- notation d'un coup --------------------------------------------------------
 function moveNotation(moveInfo) {
