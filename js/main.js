@@ -1,7 +1,7 @@
 import {
   DraughtsGame, WHITE, BLACK, countPieces, computeTempoDifferential, hasAnyKing,
 } from './engine/rules.js';
-import { BoardRenderer, BOARD_THEMES, PIECE_STYLES } from './render/board.js';
+import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { parsePdn } from './pdn/parser.js';
 import { loadGameFromPdn } from './pdn/loader.js';
 import { serializeToPdn, serializeToTxt, serializeLibraryToPdn, serializeLibraryEntryToPdn } from './pdn/serializer.js';
@@ -446,6 +446,7 @@ const el = {
   themeMenu: document.getElementById('theme-menu'),
   boardThemeOptions: document.getElementById('board-theme-options'),
   pieceStyleOptions: document.getElementById('piece-style-options'),
+  pieceSizeOptions: document.getElementById('piece-size-options'),
   boardWrap: document.querySelector('.board-wrap'),
   playersRail: document.querySelector('.players-rail'),
   panelTabs: document.querySelector('.panel-tabs'),
@@ -3066,7 +3067,19 @@ function loadSharedGameFromUrl() {
   }
 }
 
-// --- thème du damier / style des pions ------------------------------------------------
+// --- thème du damier / style et taille des pions ---------------------------------------
+// Taille des pions : seul réglage des trois persisté pour l'instant (damier/style de pion
+// ne le sont pas encore, cf. leur absence de clé localStorage — hors périmètre de ce
+// chantier) — presets nommés (PIECE_SIZES), jamais un pourcentage libre.
+const PIECE_SIZE_KEY = 'damika:piece-size';
+function pieceSizeKeyFromScale(scale) {
+  return Object.keys(PIECE_SIZES).find((k) => PIECE_SIZES[k].scale === scale) || 'normal';
+}
+{
+  const savedSize = localStorage.getItem(PIECE_SIZE_KEY);
+  if (savedSize && PIECE_SIZES[savedSize]) renderer.setPieceSize(savedSize);
+}
+
 function renderThemeOptions(container, entries, activeId, onPick) {
   container.innerHTML = '';
   Object.entries(entries).forEach(([id, def]) => {
@@ -3076,14 +3089,20 @@ function renderThemeOptions(container, entries, activeId, onPick) {
     btn.addEventListener('click', () => {
       onPick(id);
       el.themeMenu.hidden = true;
-      renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => renderer.setBoardTheme(v));
-      renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => renderer.setPieceStyle(v));
+      refreshThemeMenuOptions();
     });
     container.appendChild(btn);
   });
 }
-renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => renderer.setBoardTheme(v));
-renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => renderer.setPieceStyle(v));
+function refreshThemeMenuOptions() {
+  renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => renderer.setBoardTheme(v));
+  renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => renderer.setPieceStyle(v));
+  renderThemeOptions(el.pieceSizeOptions, PIECE_SIZES, pieceSizeKeyFromScale(renderer.pieceScale), (v) => {
+    renderer.setPieceSize(v);
+    localStorage.setItem(PIECE_SIZE_KEY, v);
+  });
+}
+refreshThemeMenuOptions();
 
 el.btnTheme.addEventListener('click', () => { el.themeMenu.hidden = !el.themeMenu.hidden; });
 window.addEventListener('click', (e) => {
