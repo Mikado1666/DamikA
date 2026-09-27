@@ -2491,9 +2491,9 @@ async function exportBoardImage(format = 'png') {
 // reste de cette fonction — le navigateur ne peint jamais l'état intermédiaire, aucun
 // flash visible pour l'utilisateur.
 // `targetIdx` : index "dernier coup joué" au sens de jumpToPly() (history.length-1 une fois
-// ce coup joué) — généralisée pour aussi capturer un diagramme "à la volée" sur un coup
-// annoté précis (cf. exportGamePdf(), section "Positions clés"), pas seulement la position
-// finale.
+// ce coup joué) — capture un diagramme "à la volée" sur un coup annoté précis (cf.
+// exportGamePdf()) : seuls ces diagrammes explicitement ajoutés par l'utilisateur
+// apparaissent dans le PDF, plus de diagramme de position finale automatique.
 function boardImageDataUrlAtPly(targetIdx) {
   const originalIdx = game.history.length - 1;
   if (targetIdx !== originalIdx) jumpToPly(targetIdx);
@@ -2509,22 +2509,18 @@ function boardImageDataUrlAtPly(targetIdx) {
   if (targetIdx !== originalIdx) jumpToPly(originalIdx);
   return dataUrl;
 }
-function boardImageDataUrlAtFinalPosition() {
-  return boardImageDataUrlAtPly(fullMoveList(game).length - 1);
-}
 
-// PDF complet : page de garde + notation intégrale (2 colonnes Blancs/Noirs, commentaires
-// inclus) + diagramme de la position finale. Thème sombre bronze/doré cohérent avec l'appli
-// (jsPDF ne fournit pas de fond de page global : on redessine un rectangle plein sur CHAQUE
-// page, cf. `paintPageBackground()` appelé après chaque `addPage()`).
+// PDF complet : en-tête + notation intégrale, avec commentaires/diagrammes insérés dans le
+// flux au coup annoté (cf. section "notation" plus bas). Thème "papier" clair, indépendant
+// du thème sombre/clair de l'app (cf. constantes PAPER/INK/... ci-dessous).
 // PDF pensé comme un document imprimable/partageable — fond clair papier, PAS le thème
 // sombre de l'app (retour Mickaël : un export "brut de l'interface" ne se lit ni ne
-// s'imprime bien). Tout tient sur UNE page : en-tête compact, notation en grille resserrée,
-// diagramme de la position finale équilibré dans l'espace restant (centré verticalement
-// plutôt que collé en haut avec un grand vide en dessous — l'ancien symptôme).
+// s'imprime bien). En-tête compact, notation en grille resserrée — tient sur une seule page
+// tant qu'aucun coup n'est annoté ; un coup annoté (commentaire et/ou diagramme) interrompt
+// la grille pour s'afficher à sa place exacte dans le flux, ce qui peut alors déborder sur
+// plusieurs pages selon le nombre d'annotations.
 function exportGamePdf() {
-  // Figée ICI, avant tout autre traitement : la notation ET le diagramme (position finale,
-  // cf. boardImageDataUrlAtFinalPosition()) dérivent tous les deux de cette même liste,
+  // Figée ICI, avant tout autre traitement : la notation dérive de cette même liste,
   // reflétant l'état de `game` en mémoire au moment de l'export — sauvegardée ou non, quelle
   // que soit la position actuellement naviguée/affichée (retour Mickaël).
   const moves = fullMoveList(game);
@@ -2693,7 +2689,11 @@ function exportGamePdf() {
       y = top + blockH + 6;
     }
 
-    function renderAnnotatedRow(n, white, black) {
+    // Ligne "N. blancs" seule, avec les noirs affichés SEULEMENT s'ils ne sont pas eux-mêmes
+    // annotés (sinon leur coup doit attendre l'annotation des blancs, cf. renderPairInFlow) —
+    // sans quoi une annotation posée sur les blancs se retrouvait affichée après les noirs
+    // (retour Mickaël : l'alignement doit respecter la couleur exacte du trait annoté).
+    function renderMoveRow(n, white, black, includeBlack) {
       if (y + 16 > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10.5);
@@ -2701,21 +2701,58 @@ function exportGamePdf() {
       doc.text(`${n}.`, margin, y);
       doc.setTextColor(WHITE_MOVE);
       doc.text(moveNotation(white), margin + 22, y);
-      if (black) {
+      if (black && includeBlack) {
         doc.setTextColor(BLACK_MOVE);
         doc.text(moveNotation(black), margin + 90, y);
       }
       y += 16;
     }
 
+    // Coup des noirs seul, sur sa propre ligne (cas où les blancs de la même paire étaient
+    // annotés : leur annotation s'est déjà affichée avant, donc les noirs n'ont pas pu tenir
+    // sur la ligne "N. blancs" de départ) — même indentation que le début d'un coup blanc,
+    // couleur noirs, sans numéro (déjà donné par la ligne blancs juste au-dessus).
+    function renderBlackOnlyRow(black) {
+      if (y + 16 > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(BLACK_MOVE);
+      doc.text(moveNotation(black), margin + 22, y);
+      y += 16;
+    }
+
+    // Pastille + "Trait aux Blancs/Noirs" centrés sous un diagramme — factorisé pour être
+    // réutilisé à toute taille de police (diagrammes annotés en cours de partie, plus petits
+    // que l'ancien diagramme de position finale qui utilisait la même pastille).
+    function renderTurnLabel(centerX, baselineY, side, fontSize) {
+      const label = `Trait aux ${side === WHITE ? 'Blancs' : 'Noirs'}`;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(fontSize);
+      const dotR = fontSize * 0.41;
+      const dotGap = fontSize * 0.64;
+      const labelW = doc.getTextWidth(label);
+      const groupX = centerX - (dotR * 2 + dotGap + labelW) / 2;
+      const dotCx = groupX + dotR;
+      const dotCy = baselineY - fontSize * 0.24;
+      doc.setDrawColor(INK);
+      doc.setLineWidth(0.8);
+      doc.setFillColor(side === WHITE ? '#ffffff' : INK);
+      doc.circle(dotCx, dotCy, dotR, 'FD');
+      doc.setTextColor(ACCENT);
+      doc.text(label, groupX + dotR * 2 + dotGap, baselineY);
+    }
+
     // `ply` = numéro de coup 1-indexé (même indexation que DIAGRAM_MARKER/hasDiagramMarker) ;
     // boardImageDataUrlAtPly() attend l'index "dernier coup joué" façon jumpToPly (ply - 1).
+    // Trait affiché sous CE diagramme précis (après ce ply, pas la position finale) — parité
+    // du nombre de coups joués À CE STADE, même formule que pour l'ancien diagramme final.
     function renderAnnotationBlock(ply, moveInfo) {
       const withDiagram = hasDiagramMarker(moveInfo.comment);
       const text = withDiagram ? stripDiagramMarker(moveInfo.comment) : moveInfo.comment;
       const wrapped = text ? doc.splitTextToSize(text, contentW - 14) : [];
       const diagramSize = withDiagram ? Math.min(170, contentW) : 0;
-      const blockH = wrapped.length * 11 + (withDiagram ? diagramSize + 10 : 0) + 8;
+      const turnLabelH = withDiagram ? 18 : 0;
+      const blockH = wrapped.length * 11 + (withDiagram ? diagramSize + 10 + turnLabelH : 0) + 8;
       if (y + blockH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(8.5);
@@ -2729,7 +2766,10 @@ function exportGamePdf() {
         doc.setDrawColor(RULE);
         doc.setLineWidth(1);
         doc.rect(dx, y, diagramSize, diagramSize);
-        y += diagramSize + 10;
+        y += diagramSize + 12;
+        const sideToMoveHere = ply % 2 === 0 ? WHITE : BLACK;
+        renderTurnLabel(pageW / 2, y, sideToMoveHere, 9);
+        y += 6;
       }
       y += 4;
     }
@@ -2737,73 +2777,30 @@ function exportGamePdf() {
     let segment = [];
     pairs.forEach(([white, black], i) => {
       const n = i + 1;
-      const annotated = (white && white.comment) || (black && black.comment);
-      if (!annotated) {
+      const whiteAnnotated = !!(white && white.comment);
+      const blackAnnotated = !!(black && black.comment);
+      if (!whiteAnnotated && !blackAnnotated) {
         segment.push({ n, white, black });
         return;
       }
       renderGridSegment(segment);
       segment = [];
-      renderAnnotatedRow(n, white, black);
-      if (white && white.comment) renderAnnotationBlock(n * 2 - 1, white);
-      if (black && black.comment) renderAnnotationBlock(n * 2, black);
+      // Noirs affichés avec les blancs sur la même ligne uniquement si les blancs ne sont
+      // pas annotés (sinon l'annotation des blancs doit s'intercaler AVANT les noirs).
+      renderMoveRow(n, white, black, !whiteAnnotated);
+      if (whiteAnnotated) renderAnnotationBlock(n * 2 - 1, white);
+      if (whiteAnnotated && black) renderBlackOnlyRow(black);
+      if (blackAnnotated) renderAnnotationBlock(n * 2, black);
     });
     renderGridSegment(segment);
   }
-
-  // --- diagramme de la position finale -----------------------------------------------------
-  // Footer ancré en bas de page (marque + date), qui réserve sa propre place : évite qu'un
-  // grand vide résiduel s'accumule tout en bas de la page sous le diagramme. Nouvelle page si
-  // ce qui précède (notation, commentaires, positions clés) n'a pas laissé assez de place
-  // pour un diagramme lisible — possible depuis l'ajout des positions clés ci-dessus.
+  // Plus de diagramme de position finale automatique : seuls les diagrammes explicitement
+  // insérés par l'utilisateur sur des coups précis apparaissent dans ce PDF (retour Mickaël).
+  // Footer ancré en bas de la DERNIÈRE page utilisée (marque + date) — nouvelle page si ce
+  // qui précède n'a pas laissé assez de place pour lui.
   const footerH = 26;
   const footerY = pageH - margin + 6;
-  if (y + 10 + 140 > pageH - margin - footerH) { doc.addPage(); fillPage(); y = margin; }
-  const diagramZoneTop = y + 10;
-  const diagramZoneBottom = pageH - margin - footerH;
-  const diagramZoneH = Math.max(80, diagramZoneBottom - diagramZoneTop);
-  const labelH = 18;
-  // Taille carrée = tout ce qui reste en hauteur (moins la place du label), plafonnée par la
-  // largeur de contenu — jamais collée en haut de sa zone : centrée verticalement dans
-  // l'espace disponible, pour que le "surplus" éventuel (partie courte, peu de coups) se
-  // répartisse en marge au-dessus ET en dessous plutôt qu'en un seul grand vide (l'ancien
-  // symptôme, aggravé par le fond sombre qui le rendait très visible).
-  const diagramSize = Math.max(120, Math.min(contentW, diagramZoneH - labelH));
-  const blockH = labelH + diagramSize;
-  const blockTop = diagramZoneTop + Math.max(0, (diagramZoneH - blockH) / 2);
-
-  // Label "Trait aux Blancs/Noirs" plutôt que "Position finale" : indique à qui de jouer
-  // dans cette position, avec une petite pastille de la couleur au trait pour que ce soit un
-  // vrai élément visuel mis en valeur, pas juste du texte (retour Mickäel). Parité du nombre
-  // de coups joués : les Blancs ouvrent toujours la partie, donc un nombre pair de demi-coups
-  // ramène le trait aux Blancs.
-  const finalSideToMove = moves.length % 2 === 0 ? WHITE : BLACK;
-  const turnLabel = `Trait aux ${finalSideToMove === WHITE ? 'Blancs' : 'Noirs'}`;
-  const labelBaseline = blockTop + 11;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  const dotR = 4.5;
-  const dotGap = 7;
-  const labelW = doc.getTextWidth(turnLabel);
-  const groupX = pageW / 2 - (dotR * 2 + dotGap + labelW) / 2;
-  const dotCx = groupX + dotR;
-  // Décalage vertical réduit par rapport au centre optique du texte (retour Mickaël :
-  // pastille perçue légèrement trop haute) — Helvetica bold 11pt : ~2.6pt sous la baseline.
-  const dotCy = labelBaseline - 2.6;
-  doc.setDrawColor(INK);
-  doc.setLineWidth(0.8);
-  if (finalSideToMove === WHITE) doc.setFillColor('#ffffff');
-  else doc.setFillColor(INK);
-  doc.circle(dotCx, dotCy, dotR, 'FD');
-  doc.setTextColor(ACCENT);
-  doc.text(turnLabel, groupX + dotR * 2 + dotGap, labelBaseline);
-  const diagramDataUrl = boardImageDataUrlAtFinalPosition();
-  const diagramX = (pageW - diagramSize) / 2;
-  const diagramY = blockTop + labelH;
-  doc.addImage(diagramDataUrl, 'PNG', diagramX, diagramY, diagramSize, diagramSize);
-  doc.setDrawColor(RULE);
-  doc.setLineWidth(1);
-  doc.rect(diagramX, diagramY, diagramSize, diagramSize);
+  if (y + 10 > pageH - margin - footerH) { doc.addPage(); fillPage(); }
 
   // --- pied de page ---
   doc.setFont('helvetica', 'normal');
