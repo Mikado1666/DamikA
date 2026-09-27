@@ -26,9 +26,9 @@ Appli de jeu de dames internationales (10x10), gratuite, fluide et rapide, jouab
   - Prise multiple obligatoire. ✅ implémenté
   - La grande prise (maximiser le nombre de pièces prises). ✅ implémenté
   - Dame volante (déplacement sur toute la diagonale, capture à distance). ✅ implémenté
-- Promotion en cours de prise (un pion qui atteint la dernière rangée pendant une rafle devient dame et continue si une suite existe). ✅ implémenté
+- Promotion en cours de prise (un pion qui atteint la dernière rangée pendant une rafle ne devient dame que s'il s'y arrête à la fin de la séquence ; s'il continue à capturer au-delà, il reste un simple pion — portée normale, pas de dame volante — pour la suite du coup). ✅ implémenté et corrigé (bug confirmé par un cas réel : le pion restait promu de façon permanente même quand la rafle continuait au-delà de la dernière rangée ; testé sur les deux cas — arrêt effectif sur la dernière rangée → promotion, traversée sans arrêt → reste pion).
 - Pas de variantes autres prévues pour la V1.
-- Référence officielle : règlement FMJD. Le moteur (`js/engine/rules.js`) est correct sur les cas structurels relus dans le code (grande prise par comptage de pièces, dame volante, promotion en cours de rafle qui fait continuer la capture avec la portée d'une dame) mais **n'a fait l'objet d'aucune suite de tests automatisée ni d'une revue exhaustive contre le règlement complet** — Mickaël doit continuer à tester des positions réelles. Point resté en particulier non tranché explicitement : l'interprétation retenue (une pièce promue en cours de rafle continue à capturer comme une dame dans le même coup) est la plus courante côté FMJD mais reste un point disputé selon les fédérations/logiciels — à confirmer sur quelques positions officielles.
+- Référence officielle : règlement FMJD. Le moteur (`js/engine/rules.js`) est correct sur les cas structurels relus dans le code (grande prise par comptage de pièces, dame volante, promotion en cours de rafle uniquement si le pion s'y arrête) mais **n'a fait l'objet d'aucune suite de tests automatisée ni d'une revue exhaustive contre le règlement complet** — Mickaël doit continuer à tester des positions réelles.
 
 ## 4. Fonctionnalités V1 — "Liseuse" (priorité : visuel parfait, zéro bug)
 
@@ -106,8 +106,9 @@ La flèche visuelle, elle, trace toujours le chemin complet quelle que soit la n
    - Persistance du thème de damier et du style de pion choisis (revient au défaut à chaque F5).
    - Packs de sons personnalisés (un seul pack pour l'instant).
    - Molette absente de l'écran d'aide (`?`).
-   - Une passe de test FMJD plus systématique (pas de suite de tests automatisée), en
-     particulier sur la promotion en cours de rafle (cf. section 3).
+   - Une passe de test FMJD plus systématique (toujours pas de suite de tests automatisée,
+     cf. section 3) — le bug de promotion en cours de rafle signalé par un cas réel est
+     corrigé, mais aucun autre point du règlement n'a été confronté à des positions réelles.
    - Validation en conditions réelles des tout derniers chantiers (annotations, recherche/tri
      Bibliothèque, durée de flèche, taille des pions) — codés et vérifiés statiquement, pas
      encore testés dans un vrai navigateur par Mickaël.
