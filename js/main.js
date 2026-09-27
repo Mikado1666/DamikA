@@ -7,16 +7,14 @@ import { loadGameFromPdn } from './pdn/loader.js';
 import { serializeToPdn, serializeToTxt, serializeLibraryToPdn } from './pdn/serializer.js';
 import { saveLibraryState, loadLibraryState } from './pdn/storage.js';
 
-// --- thème d'interface (clair/sombre) --------------------------------------------------
-// TEMPORAIRE (chantier thème clair, cf. CLAUDE.md) : appliqué AVANT la construction du
-// BoardRenderer pour que sa première lecture de couleurs (getComputedStyle(), cf.
-// board.js) tombe déjà sur le bon thème plutôt que sur le sombre par défaut suivi d'un
-// flash au premier rendu.
+// --- thème d'interface (clair/sombre, toggle) -------------------------------------------
+// Persisté en localStorage ; appliqué AVANT la construction du BoardRenderer pour que sa
+// première lecture de couleurs (getComputedStyle(), cf. board.js) tombe déjà sur le bon
+// thème plutôt que sur le sombre par défaut suivi d'un flash au premier rendu.
 const UI_THEME_KEY = 'damika:ui-theme';
-const UI_THEMES = ['dark', 'light-1', 'light-2', 'light-3'];
-let uiTheme = UI_THEMES.includes(localStorage.getItem(UI_THEME_KEY)) ? localStorage.getItem(UI_THEME_KEY) : 'dark';
-if (uiTheme === 'dark') delete document.documentElement.dataset.theme;
-else document.documentElement.dataset.theme = uiTheme;
+let uiTheme = localStorage.getItem(UI_THEME_KEY) === 'light' ? 'light' : 'dark';
+if (uiTheme === 'light') document.documentElement.dataset.theme = 'light';
+else delete document.documentElement.dataset.theme;
 
 let game = new DraughtsGame();
 const canvas = document.getElementById('board-canvas');
@@ -265,7 +263,7 @@ const el = {
   btnUndo: document.getElementById('btn-undo'),
   btnRedo: document.getElementById('btn-redo'),
   btnFlip: document.getElementById('btn-flip'),
-  uiThemeSelect: document.getElementById('ui-theme-select'),
+  btnUiTheme: document.getElementById('btn-ui-theme'),
   btnMute: document.getElementById('btn-mute'),
   soundControl: document.getElementById('sound-control'),
   soundVolumeSlider: document.getElementById('sound-volume-slider'),
@@ -835,14 +833,19 @@ function toggleFlip() {
 }
 el.btnFlip.addEventListener('click', toggleFlip);
 
-// --- thème d'interface (suite, cf. UI_THEME_KEY tout en haut) : sélecteur temporaire -------
-el.uiThemeSelect.value = uiTheme;
-el.uiThemeSelect.addEventListener('change', () => {
-  uiTheme = el.uiThemeSelect.value;
+// --- thème d'interface (suite, cf. UI_THEME_KEY tout en haut) : toggle sombre/clair --------
+function syncUiThemeButton() {
+  el.btnUiTheme.textContent = uiTheme === 'light' ? '☀️' : '🌙';
+  el.btnUiTheme.title = uiTheme === 'light' ? 'Passer au thème sombre' : 'Passer au thème clair';
+}
+syncUiThemeButton();
+el.btnUiTheme.addEventListener('click', () => {
+  uiTheme = uiTheme === 'light' ? 'dark' : 'light';
   localStorage.setItem(UI_THEME_KEY, uiTheme);
-  if (uiTheme === 'dark') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = uiTheme;
+  if (uiTheme === 'light') document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
   renderer.applyUiTheme();
+  syncUiThemeButton();
 });
 
 // --- mute (état persisté en localStorage, cf. `soundMuted`/SOUND_MUTE_KEY plus haut) --------
