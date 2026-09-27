@@ -192,7 +192,18 @@
           <span id="speed-value">×1</span>
         </label>
         <div class="ctrl-sep"></div>
-        <button id="btn-toggle-arrow" class="ctrl-btn" title="Afficher/masquer la flèche du dernier coup">➜</button>
+        <div class="arrow-control" id="arrow-control">
+          <button id="btn-toggle-arrow" class="ctrl-btn" title="Afficher/masquer la flèche du dernier coup">➜</button>
+          <div class="arrow-popover" id="arrow-popover">
+            <div class="arrow-popover-inner">
+              <span class="arrow-popover-label">Durée</span>
+              <button type="button" class="arrow-duration-btn" data-duration="0">Permanente</button>
+              <button type="button" class="arrow-duration-btn" data-duration="2">2s</button>
+              <button type="button" class="arrow-duration-btn" data-duration="3">3s</button>
+              <button type="button" class="arrow-duration-btn" data-duration="5">5s</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

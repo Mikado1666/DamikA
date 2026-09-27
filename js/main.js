@@ -49,6 +49,12 @@ const soundPools = Object.fromEntries(Object.entries(SOUND_FILES).map(([name, sr
 }));
 const SOUND_MUTE_KEY = 'damika:sound-muted';
 const SOUND_VOLUME_KEY = 'damika:sound-volume';
+// Durée d'affichage de la flèche du dernier coup : 0 = permanente (comportement historique,
+// reste affichée jusqu'au coup suivant), sinon un nombre de secondes après lequel elle
+// s'efface automatiquement (cf. scheduleArrowHideTimer()).
+const ARROW_DURATION_KEY = 'damika:arrow-duration';
+let arrowDurationSec = Number(localStorage.getItem(ARROW_DURATION_KEY)) || 0;
+let arrowHideTimer = null;
 let soundMuted = localStorage.getItem(SOUND_MUTE_KEY) === '1';
 // Volume 0..1, persisté en pourcentage entier (0-100) — plus lisible en localStorage/devtools
 // qu'un flottant. 0.35 par défaut (raisonnable, pas agressif — demande explicite de Mickaël)
@@ -372,6 +378,7 @@ const el = {
   speedSlider: document.getElementById('speed-slider'),
   speedValue: document.getElementById('speed-value'),
   btnToggleArrow: document.getElementById('btn-toggle-arrow'),
+  arrowDurationBtns: document.querySelectorAll('.arrow-duration-btn'),
   easterEgg: document.getElementById('easter-egg'),
   brand: document.querySelector('.brand'),
   fileInput: document.getElementById('pdn-file-input'),
@@ -562,6 +569,7 @@ function renderBoardState() {
     mandatorySquares,
     lastMove,
   });
+  scheduleArrowHideTimer();
 }
 
 function renderMoveList() {
@@ -980,6 +988,44 @@ el.btnToggleArrow.addEventListener('click', () => {
   renderer.render();
 });
 el.btnToggleArrow.classList.toggle('active', renderer.showArrow);
+
+// --- durée d'affichage de la flèche (popover révélé au survol de btn-toggle-arrow) ---------
+// Le minuteur (re)démarre à chaque nouveau `lastMove` (cf. scheduleArrowHideTimer(), appelé
+// depuis renderBoardState() à chaque coup joué/annulé/navigué) — jamais ici : ce bloc ne fait
+// que lire/écrire la préférence de durée elle-même.
+function syncArrowDurationButtons() {
+  el.arrowDurationBtns.forEach((btn) => {
+    btn.classList.toggle('active', Number(btn.dataset.duration) === arrowDurationSec);
+  });
+}
+function setArrowDuration(sec) {
+  arrowDurationSec = sec;
+  localStorage.setItem(ARROW_DURATION_KEY, String(sec));
+  syncArrowDurationButtons();
+  scheduleArrowHideTimer();
+}
+el.arrowDurationBtns.forEach((btn) => {
+  btn.addEventListener('click', () => setArrowDuration(Number(btn.dataset.duration)));
+});
+syncArrowDurationButtons();
+
+// (Re)démarre le minuteur d'extinction de la flèche pour le `lastMove` courant de `renderer`
+// (déjà posé par renderBoardState() juste avant cet appel). Une durée "Permanente" (0) ou
+// l'absence de dernier coup annule simplement tout minuteur en attente.
+function scheduleArrowHideTimer() {
+  clearTimeout(arrowHideTimer);
+  // Toujours réarmé à false ici puis redessiné : le coup précédent peut avoir laissé
+  // `arrowHiddenByTimer` à true (son propre minuteur déjà écoulé), ce qui ferait manquer la
+  // flèche du nouveau coup si on ne la redessinait qu'au prochain minuteur.
+  renderer.arrowHiddenByTimer = false;
+  renderer.render();
+  if (arrowDurationSec > 0 && renderer.lastMove) {
+    arrowHideTimer = setTimeout(() => {
+      renderer.arrowHiddenByTimer = true;
+      renderer.render();
+    }, arrowDurationSec * 1000);
+  }
+}
 
 // --- flip / plein écran -----------------------------------------------------------
 let flipped = false;
