@@ -1301,8 +1301,17 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
     // l'utilisateur édite le champ pendant que le plateau est retourné, il faut ré-inverser
     // avant d'écrire dans `headers.Result`, qui reste toujours au format PDN "Blancs-Noirs".
     if (key === 'Result' && flipped) val = reverseScoreText(val);
-    if (!isUntouchedPlayerName && !isUntouchedDate) {
-      if (val && val !== '—') headers[key] = val;
+    // Un simple clic dans un champ suivi d'un blur SANS frappe (ex. cliquer pour vérifier
+    // une valeur, puis changer de partie active en Bibliothèque) ne doit PAS marquer
+    // l'entrée modifiée — seule une vraie divergence de valeur compte (retour Mickaël :
+    // le pill "modifications non enregistrées" apparaissait à tort en changeant juste de
+    // partie active, sans rien éditer). `changed` compare la valeur normalisée à celle déjà
+    // stockée AVANT toute mutation de `headers`.
+    const prevVal = headers[key];
+    const nextVal = (val && val !== '—') ? val : undefined;
+    const changed = !isUntouchedPlayerName && !isUntouchedDate && nextVal !== prevVal;
+    if (changed) {
+      if (nextVal !== undefined) headers[key] = nextVal;
       else delete headers[key];
     }
     syncHeaderFieldsFromState();
@@ -1313,7 +1322,7 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
     // (entrée active), on ne marque plus `libraryDirty` ici : `markActiveEntryDirty()` diffère
     // l'écriture jusqu'à "Enregistrer"/Ctrl+S (cf. activeEntryDirty) — seule une saisie pure
     // (aucune entrée active) continue d'auto-sauvegarder comme avant.
-    if (libraryActiveIndex >= 0) {
+    if (libraryActiveIndex >= 0 && changed) {
       markActiveEntryDirty();
       renderLibrary();
     }
