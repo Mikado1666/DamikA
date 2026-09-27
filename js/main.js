@@ -320,6 +320,7 @@ const el = {
   btnRevertEntry: document.getElementById('btn-revert-entry'),
   commentPopover: document.getElementById('move-comment-popover'),
   commentTextarea: document.getElementById('move-comment-input'),
+  commentDiagramCheckbox: document.getElementById('move-comment-diagram'),
   commentCloseBtn: document.getElementById('move-comment-close'),
   libraryFileInput: document.getElementById('library-file-input'),
   toast: document.getElementById('toast'),
@@ -521,9 +522,21 @@ function emptyPly() {
 // --- commentaire de coup (A3) : popover flottant, pas de bloc permanent sous la liste ------
 let commentPopoverIdx = null;
 
+// Marqueur "ce coup a un diagramme à inclure dans l'export PDF" (case à cocher du popover,
+// cf. exportGamePdf()) — encodé comme un suffixe dans le texte du commentaire lui-même
+// plutôt qu'un champ de données séparé : round-trip PDN/bibliothèque gratuit (le
+// commentaire est déjà persisté tel quel partout, cf. currentGameAsLibraryEntry(),
+// serializeToPdn...), aucun schéma/format à faire évoluer. Retiré à l'affichage dans le
+// textarea, ré-ajouté à la fermeture si la case est cochée.
+const DIAGRAM_MARKER = '\n[diagramme]';
+function stripDiagramMarker(text) { return text.endsWith(DIAGRAM_MARKER) ? text.slice(0, -DIAGRAM_MARKER.length) : text; }
+function hasDiagramMarker(text) { return !!text && text.endsWith(DIAGRAM_MARKER); }
+
 function openCommentPopover(idx, anchorEl) {
   commentPopoverIdx = idx;
-  el.commentTextarea.value = game.getCommentAt(idx) || '';
+  const raw = game.getCommentAt(idx) || '';
+  el.commentTextarea.value = stripDiagramMarker(raw);
+  el.commentDiagramCheckbox.checked = hasDiagramMarker(raw);
   el.commentPopover.hidden = false;
   const rect = anchorEl.getBoundingClientRect();
   const popRect = el.commentPopover.getBoundingClientRect();
@@ -539,7 +552,9 @@ function openCommentPopover(idx, anchorEl) {
 function closeCommentPopover(commit) {
   if (el.commentPopover.hidden) return;
   if (commit && commentPopoverIdx != null) {
-    game.setCommentAt(commentPopoverIdx, el.commentTextarea.value.trim());
+    const text = el.commentTextarea.value.trim();
+    const comment = el.commentDiagramCheckbox.checked ? `${text}${DIAGRAM_MARKER}` : text;
+    game.setCommentAt(commentPopoverIdx, comment);
     markActiveEntryDirty();
     scheduleSave();
     renderMoveList();
@@ -555,7 +570,13 @@ el.commentTextarea.addEventListener('keydown', (e) => {
   e.stopPropagation();
   if (e.key === 'Escape') { e.preventDefault(); closeCommentPopover(false); }
 });
-el.commentTextarea.addEventListener('blur', () => closeCommentPopover(true));
+el.commentTextarea.addEventListener('blur', (e) => {
+  // Un clic sur la case à cocher juste en dessous déplace le focus DANS le même popover —
+  // ne pas fermer/committer dans ce cas (sinon la case n'est jamais atteignable au clic,
+  // son propre mousedown déclenchant ce blur avant que 'change' ne se produise).
+  if (e.relatedTarget && el.commentPopover.contains(e.relatedTarget)) return;
+  closeCommentPopover(true);
+});
 el.commentCloseBtn.addEventListener('click', () => closeCommentPopover(true));
 
 function jumpToPly(targetIdx) {
@@ -2469,10 +2490,13 @@ async function exportBoardImage(format = 'png') {
 // façon synchrone (pas d'animation, cf. son implémentation) donc dans la même frame que le
 // reste de cette fonction — le navigateur ne peint jamais l'état intermédiaire, aucun
 // flash visible pour l'utilisateur.
-function boardImageDataUrlAtFinalPosition() {
+// `targetIdx` : index "dernier coup joué" au sens de jumpToPly() (history.length-1 une fois
+// ce coup joué) — généralisée pour aussi capturer un diagramme "à la volée" sur un coup
+// annoté précis (cf. exportGamePdf(), section "Positions clés"), pas seulement la position
+// finale.
+function boardImageDataUrlAtPly(targetIdx) {
   const originalIdx = game.history.length - 1;
-  const finalIdx = fullMoveList(game).length - 1;
-  if (finalIdx !== originalIdx) jumpToPly(finalIdx);
+  if (targetIdx !== originalIdx) jumpToPly(targetIdx);
   // Flèche du dernier coup masquée ici aussi (export "propre", sans annotation, même
   // demande que pour l'export Image — retour Mickaël) : basculée le temps de la capture,
   // restaurée juste après, comme dans exportBoardImage().
@@ -2482,8 +2506,11 @@ function boardImageDataUrlAtFinalPosition() {
   const dataUrl = renderer.canvas.toDataURL('image/png');
   renderer.showArrow = originalShowArrow;
   renderer.render();
-  if (finalIdx !== originalIdx) jumpToPly(originalIdx);
+  if (targetIdx !== originalIdx) jumpToPly(originalIdx);
   return dataUrl;
+}
+function boardImageDataUrlAtFinalPosition() {
+  return boardImageDataUrlAtPly(fullMoveList(game).length - 1);
 }
 
 // PDF complet : page de garde + notation intégrale (2 colonnes Blancs/Noirs, commentaires
@@ -2519,8 +2546,11 @@ function exportGamePdf() {
   const WHITE_MOVE = INK;
   const BLACK_MOVE = '#7a3418';
 
-  doc.setFillColor(PAPER);
-  doc.rect(0, 0, pageW, pageH, 'F');
+  function fillPage() {
+    doc.setFillColor(PAPER);
+    doc.rect(0, 0, pageW, pageH, 'F');
+  }
+  fillPage();
 
   const meta = matchMetaLines();
 
@@ -2558,8 +2588,16 @@ function exportGamePdf() {
   // --- notation : grille en plusieurs colonnes, resserrée selon la longueur de la partie --
   const pairs = [];
   for (let i = 0; i < moves.length; i += 2) pairs.push([moves[i], moves[i + 1]]);
+  // Coups avec un commentaire "diagramme" coché (cf. DIAGRAM_MARKER) traités à part, dans
+  // leur propre section illustrée plus bas — pas dans la liste compacte ci-dessous, pour ne
+  // pas les afficher deux fois.
   const comments = [];
-  moves.forEach((mv, idx) => { if (mv.comment) comments.push({ n: idx + 1, text: mv.comment }); });
+  const diagramMoves = [];
+  moves.forEach((mv, idx) => {
+    if (!mv.comment) return;
+    if (hasDiagramMarker(mv.comment)) diagramMoves.push({ n: idx + 1, mv, text: stripDiagramMarker(mv.comment) });
+    else comments.push({ n: idx + 1, text: mv.comment });
+  });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
@@ -2621,11 +2659,60 @@ function exportGamePdf() {
     y += 6;
   }
 
+  // --- positions clés : un diagramme "à la volée" par coup annoté (case cochée dans le
+  // popover de commentaire) — illustre une position précise en cours de partie, pas
+  // seulement la position finale (retour Mickaël). Chaque carte (repère du coup + commentaire
+  // + diagramme) passe à la page suivante si elle ne tient pas dans l'espace restant, plutôt
+  // que de la couper ; une partie sans coup annoté ainsi ne voit strictement rien changer ici
+  // (le document reste sur une seule page comme avant).
+  if (diagramMoves.length) {
+    const cardDiagramSize = Math.min(170, contentW);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(ACCENT);
+    doc.text('POSITIONS CLÉS', margin, y);
+    y += 18;
+
+    for (const { n, mv, text } of diagramMoves) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      const wrapped = text ? doc.splitTextToSize(text, contentW) : [];
+      const cardH = 15 + wrapped.length * 11 + (wrapped.length ? 6 : 0) + cardDiagramSize + 10 + 18;
+      if (y + cardH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(ACCENT);
+      doc.text(`Coup ${n} — ${moveNotation(mv)}`, margin, y);
+      y += 15;
+
+      if (wrapped.length) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8.5);
+        doc.setTextColor(INK_MUTED);
+        for (const wline of wrapped) { doc.text(wline, margin, y); y += 11; }
+        y += 6;
+      }
+
+      const cardDiagramUrl = boardImageDataUrlAtPly(n - 1);
+      const cardDiagramX = (pageW - cardDiagramSize) / 2;
+      doc.addImage(cardDiagramUrl, 'PNG', cardDiagramX, y, cardDiagramSize, cardDiagramSize);
+      doc.setDrawColor(RULE);
+      doc.setLineWidth(1);
+      doc.rect(cardDiagramX, y, cardDiagramSize, cardDiagramSize);
+      y += cardDiagramSize + 18;
+    }
+  }
+
   // --- diagramme de la position finale -----------------------------------------------------
   // Footer ancré en bas de page (marque + date), qui réserve sa propre place : évite qu'un
-  // grand vide résiduel s'accumule tout en bas de la page sous le diagramme.
+  // grand vide résiduel s'accumule tout en bas de la page sous le diagramme. Nouvelle page si
+  // ce qui précède (notation, commentaires, positions clés) n'a pas laissé assez de place
+  // pour un diagramme lisible — possible depuis l'ajout des positions clés ci-dessus.
   const footerH = 26;
   const footerY = pageH - margin + 6;
+  if (y + 10 + 140 > pageH - margin - footerH) { doc.addPage(); fillPage(); y = margin; }
   const diagramZoneTop = y + 10;
   const diagramZoneBottom = pageH - margin - footerH;
   const diagramZoneH = Math.max(80, diagramZoneBottom - diagramZoneTop);
@@ -2654,7 +2741,9 @@ function exportGamePdf() {
   const labelW = doc.getTextWidth(turnLabel);
   const groupX = pageW / 2 - (dotR * 2 + dotGap + labelW) / 2;
   const dotCx = groupX + dotR;
-  const dotCy = labelBaseline - 3.5;
+  // Décalage vertical réduit par rapport au centre optique du texte (retour Mickaël :
+  // pastille perçue légèrement trop haute) — Helvetica bold 11pt : ~2.6pt sous la baseline.
+  const dotCy = labelBaseline - 2.6;
   doc.setDrawColor(INK);
   doc.setLineWidth(0.8);
   if (finalSideToMove === WHITE) doc.setFillColor('#ffffff');
