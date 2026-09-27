@@ -21,6 +21,9 @@
   --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
 
+  /* Dégradé du logo "DamikA" (.brand-name) */
+  --brand-gradient: linear-gradient(180deg, #ffe9c2 0%, #e0ab5c 35%, #8a5a24 55%, #f0c887 62%, #4a2f10 100%);
+
   /* Header (fond du bandeau du haut) */
   --header-grad-1: #1c150e;
   --header-grad-2: #17110b;
@@ -51,89 +54,10 @@
   --gold-chip: #d4af69;
 }
 
-/* ---------- Thème clair — variante 1 "Chêne clair" (crème/beige, bronze) -----------------
-   TEMPORAIRE : 3 variantes cohabitent derrière le sélecteur du bandeau (main.js) le temps
-   de choisir — cf. CLAUDE.md. Une fois le choix fait, retirer les 2 variantes non retenues
-   et renommer celle gardée en `[data-theme="light"]`. */
-:root[data-theme="light-1"] {
-  --bg-0: #f3ead9;
-  --bg-1: #ede0c8;
-  --bg-2: #e4d3b2;
-  --panel: #f8f1e3;
-  --panel-border: #d9c6a0;
-  --text-0: #2e2013;
-  --text-1: #5b4a34;
-  --text-2: #8a7a62;
-  --gold: #a97729;
-  --gold-soft: rgba(169, 119, 41, 0.16);
-  --gold-dim: #7a5a25;
-  --accent-white: #2e2013;
-  --accent-black: #f8f1e3;
-  --success: #2f8a5e;
-  --danger: #b6432f;
-  --shadow-panel: 0 8px 24px rgba(90, 60, 30, 0.18);
-  color-scheme: light;
-
-  --header-grad-1: #efe3c9;
-  --header-grad-2: #e6d5b3;
-
-  --board-frame-1: #8a5f34;
-  --board-frame-2: #5e3d1f;
-  --board-frame-border: rgba(122, 90, 37, 0.45);
-  --board-light: #f1e3c4;
-  --board-dark: #b98a4a;
-  --board-dark-hl: #d1a15c;
-  --coord-text: rgba(60, 42, 20, 0.65);
-  --select-stroke: #c98a1f;
-  --select-glow: rgba(201, 138, 31, 0.55);
-  --mandatory-color: 200, 90, 10;
-  --target-color: rgba(40, 150, 110, 0.6);
-  --arrow-color: #1f7fb0;
-  --black-name-accent: #8a5a25;
-  --gold-chip: #d1a13f;
-}
-
-/* ---------- Thème clair — variante 2 "Ivoire tournoi" (ivoire/gris chaud, plus neutre) --- */
-:root[data-theme="light-2"] {
-  --bg-0: #ece6da;
-  --bg-1: #e4ddcb;
-  --bg-2: #dbd1b8;
-  --panel: #f2ecdf;
-  --panel-border: #cabf9e;
-  --text-0: #2b2620;
-  --text-1: #55503f;
-  --text-2: #837d66;
-  --gold: #b08a3e;
-  --gold-soft: rgba(176, 138, 62, 0.16);
-  --gold-dim: #8a6a2c;
-  --accent-white: #2b2620;
-  --accent-black: #f2ecdf;
-  --success: #3a8a63;
-  --danger: #ab4632;
-  --shadow-panel: 0 8px 24px rgba(60, 52, 36, 0.16);
-  color-scheme: light;
-
-  --header-grad-1: #e9e2d1;
-  --header-grad-2: #ddd4bc;
-
-  --board-frame-1: #4f4636;
-  --board-frame-2: #332c20;
-  --board-frame-border: rgba(90, 78, 52, 0.45);
-  --board-light: #e9e2d0;
-  --board-dark: #9c8a63;
-  --board-dark-hl: #b8a375;
-  --coord-text: rgba(50, 44, 30, 0.65);
-  --select-stroke: #caa23f;
-  --select-glow: rgba(202, 162, 63, 0.55);
-  --mandatory-color: 185, 100, 30;
-  --target-color: rgba(45, 130, 120, 0.55);
-  --arrow-color: #3a7ea8;
-  --black-name-accent: #7c6a3a;
-  --gold-chip: #c9a24a;
-}
-
-/* ---------- Thème clair — variante 3 "Miel doré" (plus saturé, caramel/miel) ------------- */
-:root[data-theme="light-3"] {
+/* ---------- Thème clair "Miel doré" (caramel/miel) ---------------------------------------
+   Toggle Sombre/Clair dans le bandeau (main.js), persisté dans localStorage. Le thème sombre
+   ci-dessus reste le défaut. */
+:root[data-theme="light"] {
   --bg-0: #f6e9cf;
   --bg-1: #f0dbae;
   --bg-2: #e6c88c;
@@ -151,6 +75,12 @@
   --danger: #b6432f;
   --shadow-panel: 0 8px 24px rgba(110, 70, 20, 0.2);
   color-scheme: light;
+
+  /* Dégradé du logo assombri spécifiquement pour ce thème : la version bronze/doré du
+     thème sombre (tons clairs #ffe9c2/#f0c887) se fond dans le fond miel/caramel une fois
+     ce thème actif (retour Mickaël) — mêmes teintes bronze, mais nettement plus sombres,
+     pour rester lisibles sur ce fond clair (pas de contour ni d'ombre portée). */
+  --brand-gradient: linear-gradient(180deg, #6b4310 0%, #4a2f0c 35%, #241505 55%, #5a3a12 62%, #150c03 100%);
 
   --header-grad-1: #f2e2b8;
   --header-grad-2: #e8cd94;
@@ -250,7 +180,7 @@ body {
   font-size: 30px;
   line-height: 0.72;
   letter-spacing: normal;
-  background-image: linear-gradient(180deg, #ffe9c2 0%, #e0ab5c 35%, #8a5a24 55%, #f0c887 62%, #4a2f10 100%);
+  background-image: var(--brand-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -279,18 +209,6 @@ body {
   border-color: var(--gold);
 }
 
-/* TEMPORAIRE — sélecteur de comparaison des variantes de thème clair (cf. index.html). */
-.ui-theme-select {
-  height: 42px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--panel-border);
-  background: var(--bg-2);
-  color: var(--text-1);
-  font-size: 13px;
-  padding: 0 8px;
-  cursor: pointer;
-}
-.ui-theme-select:hover, .ui-theme-select:focus { border-color: var(--gold); color: var(--gold); }
 
 .action-btn {
   height: 42px;
