@@ -2582,9 +2582,14 @@ function exportGamePdf() {
   y += 22;
 
   // --- notation --------------------------------------------------------------------------
+  // Vraie table à colonnes indépendantes (façon journal : colonne 1 de haut en bas, puis
+  // colonne 2 reprend en haut de page à côté) — une paire annotée fait grandir SA ligne
+  // (commentaire/diagramme insérés dessous, dans la largeur de SA colonne) sans jamais
+  // décaler les autres colonnes : chaque colonne garde son propre curseur vertical
+  // indépendant (retour Mickaël — un décalage vertical par-dessus les colonnes voisines
+  // cassait leur alignement avec le reste de la grille).
   const pairs = [];
   for (let i = 0; i < moves.length; i += 2) pairs.push([moves[i], moves[i + 1]]);
-  const hasAnyDiagram = moves.some((mv) => hasDiagramMarker(mv.comment));
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
@@ -2592,208 +2597,130 @@ function exportGamePdf() {
   doc.text('NOTATION', margin, y);
   y += 16;
 
-  // Palier (nb de paires de coups) -> colonnes/police : plus le bloc est long, plus on
+  // Palier (nb de paires de coups) -> colonnes/police : plus la partie est longue, plus on
   // resserre, jusqu'à un plancher de lisibilité à 7pt.
-  function pickTier(pairCount) {
-    const tiers = [
-      { max: 20, cols: 2, font: 10.5 },
-      { max: 32, cols: 3, font: 10 },
-      { max: 48, cols: 4, font: 9 },
-      { max: 70, cols: 5, font: 8 },
-      { max: Infinity, cols: 6, font: 7.5 },
-    ];
-    return tiers.find((t) => pairCount <= t.max);
+  const tiers = [
+    { max: 20, cols: 2, font: 10.5 },
+    { max: 32, cols: 3, font: 10 },
+    { max: 48, cols: 4, font: 9 },
+    { max: 70, cols: 5, font: 8 },
+    { max: Infinity, cols: 6, font: 7.5 },
+  ];
+  const tier = tiers.find((t) => pairs.length <= t.max);
+  const cols = tier.cols;
+  const fontSize = tier.font;
+  const lineH = fontSize + 4;
+  const colW = contentW / cols;
+  const rowsPerCol = Math.ceil(pairs.length / cols);
+  const notationTop = y;
+  const colY = new Array(cols).fill(notationTop);
+
+  // Saut de page EN BLOC (toutes les colonnes reprennent ensemble en haut de la page
+  // suivante) dès que la colonne courante manque de place — plus simple et plus lisible
+  // qu'un débordement colonne par colonne, acceptable vu que les annotations restent rares.
+  function ensureSpace(c, neededH) {
+    if (colY[c] + neededH > pageH - margin) {
+      doc.addPage();
+      fillPage();
+      for (let k = 0; k < cols; k++) colY[k] = margin;
+    }
   }
 
-  if (!hasAnyDiagram) {
-    // Cas courant (aucun diagramme à la volée) : grille compacte en plusieurs colonnes sur
-    // TOUTE la partie, commentaires éventuels (texte seul) en liste compacte à la suite —
-    // comportement inchangé, document toujours resserré sur une seule page.
-    const comments = [];
-    moves.forEach((mv, idx) => { if (mv.comment) comments.push({ n: idx + 1, text: mv.comment }); });
+  // Pastille + "Trait aux Blancs/Noirs" centrés sous un diagramme.
+  function renderTurnLabel(centerX, baselineY, side, fs) {
+    const label = `Trait aux ${side === WHITE ? 'Blancs' : 'Noirs'}`;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(fs);
+    const dotR = fs * 0.41;
+    const dotGap = fs * 0.64;
+    const labelW = doc.getTextWidth(label);
+    const groupX = centerX - (dotR * 2 + dotGap + labelW) / 2;
+    const dotCx = groupX + dotR;
+    const dotCy = baselineY - fs * 0.24;
+    doc.setDrawColor(INK);
+    doc.setLineWidth(0.8);
+    doc.setFillColor(side === WHITE ? '#ffffff' : INK);
+    doc.circle(dotCx, dotCy, dotR, 'FD');
+    doc.setTextColor(ACCENT);
+    doc.text(label, groupX + dotR * 2 + dotGap, baselineY);
+  }
 
-    const tier = pickTier(pairs.length);
-    const cols = tier.cols;
-    const fontSize = tier.font;
-    const lineH = fontSize + 4;
-    const colW = contentW / cols;
-    const rowsPerCol = Math.ceil(pairs.length / cols);
-    const notationTop = y;
+  // Commentaire (+ diagramme éventuel) inséré SOUS le coup, dans la largeur de la colonne `c`
+  // (jamais pleine page — déborderait sur la colonne voisine). `ply` = numéro 1-indexé ;
+  // boardImageDataUrlAtPly() attend l'index "dernier coup joué" façon jumpToPly (ply - 1).
+  function renderAnnotation(c, x, ply, moveInfo) {
+    const withDiagram = hasDiagramMarker(moveInfo.comment);
+    const text = withDiagram ? stripDiagramMarker(moveInfo.comment) : moveInfo.comment;
+    const annFont = Math.max(7, fontSize - 1.5);
+    const annLineH = annFont + 2.5;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(annFont);
+    const wrapped = text ? doc.splitTextToSize(text, colW - 16) : [];
+    for (const wline of wrapped) {
+      ensureSpace(c, annLineH);
+      doc.setTextColor(INK_MUTED);
+      doc.text(wline, x + 10, colY[c]);
+      colY[c] += annLineH;
+    }
+    if (withDiagram) {
+      const diagramSize = Math.max(70, Math.min(colW - 18, 150));
+      const labelFont = Math.max(6.5, fontSize - 2);
+      colY[c] += 4;
+      ensureSpace(c, diagramSize + 10 + labelFont + 8 + 20);
+      const dx = x + (colW - diagramSize) / 2;
+      const durl = boardImageDataUrlAtPly(ply - 1);
+      doc.addImage(durl, 'PNG', dx, colY[c], diagramSize, diagramSize);
+      doc.setDrawColor(RULE);
+      doc.setLineWidth(1);
+      doc.rect(dx, colY[c], diagramSize, diagramSize);
+      colY[c] += diagramSize + 12;
+      const sideToMoveHere = ply % 2 === 0 ? WHITE : BLACK;
+      renderTurnLabel(x + colW / 2, colY[c], sideToMoveHere, labelFont);
+      // Espace généreux après un diagramme (contre un coup suivant perçu "collé", retour
+      // Mickaël) ; plus modeste pour un commentaire texte seul.
+      colY[c] += 22;
+    } else {
+      colY[c] += 8;
+    }
+  }
 
+  pairs.forEach(([white, black], i) => {
+    const n = i + 1;
+    const c = Math.floor(i / rowsPerCol);
+    const x = margin + c * colW;
+    const whiteAnnotated = !!(white && white.comment);
+    const blackAnnotated = !!(black && black.comment);
+
+    ensureSpace(c, lineH);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontSize);
-    pairs.forEach(([white, black], i) => {
-      const col = Math.floor(i / rowsPerCol);
-      const row = i % rowsPerCol;
-      const x = margin + col * colW;
-      const rowY = notationTop + row * lineH;
-      doc.setTextColor(INK_MUTED);
-      doc.text(`${i + 1}.`, x, rowY);
-      doc.setTextColor(WHITE_MOVE);
-      doc.text(moveNotation(white), x + 20, rowY);
-      if (black) {
-        doc.setTextColor(BLACK_MOVE);
-        doc.text(moveNotation(black), x + colW * 0.58, rowY);
-      }
-    });
-    y = notationTop + rowsPerCol * lineH + 8;
-
-    if (comments.length) {
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(8.5);
-      doc.setTextColor(INK_MUTED);
-      for (const { n, text } of comments) {
-        const wrapped = doc.splitTextToSize(`${n}. ${text}`, contentW);
-        for (const wline of wrapped) {
-          doc.text(wline, margin, y);
-          y += 11;
-        }
-      }
-      y += 6;
+    doc.setTextColor(INK_MUTED);
+    doc.text(`${n}.`, x, colY[c]);
+    doc.setTextColor(WHITE_MOVE);
+    doc.text(moveNotation(white), x + 20, colY[c]);
+    // Noirs affichés avec les blancs sur la même ligne uniquement si les blancs ne sont pas
+    // annotés (sinon l'annotation des blancs doit s'intercaler AVANT les noirs, cf. plus bas).
+    if (black && !whiteAnnotated) {
+      doc.setTextColor(BLACK_MOVE);
+      doc.text(moveNotation(black), x + colW * 0.58, colY[c]);
     }
-  } else {
-    // Au moins un coup a un diagramme coché : commentaire(s) et diagramme(s) doivent
-    // apparaître DANS LE FLUX de la notation, juste après le coup concerné (retour Mickaël —
-    // pas regroupés à part en fin de liste). La grille multi-colonnes ne peut pas être
-    // "interrompue" proprement en cours de route (colonnes déjà positionnées d'avance) :
-    // les paires SANS annotation se regroupent quand même en mini-grilles compactes entre
-    // deux annotations (pour rester dense), mais toute paire annotée sort du flux en grille
-    // et s'affiche seule, pleine largeur, suivie immédiatement de son commentaire/diagramme.
-    function renderGridSegment(segPairs) {
-      if (!segPairs.length) return;
-      const tier = pickTier(segPairs.length);
-      const cols = Math.max(1, Math.min(tier.cols, segPairs.length));
-      const fontSize = tier.font;
-      const lineH = fontSize + 4;
-      const colW = contentW / cols;
-      const rowsPerCol = Math.ceil(segPairs.length / cols);
-      const blockH = rowsPerCol * lineH;
-      if (y + blockH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
-      const top = y;
+    colY[c] += lineH;
+
+    if (whiteAnnotated) renderAnnotation(c, x, n * 2 - 1, white);
+    if (whiteAnnotated && black) {
+      // Noirs n'ont pas pu tenir sur la ligne de départ : leur propre ligne, dans la colonne.
+      ensureSpace(c, lineH);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(fontSize);
-      segPairs.forEach(({ n, white, black }, i) => {
-        const col = Math.floor(i / rowsPerCol);
-        const row = i % rowsPerCol;
-        const x = margin + col * colW;
-        const rowY = top + row * lineH;
-        doc.setTextColor(INK_MUTED);
-        doc.text(`${n}.`, x, rowY);
-        doc.setTextColor(WHITE_MOVE);
-        doc.text(moveNotation(white), x + 20, rowY);
-        if (black) {
-          doc.setTextColor(BLACK_MOVE);
-          doc.text(moveNotation(black), x + colW * 0.58, rowY);
-        }
-      });
-      y = top + blockH + 6;
-    }
-
-    // Ligne "N. blancs" seule, avec les noirs affichés SEULEMENT s'ils ne sont pas eux-mêmes
-    // annotés (sinon leur coup doit attendre l'annotation des blancs, cf. renderPairInFlow) —
-    // sans quoi une annotation posée sur les blancs se retrouvait affichée après les noirs
-    // (retour Mickaël : l'alignement doit respecter la couleur exacte du trait annoté).
-    function renderMoveRow(n, white, black, includeBlack) {
-      if (y + 16 > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(INK_MUTED);
-      doc.text(`${n}.`, margin, y);
-      doc.setTextColor(WHITE_MOVE);
-      doc.text(moveNotation(white), margin + 22, y);
-      if (black && includeBlack) {
-        doc.setTextColor(BLACK_MOVE);
-        doc.text(moveNotation(black), margin + 90, y);
-      }
-      y += 16;
-    }
-
-    // Coup des noirs seul, sur sa propre ligne (cas où les blancs de la même paire étaient
-    // annotés : leur annotation s'est déjà affichée avant, donc les noirs n'ont pas pu tenir
-    // sur la ligne "N. blancs" de départ) — même indentation que le début d'un coup blanc,
-    // couleur noirs, sans numéro (déjà donné par la ligne blancs juste au-dessus).
-    function renderBlackOnlyRow(black) {
-      if (y + 16 > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
       doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(black), margin + 22, y);
-      y += 16;
+      doc.text(moveNotation(black), x + 20, colY[c]);
+      colY[c] += lineH;
     }
+    if (blackAnnotated) renderAnnotation(c, x, n * 2, black);
+  });
 
-    // Pastille + "Trait aux Blancs/Noirs" centrés sous un diagramme — factorisé pour être
-    // réutilisé à toute taille de police (diagrammes annotés en cours de partie, plus petits
-    // que l'ancien diagramme de position finale qui utilisait la même pastille).
-    function renderTurnLabel(centerX, baselineY, side, fontSize) {
-      const label = `Trait aux ${side === WHITE ? 'Blancs' : 'Noirs'}`;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(fontSize);
-      const dotR = fontSize * 0.41;
-      const dotGap = fontSize * 0.64;
-      const labelW = doc.getTextWidth(label);
-      const groupX = centerX - (dotR * 2 + dotGap + labelW) / 2;
-      const dotCx = groupX + dotR;
-      const dotCy = baselineY - fontSize * 0.24;
-      doc.setDrawColor(INK);
-      doc.setLineWidth(0.8);
-      doc.setFillColor(side === WHITE ? '#ffffff' : INK);
-      doc.circle(dotCx, dotCy, dotR, 'FD');
-      doc.setTextColor(ACCENT);
-      doc.text(label, groupX + dotR * 2 + dotGap, baselineY);
-    }
+  y = Math.max(...colY) + 6;
 
-    // `ply` = numéro de coup 1-indexé (même indexation que DIAGRAM_MARKER/hasDiagramMarker) ;
-    // boardImageDataUrlAtPly() attend l'index "dernier coup joué" façon jumpToPly (ply - 1).
-    // Trait affiché sous CE diagramme précis (après ce ply, pas la position finale) — parité
-    // du nombre de coups joués À CE STADE, même formule que pour l'ancien diagramme final.
-    function renderAnnotationBlock(ply, moveInfo) {
-      const withDiagram = hasDiagramMarker(moveInfo.comment);
-      const text = withDiagram ? stripDiagramMarker(moveInfo.comment) : moveInfo.comment;
-      const wrapped = text ? doc.splitTextToSize(text, contentW - 14) : [];
-      const diagramSize = withDiagram ? Math.min(170, contentW) : 0;
-      const turnLabelH = withDiagram ? 18 : 0;
-      const blockH = wrapped.length * 11 + (withDiagram ? diagramSize + 10 + turnLabelH : 0) + 8;
-      if (y + blockH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(8.5);
-      doc.setTextColor(INK_MUTED);
-      for (const wline of wrapped) { doc.text(wline, margin + 14, y); y += 11; }
-      if (withDiagram) {
-        y += 4;
-        const dx = (pageW - diagramSize) / 2;
-        const durl = boardImageDataUrlAtPly(ply - 1);
-        doc.addImage(durl, 'PNG', dx, y, diagramSize, diagramSize);
-        doc.setDrawColor(RULE);
-        doc.setLineWidth(1);
-        doc.rect(dx, y, diagramSize, diagramSize);
-        y += diagramSize + 12;
-        const sideToMoveHere = ply % 2 === 0 ? WHITE : BLACK;
-        renderTurnLabel(pageW / 2, y, sideToMoveHere, 9);
-        y += 6;
-      }
-      y += 4;
-    }
-
-    let segment = [];
-    pairs.forEach(([white, black], i) => {
-      const n = i + 1;
-      const whiteAnnotated = !!(white && white.comment);
-      const blackAnnotated = !!(black && black.comment);
-      if (!whiteAnnotated && !blackAnnotated) {
-        segment.push({ n, white, black });
-        return;
-      }
-      renderGridSegment(segment);
-      segment = [];
-      // Noirs affichés avec les blancs sur la même ligne uniquement si les blancs ne sont
-      // pas annotés (sinon l'annotation des blancs doit s'intercaler AVANT les noirs).
-      renderMoveRow(n, white, black, !whiteAnnotated);
-      if (whiteAnnotated) renderAnnotationBlock(n * 2 - 1, white);
-      if (whiteAnnotated && black) renderBlackOnlyRow(black);
-      if (blackAnnotated) renderAnnotationBlock(n * 2, black);
-    });
-    renderGridSegment(segment);
-  }
   // Plus de diagramme de position finale automatique : seuls les diagrammes explicitement
   // insérés par l'utilisateur sur des coups précis apparaissent dans ce PDF (retour Mickaël).
   // Footer ancré en bas de la DERNIÈRE page utilisée (marque + date) — nouvelle page si ce
