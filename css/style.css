@@ -871,6 +871,42 @@ body {
 }
 .library-empty[hidden] { display: none; }
 
+/* Recherche + tri : une ligne au-dessus des filtres, même famille visuelle (fond --bg-2,
+   bordure --panel-border, dorée au focus) que les autres champs du panneau. */
+.library-search-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 7px 8px;
+  flex-shrink: 0;
+}
+.library-search-row[hidden] { display: none; }
+.library-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--bg-2);
+  color: var(--text-0);
+  font-size: 13px;
+  font-family: inherit;
+}
+.library-search-input::placeholder { color: var(--text-2); }
+.library-search-input:focus { outline: none; border-color: var(--gold); }
+.library-sort-select {
+  flex-shrink: 0;
+  max-width: 42%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.library-sort-select:focus { outline: none; border-color: var(--gold); }
+
 /* Filtres Toutes/Récentes/Favoris : mêmes pastilles que .panel-tab (fond --gold-soft, texte
    --gold à l'état actif), en plus compact pour tenir sur une seule ligne dans le panneau. */
 .library-filters {
