@@ -567,6 +567,21 @@ body {
 }
 .confirm-ok-btn:hover { background: var(--danger); color: var(--accent-white); }
 
+/* ---------- Modale de choix du format d'image (export PNG/JPEG) — même overlay/boîte que
+   la confirmation générique ci-dessus, mais action non destructrice : bouton dans les tons
+   or plutôt que rouge danger. ---------- */
+.export-image-format-row {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 18px;
+  color: var(--text-1);
+  font-size: 14px;
+}
+.export-image-format-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.export-image-format-row input[type="radio"] { accent-color: var(--gold); cursor: pointer; }
+#export-image-ok { border-color: var(--gold); color: var(--gold); }
+#export-image-ok:hover { background: var(--gold); color: #241a0d; }
+
 /* ---------- Modale de partage (lien + QR code) — même overlay que la modale de
    confirmation ci-dessus, juste un contenu plus large pour accueillir le champ lien et le
    QR code. Le QR lui-même reste sur fond BLANC (`.share-qr`) même en thème sombre : un QR
