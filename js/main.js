@@ -2585,19 +2585,10 @@ function exportGamePdf() {
   doc.line(margin, y, pageW - margin, y);
   y += 22;
 
-  // --- notation : grille en plusieurs colonnes, resserrée selon la longueur de la partie --
+  // --- notation --------------------------------------------------------------------------
   const pairs = [];
   for (let i = 0; i < moves.length; i += 2) pairs.push([moves[i], moves[i + 1]]);
-  // Coups avec un commentaire "diagramme" coché (cf. DIAGRAM_MARKER) traités à part, dans
-  // leur propre section illustrée plus bas — pas dans la liste compacte ci-dessous, pour ne
-  // pas les afficher deux fois.
-  const comments = [];
-  const diagramMoves = [];
-  moves.forEach((mv, idx) => {
-    if (!mv.comment) return;
-    if (hasDiagramMarker(mv.comment)) diagramMoves.push({ n: idx + 1, mv, text: stripDiagramMarker(mv.comment) });
-    else comments.push({ n: idx + 1, text: mv.comment });
-  });
+  const hasAnyDiagram = moves.some((mv) => hasDiagramMarker(mv.comment));
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
@@ -2605,104 +2596,159 @@ function exportGamePdf() {
   doc.text('NOTATION', margin, y);
   y += 16;
 
-  // Palier (nb de paires de coups) -> colonnes/police : plus la partie est longue, plus on
-  // resserre, jusqu'à un plancher de lisibilité à 7pt. Choisi empiriquement pour qu'une
-  // partie "normale" (jusqu'à ~50 coups) tienne large sur 2-3 colonnes, une partie très
-  // longue sur davantage de colonnes plus denses plutôt que de déborder.
-  const tiers = [
-    { max: 20, cols: 2, font: 10.5 },
-    { max: 32, cols: 3, font: 10 },
-    { max: 48, cols: 4, font: 9 },
-    { max: 70, cols: 5, font: 8 },
-    { max: Infinity, cols: 6, font: 7.5 },
-  ];
-  const tier = tiers.find((t) => pairs.length <= t.max);
-  const cols = tier.cols;
-  const fontSize = tier.font;
-  const lineH = fontSize + 4;
-  const colW = contentW / cols;
-  const rowsPerCol = Math.ceil(pairs.length / cols);
-  const notationTop = y;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(fontSize);
-  pairs.forEach(([white, black], i) => {
-    const col = Math.floor(i / rowsPerCol);
-    const row = i % rowsPerCol;
-    const x = margin + col * colW;
-    const rowY = notationTop + row * lineH;
-    doc.setTextColor(INK_MUTED);
-    doc.text(`${i + 1}.`, x, rowY);
-    doc.setTextColor(WHITE_MOVE);
-    doc.text(moveNotation(white), x + 20, rowY);
-    if (black) {
-      doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(black), x + colW * 0.58, rowY);
-    }
-  });
-  y = notationTop + rowsPerCol * lineH + 8;
-
-  // Commentaires éventuels : liste compacte "n. texte" sous la grille plutôt qu'indentés
-  // sous chaque coup (incompatible avec une grille multi-colonnes) — reste lisible et garde
-  // la mise en page condensée pour le cas courant (peu ou pas de commentaires).
-  if (comments.length) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8.5);
-    doc.setTextColor(INK_MUTED);
-    for (const { n, text } of comments) {
-      const wrapped = doc.splitTextToSize(`${n}. ${text}`, contentW);
-      for (const wline of wrapped) {
-        doc.text(wline, margin, y);
-        y += 11;
-      }
-    }
-    y += 6;
+  // Palier (nb de paires de coups) -> colonnes/police : plus le bloc est long, plus on
+  // resserre, jusqu'à un plancher de lisibilité à 7pt.
+  function pickTier(pairCount) {
+    const tiers = [
+      { max: 20, cols: 2, font: 10.5 },
+      { max: 32, cols: 3, font: 10 },
+      { max: 48, cols: 4, font: 9 },
+      { max: 70, cols: 5, font: 8 },
+      { max: Infinity, cols: 6, font: 7.5 },
+    ];
+    return tiers.find((t) => pairCount <= t.max);
   }
 
-  // --- positions clés : un diagramme "à la volée" par coup annoté (case cochée dans le
-  // popover de commentaire) — illustre une position précise en cours de partie, pas
-  // seulement la position finale (retour Mickaël). Chaque carte (repère du coup + commentaire
-  // + diagramme) passe à la page suivante si elle ne tient pas dans l'espace restant, plutôt
-  // que de la couper ; une partie sans coup annoté ainsi ne voit strictement rien changer ici
-  // (le document reste sur une seule page comme avant).
-  if (diagramMoves.length) {
-    const cardDiagramSize = Math.min(170, contentW);
-    y += 4;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(ACCENT);
-    doc.text('POSITIONS CLÉS', margin, y);
-    y += 18;
+  if (!hasAnyDiagram) {
+    // Cas courant (aucun diagramme à la volée) : grille compacte en plusieurs colonnes sur
+    // TOUTE la partie, commentaires éventuels (texte seul) en liste compacte à la suite —
+    // comportement inchangé, document toujours resserré sur une seule page.
+    const comments = [];
+    moves.forEach((mv, idx) => { if (mv.comment) comments.push({ n: idx + 1, text: mv.comment }); });
 
-    for (const { n, mv, text } of diagramMoves) {
+    const tier = pickTier(pairs.length);
+    const cols = tier.cols;
+    const fontSize = tier.font;
+    const lineH = fontSize + 4;
+    const colW = contentW / cols;
+    const rowsPerCol = Math.ceil(pairs.length / cols);
+    const notationTop = y;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fontSize);
+    pairs.forEach(([white, black], i) => {
+      const col = Math.floor(i / rowsPerCol);
+      const row = i % rowsPerCol;
+      const x = margin + col * colW;
+      const rowY = notationTop + row * lineH;
+      doc.setTextColor(INK_MUTED);
+      doc.text(`${i + 1}.`, x, rowY);
+      doc.setTextColor(WHITE_MOVE);
+      doc.text(moveNotation(white), x + 20, rowY);
+      if (black) {
+        doc.setTextColor(BLACK_MOVE);
+        doc.text(moveNotation(black), x + colW * 0.58, rowY);
+      }
+    });
+    y = notationTop + rowsPerCol * lineH + 8;
+
+    if (comments.length) {
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(8.5);
-      const wrapped = text ? doc.splitTextToSize(text, contentW) : [];
-      const cardH = 15 + wrapped.length * 11 + (wrapped.length ? 6 : 0) + cardDiagramSize + 10 + 18;
-      if (y + cardH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(ACCENT);
-      doc.text(`Coup ${n} — ${moveNotation(mv)}`, margin, y);
-      y += 15;
-
-      if (wrapped.length) {
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(8.5);
-        doc.setTextColor(INK_MUTED);
-        for (const wline of wrapped) { doc.text(wline, margin, y); y += 11; }
-        y += 6;
+      doc.setTextColor(INK_MUTED);
+      for (const { n, text } of comments) {
+        const wrapped = doc.splitTextToSize(`${n}. ${text}`, contentW);
+        for (const wline of wrapped) {
+          doc.text(wline, margin, y);
+          y += 11;
+        }
       }
-
-      const cardDiagramUrl = boardImageDataUrlAtPly(n - 1);
-      const cardDiagramX = (pageW - cardDiagramSize) / 2;
-      doc.addImage(cardDiagramUrl, 'PNG', cardDiagramX, y, cardDiagramSize, cardDiagramSize);
-      doc.setDrawColor(RULE);
-      doc.setLineWidth(1);
-      doc.rect(cardDiagramX, y, cardDiagramSize, cardDiagramSize);
-      y += cardDiagramSize + 18;
+      y += 6;
     }
+  } else {
+    // Au moins un coup a un diagramme coché : commentaire(s) et diagramme(s) doivent
+    // apparaître DANS LE FLUX de la notation, juste après le coup concerné (retour Mickaël —
+    // pas regroupés à part en fin de liste). La grille multi-colonnes ne peut pas être
+    // "interrompue" proprement en cours de route (colonnes déjà positionnées d'avance) :
+    // les paires SANS annotation se regroupent quand même en mini-grilles compactes entre
+    // deux annotations (pour rester dense), mais toute paire annotée sort du flux en grille
+    // et s'affiche seule, pleine largeur, suivie immédiatement de son commentaire/diagramme.
+    function renderGridSegment(segPairs) {
+      if (!segPairs.length) return;
+      const tier = pickTier(segPairs.length);
+      const cols = Math.max(1, Math.min(tier.cols, segPairs.length));
+      const fontSize = tier.font;
+      const lineH = fontSize + 4;
+      const colW = contentW / cols;
+      const rowsPerCol = Math.ceil(segPairs.length / cols);
+      const blockH = rowsPerCol * lineH;
+      if (y + blockH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
+      const top = y;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(fontSize);
+      segPairs.forEach(({ n, white, black }, i) => {
+        const col = Math.floor(i / rowsPerCol);
+        const row = i % rowsPerCol;
+        const x = margin + col * colW;
+        const rowY = top + row * lineH;
+        doc.setTextColor(INK_MUTED);
+        doc.text(`${n}.`, x, rowY);
+        doc.setTextColor(WHITE_MOVE);
+        doc.text(moveNotation(white), x + 20, rowY);
+        if (black) {
+          doc.setTextColor(BLACK_MOVE);
+          doc.text(moveNotation(black), x + colW * 0.58, rowY);
+        }
+      });
+      y = top + blockH + 6;
+    }
+
+    function renderAnnotatedRow(n, white, black) {
+      if (y + 16 > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(INK_MUTED);
+      doc.text(`${n}.`, margin, y);
+      doc.setTextColor(WHITE_MOVE);
+      doc.text(moveNotation(white), margin + 22, y);
+      if (black) {
+        doc.setTextColor(BLACK_MOVE);
+        doc.text(moveNotation(black), margin + 90, y);
+      }
+      y += 16;
+    }
+
+    // `ply` = numéro de coup 1-indexé (même indexation que DIAGRAM_MARKER/hasDiagramMarker) ;
+    // boardImageDataUrlAtPly() attend l'index "dernier coup joué" façon jumpToPly (ply - 1).
+    function renderAnnotationBlock(ply, moveInfo) {
+      const withDiagram = hasDiagramMarker(moveInfo.comment);
+      const text = withDiagram ? stripDiagramMarker(moveInfo.comment) : moveInfo.comment;
+      const wrapped = text ? doc.splitTextToSize(text, contentW - 14) : [];
+      const diagramSize = withDiagram ? Math.min(170, contentW) : 0;
+      const blockH = wrapped.length * 11 + (withDiagram ? diagramSize + 10 : 0) + 8;
+      if (y + blockH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      doc.setTextColor(INK_MUTED);
+      for (const wline of wrapped) { doc.text(wline, margin + 14, y); y += 11; }
+      if (withDiagram) {
+        y += 4;
+        const dx = (pageW - diagramSize) / 2;
+        const durl = boardImageDataUrlAtPly(ply - 1);
+        doc.addImage(durl, 'PNG', dx, y, diagramSize, diagramSize);
+        doc.setDrawColor(RULE);
+        doc.setLineWidth(1);
+        doc.rect(dx, y, diagramSize, diagramSize);
+        y += diagramSize + 10;
+      }
+      y += 4;
+    }
+
+    let segment = [];
+    pairs.forEach(([white, black], i) => {
+      const n = i + 1;
+      const annotated = (white && white.comment) || (black && black.comment);
+      if (!annotated) {
+        segment.push({ n, white, black });
+        return;
+      }
+      renderGridSegment(segment);
+      segment = [];
+      renderAnnotatedRow(n, white, black);
+      if (white && white.comment) renderAnnotationBlock(n * 2 - 1, white);
+      if (black && black.comment) renderAnnotationBlock(n * 2, black);
+    });
+    renderGridSegment(segment);
   }
 
   // --- diagramme de la position finale -----------------------------------------------------
