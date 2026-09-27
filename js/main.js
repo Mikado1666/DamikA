@@ -637,6 +637,22 @@ canvas.addEventListener('pointerdown', async (e) => {
   renderBoardState();
 });
 
+// Un clic sur le plateau qui rejoue très exactement le prochain coup déjà présent dans
+// `game.future` (partie rechargée depuis la Bibliothèque, suivie coup par coup en cliquant
+// le plateau plutôt qu'avec les flèches/la liste) n'est PAS un vrai changement de contenu :
+// seule une divergence réelle (ou une suite qui dépasse `future`) doit marquer l'entrée
+// modifiée. Comparaison sur from/to (coup simple) ou from+chemin complet (rafle).
+function matchesFutureHead(action) {
+  const next = game.future[game.future.length - 1];
+  if (!next || next.move.type !== action.type) return false;
+  if (action.type === 'simple') {
+    return next.move.from === action.move.from && next.move.to === action.move.to;
+  }
+  const path = [action.seq[0].from, ...action.seq.map(s => s.to)];
+  const nextPath = [next.move.from, ...next.move.path];
+  return path.length === nextPath.length && path.every((sq, i) => sq === nextPath[i]);
+}
+
 async function playMove(action) {
   isAnimating = true;
   const from = action.type === 'capture' ? action.seq[0].from : action.move.from;
@@ -647,21 +663,28 @@ async function playMove(action) {
   const capturedPieces = action.type === 'capture'
     ? action.seq.map(s => ({ square: s.capturedThisStep, piece: game.board[s.capturedThisStep] }))
     : [];
+  // Calculé AVANT le commit (qui vide `game.future`) : voir matchesFutureHead() ci-dessus.
+  const isReplayOfExistingFuture = matchesFutureHead(action);
 
   selectedSquare = null;
   await renderer.animateMove({ path, piece, capturedPieces });
 
-  if (action.type === 'capture') game.playCaptureSequence(action.seq);
-  else game.playSimpleMove(action.move);
+  if (isReplayOfExistingFuture) {
+    // Simple redo() : préserve le reste de `future` (et les commentaires déjà attachés aux
+    // coups suivants) plutôt que de les perdre via `_commit()`.
+    game.redo();
+  } else {
+    if (action.type === 'capture') game.playCaptureSequence(action.seq);
+    else game.playSimpleMove(action.move);
 
-  // Seul point d'entrée d'un VRAI changement de contenu (nouveau coup joué, par opposition à
-  // la navigation undo()/redo() — flèches, molette, autoplay, "aller à ce coup" — qui ne
-  // passe jamais par playMove()) : `_commit()` dans rules.js vide `game.future` à chaque
-  // appel, que ce coup prolonge la ligne enregistrée ou en divergent. Rebuild la liste
-  // bibliothèque seulement au moment où le POINT apparaît pour la première fois (jamais en
-  // mode confirmé, cf. activeEntryConfirmed — aucun point à afficher dans ce cas).
-  if (libraryActiveIndex >= 0 && !activeEntryConfirmed && !activeEntryDirty) renderLibrary();
-  markActiveEntryDirty();
+    // Seul point d'entrée d'un VRAI changement de contenu (nouveau coup qui diverge de la
+    // suite déjà enregistrée, ou qui la prolonge au-delà) : `_commit()` dans rules.js vide
+    // `game.future` à cet appel. Rebuild la liste bibliothèque seulement au moment où le
+    // POINT apparaît pour la première fois (jamais en mode confirmé, cf. activeEntryConfirmed
+    // — aucun point à afficher dans ce cas).
+    if (libraryActiveIndex >= 0 && !activeEntryConfirmed && !activeEntryDirty) renderLibrary();
+    markActiveEntryDirty();
+  }
 
   isAnimating = false;
   refreshUI();
