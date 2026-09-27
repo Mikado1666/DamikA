@@ -21,8 +21,15 @@
   --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
 
-  /* Dégradé du logo "DamikA" (.brand-name) */
-  --brand-gradient: linear-gradient(180deg, #ffe9c2 0%, #e0ab5c 35%, #8a5a24 55%, #f0c887 62%, #4a2f10 100%);
+  /* Dégradé du logo "DamikA" (wordmark .brand-name ET losange .brand-icon, cf. les <stop
+     class="brand-c*"> du SVG inline dans index.html — un dégradé unique piloté par ces 5
+     variables, pour que les deux éléments du logo restent synchronisés par thème). */
+  --brand-c1: #ffe9c2;
+  --brand-c2: #e0ab5c;
+  --brand-c3: #8a5a24;
+  --brand-c4: #f0c887;
+  --brand-c5: #4a2f10;
+  --brand-gradient: linear-gradient(180deg, var(--brand-c1) 0%, var(--brand-c2) 35%, var(--brand-c3) 55%, var(--brand-c4) 62%, var(--brand-c5) 100%);
 
   /* Header (fond du bandeau du haut) */
   --header-grad-1: #1c150e;
@@ -52,6 +59,16 @@
      pleine). --gold-chip reste assez clair/saturé pour un texte foncé dessus, dans tous les
      thèmes. */
   --gold-chip: #d4af69;
+
+  /* "Plaque tournoi" (fond des cartes joueurs et du bloc infos tournoi, cf. .player-card et
+     .game-meta-card) : dégradé décoratif volontairement sombre en thème sombre (contraste
+     avec le fond, cf. --panel qui n'apparaît qu'au centre du dégradé). En thème clair, ces
+     extrémités doivent elles aussi s'éclaircir : sinon le texte tertiaire (--text-2, assombri
+     pour lire sur fond clair) se retrouve en texte sombre SUR fond sombre à ces endroits du
+     dégradé — c'était le bug "Série Nationale illisible" (retour Mickaël). */
+  --plaque-1: #2a2015;
+  --plaque-2: #19130d;
+  --meta-plaque: #1b140e;
 }
 
 /* ---------- Thème clair "Miel doré" (caramel/miel) ---------------------------------------
@@ -65,7 +82,10 @@
   --panel-border: #d9b878;
   --text-0: #3a2408;
   --text-1: #6b4a1e;
-  --text-2: #97794c;
+  /* Assombri par rapport à un simple "text-1 éclairci" : à ce niveau de luminosité (#97794c),
+     le texte tertiaire (libellé "Pions", titre MI/GMI, ligne secondaire du bloc tournoi...)
+     devenait illisible sur les fonds clairs/plaques du thème (retour Mickaël). */
+  --text-2: #78602f;
   --gold: #c8902e;
   --gold-soft: rgba(200, 144, 46, 0.18);
   --gold-dim: #8f5e18;
@@ -76,11 +96,17 @@
   --shadow-panel: 0 8px 24px rgba(110, 70, 20, 0.2);
   color-scheme: light;
 
-  /* Dégradé du logo assombri spécifiquement pour ce thème : la version bronze/doré du
-     thème sombre (tons clairs #ffe9c2/#f0c887) se fond dans le fond miel/caramel une fois
-     ce thème actif (retour Mickaël) — mêmes teintes bronze, mais nettement plus sombres,
-     pour rester lisibles sur ce fond clair (pas de contour ni d'ombre portée). */
-  --brand-gradient: linear-gradient(180deg, #6b4310 0%, #4a2f0c 35%, #241505 55%, #5a3a12 62%, #150c03 100%);
+  /* Dégradé du logo (wordmark ET losange, cf. --brand-c1..5 plus haut) assombri
+     spécifiquement pour ce thème : la version bronze/doré du thème sombre (tons clairs
+     #ffe9c2/#f0c887) se fondait dans le fond miel/caramel une fois ce thème actif (retour
+     Mickaël) — mêmes teintes bronze, mais nettement plus sombres, pour rester lisibles sur
+     ce fond clair (pas de contour ni d'ombre portée). */
+  --brand-c1: #6b4310;
+  --brand-c2: #4a2f0c;
+  --brand-c3: #241505;
+  --brand-c4: #5a3a12;
+  --brand-c5: #150c03;
+  --brand-gradient: linear-gradient(180deg, var(--brand-c1) 0%, var(--brand-c2) 35%, var(--brand-c3) 55%, var(--brand-c4) 62%, var(--brand-c5) 100%);
 
   --header-grad-1: #f2e2b8;
   --header-grad-2: #e8cd94;
@@ -99,6 +125,14 @@
   --arrow-color: #1f7a8c;
   --black-name-accent: #7a4a12;
   --gold-chip: #dba62f;
+
+  /* Cf. commentaire sur --plaque-1/2/--meta-plaque dans le thème sombre : mêmes tons clairs
+     que --bg-2/--panel-border plutôt que le brun quasi noir du thème sombre, pour que le
+     dégradé reste clair d'un bout à l'autre (texte tertiaire --text-2, sombre en thème
+     clair, lisible partout sur la plaque). */
+  --plaque-1: #e6c88c;
+  --plaque-2: #d9b878;
+  --meta-plaque: #e6c88c;
 }
 
 * { box-sizing: border-box; }
@@ -172,6 +206,11 @@ body {
 }
 
 .brand-icon-cutout { fill: var(--bg-1); }
+.brand-c1 { stop-color: var(--brand-c1); }
+.brand-c2 { stop-color: var(--brand-c2); }
+.brand-c3 { stop-color: var(--brand-c3); }
+.brand-c4 { stop-color: var(--brand-c4); }
+.brand-c5 { stop-color: var(--brand-c5); }
 
 .brand-name {
   display: inline-block;
@@ -328,7 +367,7 @@ body {
 
 /* ---------- Carte meta de partie (rail gauche, au-dessus des joueurs) ---------- */
 .game-meta-card {
-  background: linear-gradient(180deg, var(--panel), #1b140e);
+  background: linear-gradient(180deg, var(--panel), var(--meta-plaque));
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
   padding: 12px 15px;
@@ -883,7 +922,7 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: linear-gradient(165deg, #2a2015 0%, var(--panel) 30%, #19130d 100%);
+  background: linear-gradient(165deg, var(--plaque-1) 0%, var(--panel) 30%, var(--plaque-2) 100%);
   border: 1px solid var(--gold-dim, #8a6b3c);
   border-radius: var(--radius-md);
   padding: 14px 16px;
@@ -996,6 +1035,12 @@ body {
   white-space: normal;
   overflow-wrap: break-word;
   line-height: 1.15;
+  /* Réserve toujours la hauteur de 2 lignes (même quand le nom tient sur une seule), pour
+     que les 2 cartes joueurs restent à la MÊME hauteur qu'un nom passe à la ligne ou non
+     (retour Mickaël : "Kevin Machtelinck" sur 2 lignes agrandissait sa carte, pas celle
+     d'"Arnaud Cordier" à côté). En `em` (relatif à line-height) : reste correct si la taille
+     de police change. Cas extrême (nom sur 3 lignes) non couvert, volontairement hors scope. */
+  min-height: calc(1.15em * 2);
 }
 .player-name:hover, .player-name:focus { background: var(--gold-soft); }
 
