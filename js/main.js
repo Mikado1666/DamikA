@@ -1352,21 +1352,34 @@ function setLibraryFieldValue(idx, key, rawVal) {
   // focus/blur sans vraie modification ne doit pas écraser la virgule d'origine.
   const isUntouchedPlayerName = (key === 'White' || key === 'Black')
     && entry.headers[key] && val === formatPlayerName(entry.headers[key]);
-  if (!isUntouchedPlayerName) {
-    if (val && val !== '—') entry.headers[key] = val;
+  // Ces spans (nom/score) sont le texte visible d'une carte Bibliothèque — exactement ce sur
+  // quoi on clique pour SÉLECTIONNER/charger une partie. Un simple clic dedans (focus) suivi
+  // du clic sur une autre carte (blur, sans aucune frappe) ne doit jamais marquer l'entrée
+  // modifiée — seule une vraie divergence de valeur compte (même bug, même fix que le blur
+  // handler générique du Bloc 1 : retour Mickaël, "le pill apparaît juste en switchant de
+  // partie dans la Bibliothèque"). `headers.Result === '*'` (PDN "en cours") s'affiche aussi
+  // "—" (cf. scoreText plus bas) : équivalence à prendre en compte pour Result.
+  const prevVal = entry.headers[key];
+  const nextVal = (val && val !== '—') ? val : undefined;
+  const prevValForCompare = (key === 'Result' && prevVal === '*') ? undefined : prevVal;
+  const changed = !isUntouchedPlayerName && nextVal !== prevValForCompare;
+  if (changed) {
+    if (nextVal !== undefined) entry.headers[key] = nextVal;
     else delete entry.headers[key];
   }
   // Édition de l'entrée active depuis sa carte bibliothèque : même report que le Bloc 1
   // (cf. markActiveEntryDirty()) — édition d'une AUTRE entrée (pas ouverte dans le Bloc 1) :
   // reste auto-sauvegardée immédiatement comme avant, hors périmètre de cette fonctionnalité.
-  if (idx === libraryActiveIndex) {
-    markActiveEntryDirty();
-    if (!isUntouchedPlayerName) syncHeaderFieldsFromState();
-  } else {
-    libraryDirty = true;
+  if (changed) {
+    if (idx === libraryActiveIndex) {
+      markActiveEntryDirty();
+      syncHeaderFieldsFromState();
+    } else {
+      libraryDirty = true;
+    }
+    renderLibrary();
+    scheduleSave();
   }
-  renderLibrary();
-  scheduleSave();
 }
 
 // Construit un champ éditable (nom ou score) DANS le titre d'une carte Bibliothèque — même
