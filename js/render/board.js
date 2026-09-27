@@ -52,6 +52,12 @@ export class BoardRenderer {
     this.animation = null; // { from, to, piece, capturedSquares, start, duration, resolve }
     this.animSpeedMs = 260;
 
+    // Couleurs pilotées par le thème d'interface (clair/sombre, cf. --board-* dans
+    // style.css) : lues une fois ici (et rechargées via applyUiTheme(), appelée par main.js
+    // au changement de thème) plutôt qu'à chaque frame — getComputedStyle() dans la boucle
+    // de rendu (pulse des prises obligatoires, ~60fps) serait inutilement coûteux.
+    this._themeColors = this._readThemeColors();
+
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(canvas.parentElement);
     // Filet de sécurité pour le zoom navigateur (Ctrl+molette / Ctrl+0) : le zoom modifie
@@ -63,6 +69,26 @@ export class BoardRenderer {
     window.addEventListener('resize', this._onWindowResize);
     this.resize();
     this._loopPulse();
+  }
+
+  _readThemeColors() {
+    const cs = getComputedStyle(this.canvas);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    return {
+      frame1: v('--board-frame-1'), frame2: v('--board-frame-2'), frameBorder: v('--board-frame-border'),
+      light: v('--board-light'), dark: v('--board-dark'), darkHL: v('--board-dark-hl'),
+      coordText: v('--coord-text'),
+      selectStroke: v('--select-stroke'), selectGlow: v('--select-glow'),
+      mandatoryRGB: v('--mandatory-color'), targetColor: v('--target-color'),
+      arrowColor: v('--arrow-color'),
+    };
+  }
+
+  // Appelée par main.js après un changement de thème d'interface (attribut data-theme sur
+  // <html>) : les couleurs CSS ne sont pas ré-observées automatiquement côté canvas, ce
+  // n'est pas du DOM stylable par CSS.
+  applyUiTheme() {
+    this._themeColors = this._readThemeColors();
   }
 
   destroy() {
@@ -289,13 +315,14 @@ export class BoardRenderer {
   _drawFrame() {
     const ctx = this.ctx;
     const s = this.size;
+    const tc = this._themeColors;
     const g = ctx.createLinearGradient(0, 0, s, s);
-    g.addColorStop(0, '#3a2418');
-    g.addColorStop(1, '#241209');
+    g.addColorStop(0, tc.frame1);
+    g.addColorStop(1, tc.frame2);
     ctx.fillStyle = g;
     roundRect(ctx, LABEL_MARGIN - 8, LABEL_MARGIN - 8, s + 16, s + 16, 6);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(212,175,105,0.35)';
+    ctx.strokeStyle = tc.frameBorder;
     ctx.lineWidth = 1;
     roundRect(ctx, LABEL_MARGIN - 8, LABEL_MARGIN - 8, s + 16, s + 16, 6);
     ctx.stroke();
@@ -304,7 +331,13 @@ export class BoardRenderer {
   _drawSquares() {
     const ctx = this.ctx;
     const c = this.cell;
-    const theme = BOARD_THEMES[this.boardTheme] || BOARD_THEMES[DEFAULT_BOARD_THEME];
+    // Le thème de damier "Bois" (défaut) suit le thème d'interface (--board-*, cf.
+    // applyUiTheme()) ; les 3 autres thèmes (Ardoise/Vert/Beige) restent des skins fixes,
+    // choisis indépendamment du thème clair/sombre.
+    const tc = this._themeColors;
+    const theme = this.boardTheme === DEFAULT_BOARD_THEME
+      ? { light: tc.light, dark: tc.dark, darkHL: tc.darkHL }
+      : (BOARD_THEMES[this.boardTheme] || BOARD_THEMES[DEFAULT_BOARD_THEME]);
     const lastSquares = this.lastMove?.squares ? new Set(this.lastMove.squares) : null;
     for (let row = 0; row < 10; row++) {
       for (let col = 0; col < 10; col++) {
@@ -326,7 +359,7 @@ export class BoardRenderer {
   _drawCoords() {
     const ctx = this.ctx;
     const c = this.cell;
-    ctx.fillStyle = 'rgba(230,210,175,0.75)';
+    ctx.fillStyle = this._themeColors.coordText;
     // Taille de police plafonnée à 12px (Math.min ajouté) : sans ce plafond, la police
     // grossissait proportionnellement à la taille de case (`c * 0.22`, illimité) — sur les
     // grands damiers désormais atteignables (plafond .board-wrap remonté à 950px cette
@@ -367,6 +400,7 @@ export class BoardRenderer {
     const c = this.cell;
 
     // Cases obligées de capturer : halo pulsant ambre
+    const tc = this._themeColors;
     const pulse = 0.5 + 0.5 * Math.sin(this._pulsePhase * Math.PI * 2);
     for (const sq of this.mandatorySquares) {
       const [row, col] = squareToRC(sq);
@@ -374,9 +408,9 @@ export class BoardRenderer {
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, c * 0.46, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,140,40,${0.55 + 0.35 * pulse})`;
+      ctx.strokeStyle = `rgba(${tc.mandatoryRGB},${0.55 + 0.35 * pulse})`;
       ctx.lineWidth = 3;
-      ctx.shadowColor = 'rgba(255,140,40,0.8)';
+      ctx.shadowColor = `rgba(${tc.mandatoryRGB},0.8)`;
       ctx.shadowBlur = 8 + 6 * pulse;
       ctx.stroke();
       ctx.restore();
@@ -388,7 +422,7 @@ export class BoardRenderer {
       const [cx, cy] = this._cellCenter(row, col);
       ctx.beginPath();
       ctx.arc(cx, cy, c * 0.14, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(120,220,180,0.55)';
+      ctx.fillStyle = tc.targetColor;
       ctx.fill();
     }
   }
@@ -396,14 +430,15 @@ export class BoardRenderer {
   _drawSelection() {
     const ctx = this.ctx;
     const c = this.cell;
+    const tc = this._themeColors;
     const [row, col] = squareToRC(this.selectedSquare);
     const [sr, sc] = this._screenRC(row, col);
     const x = LABEL_MARGIN + sc * c;
     const y = LABEL_MARGIN + sr * c;
     ctx.save();
-    ctx.strokeStyle = '#ffd76a';
+    ctx.strokeStyle = tc.selectStroke;
     ctx.lineWidth = 3;
-    ctx.shadowColor = 'rgba(255,215,106,0.7)';
+    ctx.shadowColor = tc.selectGlow;
     ctx.shadowBlur = 10;
     ctx.strokeRect(x + 2, y + 2, c - 4, c - 4);
     ctx.restore();
@@ -416,7 +451,7 @@ export class BoardRenderer {
       const [row, col] = squareToRC(sq);
       return this._cellCenter(row, col);
     });
-    drawMovePath(this.ctx, points, this.cell);
+    drawMovePath(this.ctx, points, this.cell, this._themeColors.arrowColor);
   }
 
   _drawPieces() {
@@ -489,7 +524,7 @@ function roundRect(ctx, x, y, w, h, r) {
 // seule pointe de flèche à l'arrivée et un point plein à chaque étape intermédiaire.
 // Style repris de l'artefact de référence (ARTEFACT_REFERENCE_DESIGN.md §2.3) : trait
 // cyan fin et semi-transparent plutôt que le doré épais à liseré précédent.
-function drawMovePath(ctx, points, cell) {
+function drawMovePath(ctx, points, cell, color = '#5bc8ff') {
   if (!points || points.length < 2) return;
   const headLen = cell * 0.28;
   const lineWidth = cell * 0.1;
@@ -510,8 +545,8 @@ function drawMovePath(ctx, points, cell) {
 
   ctx.save();
   ctx.globalAlpha = 0.72;
-  ctx.strokeStyle = '#5bc8ff';
-  ctx.fillStyle = '#5bc8ff';
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';

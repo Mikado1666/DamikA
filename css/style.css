@@ -1,3 +1,4 @@
+/* ---------- Thème sombre (défaut) ---------- */
 :root {
   --bg-0: #100c09;
   --bg-1: #17120d;
@@ -19,6 +20,155 @@
   --radius-sm: 8px;
   --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
+
+  /* Header (fond du bandeau du haut) */
+  --header-grad-1: #1c150e;
+  --header-grad-2: #17110b;
+
+  /* Damier (canvas) : cadre, coordonnées, surbrillances, flèche — lus par board.js via
+     getComputedStyle() (cf. BoardRenderer.applyUiTheme()). Le thème de damier "Bois" (celui
+     par défaut, cf. BOARD_THEMES dans board.js) suit ces variables ; les 3 autres thèmes de
+     damier (Ardoise/Vert/Beige, choix cosmétique indépendant) restent fixes quel que soit le
+     thème d'interface. */
+  --board-frame-1: #3a2418;
+  --board-frame-2: #241209;
+  --board-frame-border: rgba(212, 175, 105, 0.35);
+  --board-light: #d4bc8a;
+  --board-dark: #8b5e1a;
+  --board-dark-hl: #b07820;
+  --coord-text: rgba(230, 210, 175, 0.75);
+  --select-stroke: #ffd76a;
+  --select-glow: rgba(255, 215, 106, 0.7);
+  --mandatory-color: 255, 140, 40;
+  --target-color: rgba(120, 220, 180, 0.55);
+  --arrow-color: #5bc8ff;
+  --black-name-accent: #c9a06a;
+  /* Fond des chips/boutons "pleins" (elo-badge, .tab-badge, bouton lecture, coup courant) :
+     DISTINCT de --gold (couleur d'accent TEXTE, assombrie en thème clair pour rester lisible
+     sur fond crème — donc trop proche du texte #241a0d une fois utilisée en fond de pastille
+     pleine). --gold-chip reste assez clair/saturé pour un texte foncé dessus, dans tous les
+     thèmes. */
+  --gold-chip: #d4af69;
+}
+
+/* ---------- Thème clair — variante 1 "Chêne clair" (crème/beige, bronze) -----------------
+   TEMPORAIRE : 3 variantes cohabitent derrière le sélecteur du bandeau (main.js) le temps
+   de choisir — cf. CLAUDE.md. Une fois le choix fait, retirer les 2 variantes non retenues
+   et renommer celle gardée en `[data-theme="light"]`. */
+:root[data-theme="light-1"] {
+  --bg-0: #f3ead9;
+  --bg-1: #ede0c8;
+  --bg-2: #e4d3b2;
+  --panel: #f8f1e3;
+  --panel-border: #d9c6a0;
+  --text-0: #2e2013;
+  --text-1: #5b4a34;
+  --text-2: #8a7a62;
+  --gold: #a97729;
+  --gold-soft: rgba(169, 119, 41, 0.16);
+  --gold-dim: #7a5a25;
+  --accent-white: #2e2013;
+  --accent-black: #f8f1e3;
+  --success: #2f8a5e;
+  --danger: #b6432f;
+  --shadow-panel: 0 8px 24px rgba(90, 60, 30, 0.18);
+  color-scheme: light;
+
+  --header-grad-1: #efe3c9;
+  --header-grad-2: #e6d5b3;
+
+  --board-frame-1: #8a5f34;
+  --board-frame-2: #5e3d1f;
+  --board-frame-border: rgba(122, 90, 37, 0.45);
+  --board-light: #f1e3c4;
+  --board-dark: #b98a4a;
+  --board-dark-hl: #d1a15c;
+  --coord-text: rgba(60, 42, 20, 0.65);
+  --select-stroke: #c98a1f;
+  --select-glow: rgba(201, 138, 31, 0.55);
+  --mandatory-color: 200, 90, 10;
+  --target-color: rgba(40, 150, 110, 0.6);
+  --arrow-color: #1f7fb0;
+  --black-name-accent: #8a5a25;
+  --gold-chip: #d1a13f;
+}
+
+/* ---------- Thème clair — variante 2 "Ivoire tournoi" (ivoire/gris chaud, plus neutre) --- */
+:root[data-theme="light-2"] {
+  --bg-0: #ece6da;
+  --bg-1: #e4ddcb;
+  --bg-2: #dbd1b8;
+  --panel: #f2ecdf;
+  --panel-border: #cabf9e;
+  --text-0: #2b2620;
+  --text-1: #55503f;
+  --text-2: #837d66;
+  --gold: #b08a3e;
+  --gold-soft: rgba(176, 138, 62, 0.16);
+  --gold-dim: #8a6a2c;
+  --accent-white: #2b2620;
+  --accent-black: #f2ecdf;
+  --success: #3a8a63;
+  --danger: #ab4632;
+  --shadow-panel: 0 8px 24px rgba(60, 52, 36, 0.16);
+  color-scheme: light;
+
+  --header-grad-1: #e9e2d1;
+  --header-grad-2: #ddd4bc;
+
+  --board-frame-1: #4f4636;
+  --board-frame-2: #332c20;
+  --board-frame-border: rgba(90, 78, 52, 0.45);
+  --board-light: #e9e2d0;
+  --board-dark: #9c8a63;
+  --board-dark-hl: #b8a375;
+  --coord-text: rgba(50, 44, 30, 0.65);
+  --select-stroke: #caa23f;
+  --select-glow: rgba(202, 162, 63, 0.55);
+  --mandatory-color: 185, 100, 30;
+  --target-color: rgba(45, 130, 120, 0.55);
+  --arrow-color: #3a7ea8;
+  --black-name-accent: #7c6a3a;
+  --gold-chip: #c9a24a;
+}
+
+/* ---------- Thème clair — variante 3 "Miel doré" (plus saturé, caramel/miel) ------------- */
+:root[data-theme="light-3"] {
+  --bg-0: #f6e9cf;
+  --bg-1: #f0dbae;
+  --bg-2: #e6c88c;
+  --panel: #fbf1de;
+  --panel-border: #d9b878;
+  --text-0: #3a2408;
+  --text-1: #6b4a1e;
+  --text-2: #97794c;
+  --gold: #c8902e;
+  --gold-soft: rgba(200, 144, 46, 0.18);
+  --gold-dim: #8f5e18;
+  --accent-white: #3a2408;
+  --accent-black: #fbf1de;
+  --success: #2f8a5e;
+  --danger: #b6432f;
+  --shadow-panel: 0 8px 24px rgba(110, 70, 20, 0.2);
+  color-scheme: light;
+
+  --header-grad-1: #f2e2b8;
+  --header-grad-2: #e8cd94;
+
+  --board-frame-1: #7a4a1a;
+  --board-frame-2: #4a2c0c;
+  --board-frame-border: rgba(140, 94, 30, 0.45);
+  --board-light: #f3dfae;
+  --board-dark: #c08a3c;
+  --board-dark-hl: #dba658;
+  --coord-text: rgba(58, 36, 8, 0.65);
+  --select-stroke: #e0a020;
+  --select-glow: rgba(224, 160, 32, 0.55);
+  --mandatory-color: 200, 70, 10;
+  --target-color: rgba(30, 130, 110, 0.55);
+  --arrow-color: #1f7a8c;
+  --black-name-accent: #7a4a12;
+  --gold-chip: #dba62f;
 }
 
 * { box-sizing: border-box; }
@@ -53,7 +203,7 @@ body {
      du header, rendant le logo non cliquable à cet endroit (retour Mickaël). */
   z-index: 5;
   border-bottom: 1px solid var(--panel-border);
-  background: linear-gradient(180deg, #1c150e, #17110b);
+  background: linear-gradient(180deg, var(--header-grad-1), var(--header-grad-2));
 }
 
 .topbar-inner {
@@ -128,6 +278,19 @@ body {
   color: var(--gold);
   border-color: var(--gold);
 }
+
+/* TEMPORAIRE — sélecteur de comparaison des variantes de thème clair (cf. index.html). */
+.ui-theme-select {
+  height: 42px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 13px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+.ui-theme-select:hover, .ui-theme-select:focus { border-color: var(--gold); color: var(--gold); }
 
 .action-btn {
   height: 42px;
@@ -325,7 +488,7 @@ body {
 }
 .unsaved-btn-save {
   border: none;
-  background: linear-gradient(180deg, #ffe3b0, var(--gold));
+  background: linear-gradient(180deg, #ffe3b0, var(--gold-chip));
   color: #241a0d;
 }
 .unsaved-btn-save:hover { filter: brightness(1.08); }
@@ -590,7 +753,7 @@ body {
 .panel-tab:hover:not(.active) { color: var(--text-0); }
 .tab-badge {
   display: inline-block;
-  background: var(--gold);
+  background: var(--gold-chip);
   color: #241a0d;
   border-radius: 9px;
   padding: 0 6px;
@@ -698,7 +861,7 @@ body {
    du vainqueur). Teinte éclaircie par rapport à --gold-dim (#8a6b3c) : ce ton, prévu pour une
    bordure décorative, est trop peu contrasté sur le fond sombre du panneau une fois utilisé
    comme couleur de texte (retour Mickaël : "on voit mal le nom des Noirs"). */
-.library-item-black { color: #c9a06a; }
+.library-item-black { color: var(--black-name-accent, #c9a06a); }
 /* Bouton de suppression discret : visible seulement au survol de la ligne (ou en focus
    clavier, pour rester accessible sans souris) — cohérent avec la densité du reste de la
    liste, pas de rangée d'icônes permanente qui alourdirait chaque ligne. */
@@ -885,7 +1048,7 @@ body {
   font-size: 14px;
   font-weight: 900;
   color: #241a0d;
-  background: var(--gold);
+  background: var(--gold-chip);
   padding: 3px 10px;
   border-radius: 8px;
   letter-spacing: 0.02em;
@@ -1130,9 +1293,9 @@ body {
 .ctrl-btn:disabled:hover { background: var(--bg-2); color: var(--text-1); }
 .ctrl-btn-main {
   width: 52px;
-  background: var(--gold);
+  background: var(--gold-chip);
   color: #241a0d;
-  border-color: var(--gold);
+  border-color: var(--gold-chip);
   font-weight: 700;
 }
 .ctrl-btn-main:hover { filter: brightness(1.08); }
@@ -1162,8 +1325,8 @@ body {
   min-width: 26px;
   text-align: center;
 }
-.ctrl-btn.active { background: var(--gold); color: #241a0d; border-color: var(--gold); }
-.ctrl-btn.active:hover { background: var(--gold); filter: brightness(1.08); }
+.ctrl-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
+.ctrl-btn.active:hover { background: var(--gold-chip); filter: brightness(1.08); }
 
 .status-line {
   text-align: center;
@@ -1239,7 +1402,7 @@ body {
   color: var(--text-0);
 }
 .move-ply:hover { background: var(--gold-soft); }
-.move-ply.current { background: var(--gold); color: #241a0d; font-weight: 700; }
+.move-ply.current { background: var(--gold-chip); color: #241a0d; font-weight: 700; }
 .move-ply.empty { visibility: hidden; }
 .move-ply-text {
   cursor: pointer;
