@@ -94,29 +94,28 @@ function findCaptureSequences(board, fromSquare, piece, deadSet) {
       const newDead = new Set(deadSet);
       newDead.add(midSq);
 
-      // Promotion en cours de capture : si le pion atteint la dernière rangée,
-      // il devient dame et DOIT continuer la capture comme une dame si possible (règle FMJD).
-      let continuationPiece = piece;
-      let promotedNow = false;
-      if (landRow === promotionRow(piece.color)) {
-        continuationPiece = { ...piece, king: true };
-        promotedNow = true;
-      }
-
+      // Promotion en cours de capture (règle FMJD) : un pion qui ATTEINT la dernière rangée en
+      // cours de rafle ne devient dame que s'il s'y ARRÊTE à la fin de la séquence. S'il peut
+      // continuer à capturer au-delà, il le fait comme un simple pion (portée normale, pas de
+      // dame volante) — la suite de la recherche se fait donc toujours avec `piece` (king:
+      // false) inchangé, jamais promu par anticipation. On ne décide `promotedNow` qu'APRÈS
+      // avoir vérifié qu'aucune suite de capture n'existe depuis cette case en tant que pion :
+      // seule l'absence de suite fait de cette étape la fin réelle de la séquence.
       const subSequences = simulateAndRecurse(
         nextBoard,
         fromSquare,
         landSq,
         midSq,
-        continuationPiece,
+        piece,
         newDead
       );
 
       if (subSequences.length === 0) {
+        const promotedNow = landRow === promotionRow(piece.color);
         sequences.push([{ from: fromSquare, to: landSq, capturedThisStep: midSq, promoted: promotedNow }]);
       } else {
         for (const sub of subSequences) {
-          sequences.push([{ from: fromSquare, to: landSq, capturedThisStep: midSq, promoted: promotedNow }, ...sub]);
+          sequences.push([{ from: fromSquare, to: landSq, capturedThisStep: midSq, promoted: false }, ...sub]);
         }
       }
     }
