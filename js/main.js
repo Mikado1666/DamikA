@@ -1309,7 +1309,12 @@ document.querySelectorAll('.meta-chip[data-field], .player-name[data-field], .me
     // stockée AVANT toute mutation de `headers`.
     const prevVal = headers[key];
     const nextVal = (val && val !== '—') ? val : undefined;
-    const changed = !isUntouchedPlayerName && !isUntouchedDate && nextVal !== prevVal;
+    // `headers.Result === '*'` (partie non terminée, marqueur PDN) s'affiche AUSSI "—" (cf.
+    // syncHeaderFieldsFromState : `headers.Result !== '*' ? headers.Result : null`) — sans
+    // cette équivalence, un simple clic/blur sans édition sur le score "changeait" '*' en
+    // valeur absente (même bug que le garde-fou player-name/Date ci-dessus, pour ce cas-là).
+    const prevValForCompare = (key === 'Result' && prevVal === '*') ? undefined : prevVal;
+    const changed = !isUntouchedPlayerName && !isUntouchedDate && nextVal !== prevValForCompare;
     if (changed) {
       if (nextVal !== undefined) headers[key] = nextVal;
       else delete headers[key];
