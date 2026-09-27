@@ -1,10 +1,13 @@
 // DAMIKA — Sérialisation d'une partie en PDN ou TXT.
 
 export function moveInfoToNotation(moveInfo) {
-  if (moveInfo.type === 'simple') return `${moveInfo.from}-${moveInfo.to}`;
-  // Notation FMJD : seules les cases de départ et d'arrivée sont notées pour une rafle,
-  // pas les étapes intermédiaires (ex. 30x19x28 s'écrit 30x28).
-  return `${moveInfo.from}x${moveInfo.to}`;
+  const base = moveInfo.type === 'simple' ? `${moveInfo.from}-${moveInfo.to}`
+    // Notation FMJD : seules les cases de départ et d'arrivée sont notées pour une rafle,
+    // pas les étapes intermédiaires (ex. 30x19x28 s'écrit 30x28).
+    : `${moveInfo.from}x${moveInfo.to}`;
+  // Symbole d'annotation (!, ?, !!, ??) collé directement après la notation — convention
+  // standard échecs/dames, distincte du commentaire {entre accolades} qui précède le coup.
+  return moveInfo.annotation ? `${base}${moveInfo.annotation}` : base;
 }
 
 const HEADER_ORDER = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'WhiteElo', 'BlackElo', 'Result'];
@@ -61,7 +64,15 @@ export function serializeToPdn({ headers = {}, moves }) {
 // Sérialise une entrée de bibliothèque telle que retournée par parsePdn() : les coups y
 // sont déjà des chaînes de notation ({ notation }), pas des moveInfo structurés
 // ({ from, to, type }) comme dans serializeToPdn ci-dessus — donc pas de moveInfoToNotation
-// ici, on écrit directement `notation`.
+// ici, on écrit directement `notation`. Le symbole d'annotation (!, ?, !!, ??), lui, peut
+// arriver soit déjà inclus dans `notation` (entrée construite depuis la partie en cours, cf.
+// currentGameAsLibraryEntry() dans main.js), soit séparé dans `annotation` (entrée issue
+// directement de parsePdn(), qui le distingue du reste du token) — on ne le rajoute que dans
+// ce second cas, jamais en double.
+function libraryMoveNotation(move) {
+  if (move.annotation && !move.notation.endsWith(move.annotation)) return `${move.notation}${move.annotation}`;
+  return move.notation;
+}
 export function serializeLibraryEntryToPdn({ headers = {}, moves = [] }) {
   const result = headers.Result || '*';
   const lines = [];
@@ -77,8 +88,8 @@ export function serializeLibraryEntryToPdn({ headers = {}, moves = [] }) {
   const parts = [];
   for (let i = 0; i < moves.length; i += 2) {
     const num = i / 2 + 1;
-    const white = appendComment(moves[i].notation, moves[i].comment);
-    const black = moves[i + 1] ? appendComment(moves[i + 1].notation, moves[i + 1].comment) : null;
+    const white = appendComment(libraryMoveNotation(moves[i]), moves[i].comment);
+    const black = moves[i + 1] ? appendComment(libraryMoveNotation(moves[i + 1]), moves[i + 1].comment) : null;
     parts.push(`${num}. ${white}${black ? ` ${black}` : ''}`);
   }
   const movetext = parts.join(' ');

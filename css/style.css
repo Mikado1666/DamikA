@@ -1552,6 +1552,28 @@ body {
   box-sizing: border-box;
 }
 .move-comment-popover textarea:focus { outline: none; border-color: var(--gold); }
+/* Symboles d'annotation (!, ?, !!, ??) : rangée de boutons-bascule au-dessus du commentaire.
+   Un seul actif à la fois (re-cliquer sur le symbole déjà actif le retire) — même logique
+   d'exclusivité qu'un jeu de radios, mais présenté en boutons pour un clic unique. */
+.move-annotation-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.move-annotation-btn {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.move-annotation-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold); }
+.move-annotation-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
 .move-comment-diagram-toggle {
   display: flex;
   align-items: center;

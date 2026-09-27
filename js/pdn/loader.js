@@ -45,9 +45,10 @@ export function loadGameFromPdn(parsedGame) {
       }
       game.playSimpleMove(simple);
     }
-    // Le coup vient d'être commité en tête de `history` — reporter son commentaire PDN
-    // (déjà lu par le parseur mais jusqu'ici jeté, jamais stocké dans le moteur).
+    // Le coup vient d'être commité en tête de `history` — reporter son commentaire et son
+    // symbole d'annotation (!, ?, !!, ??) PDN, déjà lus par le parseur.
     if (mv.comment) game.setCommentAt(game.history.length - 1, mv.comment);
+    if (mv.annotation) game.setAnnotationAt(game.history.length - 1, mv.annotation);
     loadedCount += 1;
   }
 
