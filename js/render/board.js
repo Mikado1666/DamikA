@@ -28,6 +28,16 @@ export const PIECE_STYLES = {
 };
 const DEFAULT_PIECE_STYLE = 'classique';
 
+// Taille des pions — presets nommés (pas un pourcentage libre, plus lisible dans un menu) ;
+// bornes choisies pour ne jamais déborder de la case au maximum (rayon de base 0.4×case,
+// 1.15× → 0.46×case, encore 0.04×case de marge) ni devenir méconnaissable au minimum.
+export const PIECE_SIZES = {
+  petit: { label: 'Petit', scale: 0.85 },
+  normal: { label: 'Normal', scale: 1 },
+  grand: { label: 'Grand', scale: 1.15 },
+};
+const DEFAULT_PIECE_SCALE = PIECE_SIZES.normal.scale;
+
 export class BoardRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -54,6 +64,7 @@ export class BoardRenderer {
     this.showCoords = true;
     this.boardTheme = DEFAULT_BOARD_THEME;
     this.pieceStyle = DEFAULT_PIECE_STYLE;
+    this.pieceScale = DEFAULT_PIECE_SCALE;
     this.animation = null; // { from, to, piece, capturedSquares, start, duration, resolve }
     this.animSpeedMs = 260;
 
@@ -204,6 +215,12 @@ export class BoardRenderer {
   setPieceStyle(name) {
     if (!PIECE_STYLES[name]) return;
     this.pieceStyle = name;
+    this.render();
+  }
+
+  setPieceSize(name) {
+    if (!PIECE_SIZES[name]) return;
+    this.pieceScale = PIECE_SIZES[name].scale;
     this.render();
   }
 
@@ -462,6 +479,11 @@ export class BoardRenderer {
   _drawPieces() {
     const ctx = this.ctx;
     const c = this.cell;
+    // Rayon de base 0.4×case (marge de 0.1×case de chaque côté à l'échelle 1) multiplié par
+    // le réglage de taille utilisateur — plafonné dans setPieceScale() à 1.15 pour ne jamais
+    // déborder de la case (rayon max 0.46×case, cases diagonales adjacentes bien plus
+    // éloignées que 2 rayons donc aucun risque de chevaucher la pièce voisine).
+    const r = c * 0.4 * this.pieceScale;
     const anim = this.animation;
     const renderPiece = (PIECE_STYLES[this.pieceStyle] || PIECE_STYLES[DEFAULT_PIECE_STYLE]).render;
     const skip = new Set();
@@ -476,7 +498,7 @@ export class BoardRenderer {
       if (!piece) continue;
       const [row, col] = squareToRC(sq);
       const [cx, cy] = this._cellCenter(row, col);
-      renderPiece(ctx, cx, cy, c * 0.4, piece);
+      renderPiece(ctx, cx, cy, r, piece);
     }
 
     if (anim) {
@@ -497,7 +519,7 @@ export class BoardRenderer {
         else if (idx === segmentsDone) alpha = eased < 0.5 ? 1 : 0;
         else alpha = 1;
         if (alpha <= 0.01) return;
-        renderPiece(ctx, cx, cy, c * 0.4, capturedPiece, { alpha });
+        renderPiece(ctx, cx, cy, r, capturedPiece, { alpha });
       });
 
       const fromSq = anim.path[anim.segment];
@@ -509,7 +531,7 @@ export class BoardRenderer {
       const x = x1 + (x2 - x1) * eased;
       const y = y1 + (y2 - y1) * eased;
       const bounce = 1 + Math.sin(eased * Math.PI) * 0.08;
-      renderPiece(ctx, x, y, c * 0.4 * bounce, anim.piece);
+      renderPiece(ctx, x, y, r * bounce, anim.piece);
     }
   }
 }
