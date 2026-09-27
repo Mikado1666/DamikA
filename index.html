@@ -218,6 +218,17 @@
           <button id="btn-library-save" class="text-btn" title="Enregistrer TOUTE la bibliothèque active dans un fichier .pdn">💾 Sauvegarder la bibliothèque</button>
           <button id="btn-library-open" class="text-btn" title="Charger un fichier bibliothèque .pdn (remplace la bibliothèque active)">📁 Ouvrir une bibliothèque</button>
         </div>
+        <div class="library-search-row" id="library-search-row">
+          <input type="search" class="library-search-input" id="library-search-input" placeholder="Rechercher (joueur, tournoi)…" autocomplete="off" spellcheck="false">
+          <select class="library-sort-select" id="library-sort-select" title="Trier la bibliothèque">
+            <option value="manual">Ordre manuel</option>
+            <option value="date-desc">Date ↓ (récent → ancien)</option>
+            <option value="date-asc">Date ↑ (ancien → récent)</option>
+            <option value="name-asc">Joueur (A→Z)</option>
+            <option value="elo-desc">Elo ↓</option>
+            <option value="elo-asc">Elo ↑</option>
+          </select>
+        </div>
         <div class="library-filters" id="library-filters">
           <button class="library-filter-btn active" id="library-filter-all" data-filter="all">Toutes</button>
           <button class="library-filter-btn" id="library-filter-recent" data-filter="recent">🕒 Récentes</button>
