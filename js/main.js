@@ -2529,67 +2529,95 @@ function exportGamePdf() {
     doc.text(meta.scoreLine, pageW / 2, coverY + 10, { align: 'center' });
   }
 
-  // --- notation complète ---
+  // --- notation + diagramme de la position finale, condensés sur UNE SEULE page ----------
+  // Grille de coups en plusieurs colonnes (pas 2 colonnes Blancs/Noirs pleine largeur comme
+  // avant) avec police/interligne réduits selon la longueur de la partie, pour laisser assez
+  // de place au diagramme EN DESSOUS sans déborder sur une 2e page (retour Mickaël : la
+  // notation à elle seule remplissait toute la page et repoussait le diagramme). Un
+  // débordement reste possible pour une partie extrêmement longue et/ou très commentée — le
+  // diagramme part alors sur la page suivante plutôt que d'être rendu illisible.
   doc.addPage();
   paintPageBackground();
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(GOLD);
   doc.text('Notation', margin, margin);
+
+  const pairs = [];
+  for (let i = 0; i < moves.length; i += 2) pairs.push([moves[i], moves[i + 1]]);
+  const comments = [];
+  moves.forEach((mv, idx) => { if (mv.comment) comments.push({ n: idx + 1, text: mv.comment }); });
+
+  // Palier (nb de paires de coups) -> colonnes/police : plus la partie est longue, plus on
+  // resserre, jusqu'à un plancher de lisibilité à 7pt. Choisi empiriquement pour qu'une
+  // partie "normale" (jusqu'à ~50 coups) tienne large sur 2-3 colonnes, une partie très
+  // longue sur davantage de colonnes plus denses plutôt que de déborder.
+  const tiers = [
+    { max: 20, cols: 2, font: 10.5 },
+    { max: 32, cols: 3, font: 10 },
+    { max: 48, cols: 4, font: 9 },
+    { max: 70, cols: 5, font: 8 },
+    { max: Infinity, cols: 6, font: 7.5 },
+  ];
+  const tier = tiers.find((t) => pairs.length <= t.max);
+  const cols = tier.cols;
+  const fontSize = tier.font;
+  const lineH = fontSize + 4;
+
+  const notationTop = margin + 26;
+  const contentW = pageW - margin * 2;
+  const colW = contentW / cols;
+  const rowsPerCol = Math.ceil(pairs.length / cols);
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  let y = margin + 26;
-  const lineH = 16;
-  const colNum = margin;
-  const colWhite = margin + 46;
-  const colBlack = margin + 190;
-  for (let i = 0; i < moves.length; i += 2) {
-    if (y > pageH - margin) {
-      doc.addPage();
-      paintPageBackground();
-      y = margin;
-    }
-    const white = moves[i];
-    const black = moves[i + 1];
+  doc.setFontSize(fontSize);
+  pairs.forEach(([white, black], i) => {
+    const col = Math.floor(i / rowsPerCol);
+    const row = i % rowsPerCol;
+    const x = margin + col * colW;
+    const y = notationTop + row * lineH;
     doc.setTextColor(TEXT_2);
-    doc.text(`${i / 2 + 1}.`, colNum, y);
+    doc.text(`${i + 1}.`, x, y);
     doc.setTextColor(TEXT_1);
-    doc.text(moveNotation(white), colWhite, y);
+    doc.text(moveNotation(white), x + 20, y);
     if (black) {
       doc.setTextColor(BLACK_BRONZE);
-      doc.text(moveNotation(black), colBlack, y);
+      doc.text(moveNotation(black), x + colW * 0.58, y);
     }
-    y += lineH;
-    // Commentaires : ligne(s) italique(s) indentée(s) sous le coup concerné, dans la
-    // couleur neutre du texte (pas d'emphase de couleur, juste le style italique).
-    for (const mv of [white, black]) {
-      if (!mv || !mv.comment) continue;
-      if (y > pageH - margin) { doc.addPage(); paintPageBackground(); y = margin; }
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9.5);
-      doc.setTextColor(TEXT_2);
-      const wrapped = doc.splitTextToSize(mv.comment, pageW - colWhite - margin);
-      wrapped.forEach((wline) => {
-        if (y > pageH - margin) { doc.addPage(); paintPageBackground(); y = margin; }
-        doc.text(wline, colWhite, y);
-        y += 12;
-      });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      y += 2;
+  });
+  let y = notationTop + rowsPerCol * lineH + 6;
+
+  // Commentaires éventuels : liste compacte "n. texte" sous la grille plutôt qu'indentés
+  // sous chaque coup (incompatible avec une grille multi-colonnes) — reste lisible et garde
+  // la mise en page condensée pour le cas courant (peu ou pas de commentaires).
+  if (comments.length) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8.5);
+    doc.setTextColor(TEXT_2);
+    for (const { n, text } of comments) {
+      const wrapped = doc.splitTextToSize(`${n}. ${text}`, contentW);
+      for (const wline of wrapped) {
+        if (y > pageH - margin - 20) { doc.addPage(); paintPageBackground(); y = margin; }
+        doc.text(wline, margin, y);
+        y += 11;
+      }
     }
+    y += 8;
   }
 
-  // --- diagramme de la position finale ---
-  doc.addPage();
-  paintPageBackground();
+  // --- diagramme de la position finale : occupe l'espace restant sur cette page (ou la
+  // suivante si la notation/les commentaires ont tout pris) ---
+  const diagramGap = 26;
+  const availableForDiagram = pageH - margin - y - diagramGap;
+  if (availableForDiagram < 140) { doc.addPage(); paintPageBackground(); y = margin; }
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(12);
   doc.setTextColor(GOLD);
-  doc.text('Position finale', pageW / 2, margin, { align: 'center' });
+  doc.text('Position finale', pageW / 2, y + diagramGap - 8, { align: 'center' });
   const diagramDataUrl = boardImageDataUrlAtFinalPosition();
-  const diagramSize = Math.min(pageW - margin * 2, pageH - margin * 2 - 40);
-  doc.addImage(diagramDataUrl, 'PNG', (pageW - diagramSize) / 2, margin + 30, diagramSize, diagramSize);
+  const diagramMaxH = pageH - margin - (y + diagramGap);
+  const diagramSize = Math.max(120, Math.min(contentW, diagramMaxH));
+  doc.addImage(diagramDataUrl, 'PNG', (pageW - diagramSize) / 2, y + diagramGap, diagramSize, diagramSize);
 
   return doc.output('blob');
 }
