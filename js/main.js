@@ -2293,14 +2293,35 @@ function updateUnsavedIndicator() {
   el.unsavedBar.hidden = !(libraryActiveIndex >= 0 && activeEntryDirty);
 }
 
+// Clé de comparaison du contenu d'une entrée (en-têtes + coups avec annotations et
+// commentaires), indépendante de l'ordre des clés d'en-têtes. Les valeurs `undefined` sont
+// ignorées par JSON.stringify, donc `comment: undefined` == commentaire absent.
+function entryContentKey(entry) {
+  const headerKeys = Object.keys(entry.headers).sort();
+  return JSON.stringify([
+    headerKeys.map((k) => [k, entry.headers[k]]),
+    entry.moves.map((m) => [m.notation, m.comment]),
+  ]);
+}
+
 // Marque un champ suivi (nom, score, Elo, titre, commentaire de coup) comme modifié sur
 // l'entrée active SANS l'enregistrer — appelé par les handlers d'édition à la place d'un
 // `libraryDirty = true` direct, pour que `saveAppState()` diffère l'écriture persistée
 // jusqu'à "Enregistrer"/Ctrl+S (cf. commentaire sur `activeEntryDirty` plus haut). Sans
 // entrée active (saisie pure), ne fait rien : le comportement d'auto-sauvegarde existant
 // reste intact pour ce cas.
+// Source de vérité unique du pill : le dirty n'est vrai que si le contenu sérialisé diffère
+// RÉELLEMENT du snapshot enregistré. Les handlers peuvent donc l'appeler sans se soucier
+// d'avoir changé une valeur (ouvrir/fermer un éditeur sans rien modifier, valeur remise à
+// l'identique…) : ne jamais ajouter de garde `changed` ad hoc dans un nouveau chemin d'édition.
 function markActiveEntryDirty() {
   if (libraryActiveIndex < 0) return;
+  if (!activeEntryConfirmed && activeEntrySnapshot
+      && entryContentKey(currentGameAsLibraryEntry()) === entryContentKey(activeEntrySnapshot)) {
+    activeEntryDirty = false;
+    updateUnsavedIndicator();
+    return;
+  }
   // Mode "confirmé" (au moins un "Enregistrer" déjà fait sur CETTE partie depuis son
   // ouverture) : chaque modification suivante s'enregistre directement, comme l'auto-save
   // d'origine, plutôt que de rouvrir le pill à chaque coup/champ modifié. On ne repasse en
