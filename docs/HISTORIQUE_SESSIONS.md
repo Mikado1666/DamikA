@@ -1112,6 +1112,8 @@ Session de maintenance, aucun code modifié.
 - **Limite connue** : l'ancien commit peut rester accessible par son SHA chez GitHub (cache,
   forks, PR éventuelles) tant que le support GitHub n'a pas lancé de nettoyage. Seule une
   demande au support garantit la purge complète.
+- **Suivi** : ticket GitHub Support #4824907 ouvert pour purger les vues en cache et les
+  références de l'ancien commit `01d7458` (aucune PR, aucun fork). En attente de réponse.
 - **Documentation** : CLAUDE.md remis à jour (section "Livré", backlog, clés localStorage) et
   règle permanente ajoutée : aucune donnée nominative de joueurs suivie par git, vérification
   `git check-ignore` avant tout commit touchant `scripts/`.
