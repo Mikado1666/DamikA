@@ -204,14 +204,10 @@ function setLibraryFilter(filter) {
   renderLibrary();
 }
 
-// --- recherche + tri de la Bibliothèque -------------------------------------------------
+// --- recherche de la Bibliothèque -------------------------------------------------------
 // Recherche texte : jamais persistée (état de session volatile, comme un champ de recherche
 // classique), pas de duplication de données — filtre simplement `library` à l'affichage.
 let librarySearchQuery = '';
-// 'manual' = ordre de `library` tel quel (réordonnable par drag&drop) ; les autres valeurs
-// trient à l'affichage SANS toucher au tableau `library` lui-même (pas de mutation de l'ordre
-// réel de la bibliothèque par un tri, réversible en repassant sur "Ordre manuel").
-let librarySort = 'manual';
 
 // Normalisation insensible à la casse ET aux accents (NFD + suppression des diacritiques) —
 // "Callegari" doit matcher "callegari" et "François" doit matcher "francois".
@@ -225,26 +221,6 @@ function entryMatchesSearch(entry, normalizedQuery) {
   return haystack.includes(normalizedQuery);
 }
 
-// Date au format PDN "AAAA.MM.JJ" (cf. CLAUDE.md §PDN) : comparable telle quelle en chaîne
-// pour un tri chronologique correct, sans parsing de date dédié. Une date absente/mal formée
-// retombe en fin de tri (chaîne vide, toujours "avant" alphabétiquement).
-function entrySortDateKey(entry) {
-  return entry.headers.Date || '';
-}
-
-function librarySortComparator(sort) {
-  switch (sort) {
-    case 'date-desc': return (a, b) => entrySortDateKey(b).localeCompare(entrySortDateKey(a));
-    case 'date-asc': return (a, b) => entrySortDateKey(a).localeCompare(entrySortDateKey(b));
-    case 'name-asc': return (a, b) => libraryEntryTitle(a).localeCompare(libraryEntryTitle(b), 'fr', { sensitivity: 'base' });
-    default: return null; // 'manual' : pas de tri, ordre de `library` conservé
-  }
-}
-
-function setLibrarySort(sort) {
-  librarySort = sort;
-  renderLibrary();
-}
 // Nom de la bibliothèque elle-même (distinct du nom de chaque partie qu'elle contient) —
 // vide par défaut, placeholder "Bibliothèque sans nom" géré en CSS (:empty::before). Encodé
 // dans le fichier .pdn comme un en-tête non standard `[LibraryName "..."]` PLACÉ AVANT les
@@ -409,7 +385,6 @@ const el = {
   libraryList: document.getElementById('library-list'),
   librarySearchRow: document.getElementById('library-search-row'),
   librarySearchInput: document.getElementById('library-search-input'),
-  librarySortSelect: document.getElementById('library-sort-select'),
   libraryFilters: document.getElementById('library-filters'),
   libraryEmpty: document.getElementById('library-empty'),
   libraryFilterEmpty: document.getElementById('library-filter-empty'),
@@ -461,7 +436,6 @@ el.librarySearchInput.addEventListener('input', () => {
   librarySearchQuery = normalizeSearchText(el.librarySearchInput.value.trim());
   renderLibrary();
 });
-el.librarySortSelect.addEventListener('change', () => setLibrarySort(el.librarySortSelect.value));
 
 // --- notation d'un coup --------------------------------------------------------
 function moveNotation(moveInfo) {
@@ -1819,24 +1793,20 @@ function renderLibrary() {
     if (libraryFilter === 'recent' && !libraryRecent.includes(gameFingerprint(library[idx]))) return false;
     return entryMatchesSearch(library[idx], librarySearchQuery);
   });
-  // Un tri explicite (menu déroulant) prend le pas sur l'ordre "Récentes" par défaut (le plus
-  // récemment ouvert en premier) — sinon, hors tri explicite, cet ordre par défaut s'applique
-  // seulement à la vue "Récentes" ; la vue "Toutes"/"Favoris" garde l'ordre de `library`.
-  const comparator = librarySortComparator(librarySort);
-  if (comparator) {
-    visibleIndexes.sort((a, b) => comparator(library[a], library[b]));
-  } else if (libraryFilter === 'recent') {
+  // Ordre "Récentes" (le plus récemment ouvert en premier) pour cette vue ; "Toutes"/"Favoris"
+  // gardent l'ordre de `library`.
+  if (libraryFilter === 'recent') {
     visibleIndexes.sort((a, b) => (
       libraryRecent.indexOf(gameFingerprint(library[a])) - libraryRecent.indexOf(gameFingerprint(library[b]))
     ));
   }
   el.libraryFilterEmpty.hidden = library.length === 0 || visibleIndexes.length > 0;
-  // Réordonnancement manuel : seulement quand rien ne change l'ordre/le contenu affiché par
-  // rapport à `library` elle-même (vue "Toutes", tri "Ordre manuel", pas de recherche active)
-  // — cf. startLibraryDrag()/moveLibraryEntryTo() : la position finale y est calculée depuis
-  // l'ordre DOM de TOUTE la liste, ce qui serait faux dès que la vue affichée diverge de
-  // l'ordre réel de `library` (sous-ensemble filtré, ou réordonnée par un tri).
-  const dragEnabled = libraryFilter === 'all' && librarySort === 'manual' && !librarySearchQuery;
+  // Réordonnancement manuel : seulement quand rien ne change le contenu affiché par rapport à
+  // `library` elle-même (vue "Toutes", pas de recherche active) — cf.
+  // startLibraryDrag()/moveLibraryEntryTo() : la position finale y est calculée depuis l'ordre
+  // DOM de TOUTE la liste, ce qui serait faux dès que la vue affichée est un sous-ensemble
+  // filtré de `library`.
+  const dragEnabled = libraryFilter === 'all' && !librarySearchQuery;
 
   library.forEach((entry, idx) => {
     if (!visibleIndexes.includes(idx)) return;

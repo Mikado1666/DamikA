@@ -938,19 +938,6 @@ body {
 }
 .library-search-input::placeholder { color: var(--text-2); }
 .library-search-input:focus { outline: none; border-color: var(--gold); }
-.library-sort-select {
-  flex-shrink: 0;
-  max-width: 42%;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--panel-border);
-  background: var(--bg-2);
-  color: var(--text-1);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-.library-sort-select:focus { outline: none; border-color: var(--gold); }
 
 /* Filtres Toutes/Récentes/Favoris : mêmes pastilles que .panel-tab (fond --gold-soft, texte
    --gold à l'état actif), en plus compact pour tenir sur une seule ligne dans le panneau. */

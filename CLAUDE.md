@@ -183,8 +183,8 @@ pion s'arrête sur la dernière rangée) ; plateau responsive ; 3 styles de pion
 Relief, Bois gravé) ; taille des pions réglable (Petit/Normal/Grand) ; durée d'affichage de
 la flèche du dernier coup réglable ; thème clair "Miel doré" ; aide clavier (touche `?`) ;
 import/export PDN, TXT, PNG ; export PDF repensé (fond clair, diagrammes sur les coups
-annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, drag&drop, édition inline,
-recherche texte + tri, fichiers récents, favoris, filtres) ; pill "Modifications non
+annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, ordre manuel par drag&drop,
+édition inline, recherche texte, fichiers récents, favoris, filtres Toutes/Récentes/Favoris) ; pill "Modifications non
 enregistrées" (état dirty de l'entrée active) ; commentaires de coup et symboles
 d'annotation (`!`, `?`, `!!`, `??`) ; Bloc 1 "Plaque tournoi" (Elo, titre, score libre,
 photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visuelle Damika ;

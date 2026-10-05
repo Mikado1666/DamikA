@@ -4,7 +4,7 @@
 > ayant fermé la quasi-totalité du backlog "confort" de la V1 liseuse (sons,
 > thème clair/sombre, export image/PDF, partage lien+QR, photo joueurs,
 > thèmes de damier, easter egg, aide clavier, fichiers récents/favoris,
-> annotations de coup, recherche/tri Bibliothèque, durée de la flèche, taille
+> annotations de coup, recherche Bibliothèque, durée de la flèche, taille
 > des pions). Rafraîchissement pur de ce document contre l'état réel du code
 > (aucune fonctionnalité nouvelle ajoutée par cette passe) — voir
 > `docs/HISTORIQUE_SESSIONS.md` et `CLAUDE.md` pour le détail technique de
@@ -44,7 +44,7 @@ Légende : ✅ fait · 🟡 partiel · ⬜ pas commencé
 - ✅ Retournement du plateau (vue côté Blancs ou Noirs), raccourci clavier `F`
 - ✅ Compteur de pièces restantes par camp, affiché en permanence
 - ✅ Détection/affichage automatique des prises obligatoires (surbrillance orange pulsante)
-- ✅ Bibliothèque des parties importées : liste persistante, recherche texte (joueurs + tournoi, insensible casse/accents) et tri (ordre manuel, date, joueur), combinables avec les filtres Toutes/Récentes/Favoris. *Note : recherche/tri implémentés récemment, pas encore validés en conditions réelles.*
+- ✅ Bibliothèque des parties importées : liste persistante, recherche texte (joueurs + tournoi, insensible casse/accents), combinable avec les filtres Toutes/Récentes/Favoris ; ordre manuel par glisser-déposer (pas de tri automatique : retiré volontairement, l'ordre de la bibliothèque est celui choisi par l'utilisateur). *Note : recherche implémentée récemment, pas encore validée en conditions réelles.*
 - ✅ Undo/Redo lors de la saisie manuelle d'un coup
 - ✅ Vitesse d'animation réglable (Normale / Rapide / Ultra-rapide / Instantanée)
 - ✅ Mode plein écran / présentation
@@ -100,7 +100,7 @@ La flèche visuelle, elle, trace toujours le chemin complet quelle que soit la n
 ## 7. Phasage du projet
 1. **Liseuse PC** : quasi finalisée. Le cœur (règles, plateau, PDN, navigation) est solide,
    et la quasi-totalité des fonctionnalités de confort listées en section 4 sont livrées
-   (sons, thèmes clair/sombre, annotations éditables, fichiers récents/favoris, recherche/tri
+   (sons, thèmes clair/sombre, annotations éditables, fichiers récents/favoris, recherche
    Bibliothèque, export image/PDF, partage lien/QR, photo joueurs, personnalisation
    damier/pions, durée de flèche réglable). Restent, par ordre de priorité décroissante :
    - Persistance du thème de damier et du style de pion choisis (revient au défaut à chaque F5).
@@ -109,7 +109,7 @@ La flèche visuelle, elle, trace toujours le chemin complet quelle que soit la n
    - Une passe de test FMJD plus systématique (toujours pas de suite de tests automatisée,
      cf. section 3) — le bug de promotion en cours de rafle signalé par un cas réel est
      corrigé, mais aucun autre point du règlement n'a été confronté à des positions réelles.
-   - Validation en conditions réelles des tout derniers chantiers (annotations, recherche/tri
+   - Validation en conditions réelles des tout derniers chantiers (annotations, recherche
      Bibliothèque, durée de flèche, taille des pions) — codés et vérifiés statiquement, pas
      encore testés dans un vrai navigateur par Mickaël.
 2. **Chantier Mobile** : pas commencé au-delà de quelques media queries de repli, jamais testées.
@@ -134,7 +134,7 @@ Flux : cahier des charges (Claude/Cowork) → code + design (Claude Code) → re
   favicon/icônes PWA)
 - [x] Fonctionnalité "Nouvelle partie" (bouton + logo cliquable, confirmation)
 - [x] Sons, thème clair/sombre, aide clavier, annotations éditables, fichiers récents/favoris,
-  recherche/tri Bibliothèque, export image/PDF, partage lien/QR code, personnalisation
+  recherche Bibliothèque, export image/PDF, partage lien/QR code, personnalisation
   damier/pions (style + taille)
 - [ ] Liseuse PC finalisée à 100% — reste : persistance thème damier/style de pion, packs de
   sons personnalisés, molette dans l'écran d'aide, tests FMJD plus systématiques, validation
