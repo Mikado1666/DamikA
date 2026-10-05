@@ -225,13 +225,6 @@ function entryMatchesSearch(entry, normalizedQuery) {
   return haystack.includes(normalizedQuery);
 }
 
-// Elo utilisé pour le tri : Blancs, repli sur Noirs si absent (les deux champs sont rarement
-// renseignés l'un sans l'autre en pratique) — jamais une moyenne/somme, qui masquerait lequel
-// des deux Elo a réellement servi à trier.
-function entrySortElo(entry) {
-  const val = Number(entry.headers.WhiteElo || entry.headers.BlackElo);
-  return Number.isFinite(val) ? val : -Infinity;
-}
 // Date au format PDN "AAAA.MM.JJ" (cf. CLAUDE.md §PDN) : comparable telle quelle en chaîne
 // pour un tri chronologique correct, sans parsing de date dédié. Une date absente/mal formée
 // retombe en fin de tri (chaîne vide, toujours "avant" alphabétiquement).
@@ -244,8 +237,6 @@ function librarySortComparator(sort) {
     case 'date-desc': return (a, b) => entrySortDateKey(b).localeCompare(entrySortDateKey(a));
     case 'date-asc': return (a, b) => entrySortDateKey(a).localeCompare(entrySortDateKey(b));
     case 'name-asc': return (a, b) => libraryEntryTitle(a).localeCompare(libraryEntryTitle(b), 'fr', { sensitivity: 'base' });
-    case 'elo-desc': return (a, b) => entrySortElo(b) - entrySortElo(a);
-    case 'elo-asc': return (a, b) => entrySortElo(a) - entrySortElo(b);
     default: return null; // 'manual' : pas de tri, ordre de `library` conservé
   }
 }

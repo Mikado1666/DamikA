@@ -44,7 +44,7 @@ Légende : ✅ fait · 🟡 partiel · ⬜ pas commencé
 - ✅ Retournement du plateau (vue côté Blancs ou Noirs), raccourci clavier `F`
 - ✅ Compteur de pièces restantes par camp, affiché en permanence
 - ✅ Détection/affichage automatique des prises obligatoires (surbrillance orange pulsante)
-- ✅ Bibliothèque des parties importées : liste persistante, recherche texte (joueurs + tournoi, insensible casse/accents) et tri (ordre manuel, date, joueur, Elo), combinables avec les filtres Toutes/Récentes/Favoris. *Note : recherche/tri implémentés récemment, pas encore validés en conditions réelles.*
+- ✅ Bibliothèque des parties importées : liste persistante, recherche texte (joueurs + tournoi, insensible casse/accents) et tri (ordre manuel, date, joueur), combinables avec les filtres Toutes/Récentes/Favoris. *Note : recherche/tri implémentés récemment, pas encore validés en conditions réelles.*
 - ✅ Undo/Redo lors de la saisie manuelle d'un coup
 - ✅ Vitesse d'animation réglable (Normale / Rapide / Ultra-rapide / Instantanée)
 - ✅ Mode plein écran / présentation
