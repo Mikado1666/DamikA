@@ -111,7 +111,8 @@ sw.js                 service worker (désactivé côté client)
   le renommage libre (`headers.Label`) a été retiré (nettoyé dans `renderLibrary()`).
 - localStorage : `damika:library-state` (PDN de la bibliothèque, index actif, PDN courant,
   `libraryDirty`), `damika:player-photo-registry`, `damika:sound-muted`,
-  `damika:sound-volume`. `scheduleSave()` débattue 400 ms + flush sur `beforeunload`.
+  `damika:sound-volume`, `damika:ui-theme` (sombre / clair "Miel doré"),
+  `damika:piece-size`, `damika:arrow-duration`. `scheduleSave()` débattue 400 ms + flush sur `beforeunload`.
 - "Ouvrir une bibliothèque" et "Coller" **remplacent** (garde-fou `confirmModal()` si non
   sauvegardée) ; "Importer" **ajoute**. Après tout ajout, la DERNIÈRE partie ajoutée devient
   l'entrée active (`libraryActiveIndex = length - 1` + `loadParsedGame()`). Un import à
@@ -177,23 +178,30 @@ sw.js                 service worker (désactivé côté client)
 
 ## 3. État actuel
 
-**Livré et validé** : moteur FMJD complet ; plateau responsive ; 3 styles de pions
-(Classique, Relief, Bois gravé) ; import/export PDN, TXT, PNG, PDF ; Bibliothèque
-persistante (Sauvegarder/Ouvrir, drag&drop, édition inline) ; commentaires de coup ;
-Bloc 1 "Plaque tournoi" (Elo, titre, score libre, photos, Toernooibase) ; partage lien + QR ;
-sons + volume/mute ; identité visuelle Damika ; "Nouvelle partie" ; navigation molette ;
-déploiement public.
+**Livré et validé** : moteur FMJD complet (dont promotion en cours de rafle : seulement si le
+pion s'arrête sur la dernière rangée) ; plateau responsive ; 3 styles de pions (Classique,
+Relief, Bois gravé) ; taille des pions réglable (Petit/Normal/Grand) ; durée d'affichage de
+la flèche du dernier coup réglable ; thème clair "Miel doré" ; aide clavier (touche `?`) ;
+import/export PDN, TXT, PNG ; export PDF repensé (fond clair, diagrammes sur les coups
+annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, drag&drop, édition inline,
+recherche texte + tri, fichiers récents, favoris, filtres) ; pill "Modifications non
+enregistrées" (état dirty de l'entrée active) ; commentaires de coup et symboles
+d'annotation (`!`, `?`, `!!`, `??`) ; Bloc 1 "Plaque tournoi" (Elo, titre, score libre,
+photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visuelle Damika ;
+"Nouvelle partie" ; navigation molette ; déploiement public.
 
 **En pause** : style de pion "Toernooibase" (non conforme aux images
 `reference-pion-toernooibase-1/2.png`, retiré de `PIECE_STYLES` dans `js/render/board.js` ;
 `drawPieceToernooibase` existe toujours mais n'est plus branchée).
 
 **Backlog** (aucun chantier ouvert ; ne rien commencer sans demande) :
-- Prochain annoncé : Mobile puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`), volontairement
-  pas commencés.
-- Bloc B : aide clavier, recherche dans la bibliothèque, fichiers récents, favoris, mode
-  clair, réglage de la durée de la flèche.
-- Mettre à jour `CAHIER_DES_CHARGES.md` (thèmes/styles de pions).
+- Persister en localStorage le thème du damier et le style de pion.
+- Réactiver le Service Worker (mode hors-ligne).
+- Style de pion "Toernooibase" (en pause, voir ci-dessus).
+- Export en lot.
+- Conformité FMJD approfondie.
+- Puis Mobile, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`), volontairement pas
+  commencés.
 
 ## 4. Points de vigilance
 
@@ -202,11 +210,18 @@ déploiement public.
 - Worker Toernooibase bloquable à tout moment ; logique dupliquée Worker/script Node.
 - Limite connue : "Retirer la photo" compare par égalité stricte sur le nom affiché, donc
   peut ne rien faire si la photo vient d'une correspondance floue (nom de famille seul).
+- **Données nominatives : règle permanente.** `scripts/players.txt` et toute donnée
+  nominative de joueurs ne doivent JAMAIS être suivis par git : jamais commités, jamais
+  restaurés depuis un ancien `main` ou une autre branche. Le fichier reste en local, dans
+  `.gitignore`. Avant tout commit qui touche `scripts/`, lancer
+  `git check-ignore scripts/players.txt` (doit afficher le chemin) et relire `git status`.
+  Ne jamais écrire de nom ou d'identifiant de joueur dans CLAUDE.md ni dans la
+  documentation.
 - Déploiement manuel, sans CI (dépôt GitHub public `Mikado1666/DamikA` : ne rien y commiter de
   sensible, l'historique est lisible par tous).
 - Le serveur de dev local peut être tué par l'environnement (mémoire basse) : à relancer.
 
 ## 5. Historique
 
-Récits détaillés des sessions (2026-09-15 à 2026-09-18), avec le pourquoi de chaque
+Récits détaillés des sessions (2026-09-15 à 2026-10-05), avec le pourquoi de chaque
 correctif : [`docs/HISTORIQUE_SESSIONS.md`](docs/HISTORIQUE_SESSIONS.md).

@@ -1075,8 +1075,52 @@ bug architectural de fond trouvé et corrigé en fin de session.**
 système basse pendant que la session était inactive) — pas un problème du serveur
 lui-même, à relancer manuellement au besoin.
 
-## Ce qui manque (voir CAHIER_DES_CHARGES.md pour la liste complète)
+## Session 2026-10-05 : purge d'une donnée nominative du dépôt public
 
-Mode clair, aide clavier, annotations de coups éditables (le parseur PDN les lit déjà,
-juste pas d'UI), fichiers récents, favoris.
-Chantier mobile et IA pas commencés (volontairement, phases 2 et 3 du projet).
+Session de maintenance, aucun code modifié.
+
+- **Reprise** : lecture de CLAUDE.md, `git status` et `git log`. `main` synchronisée avec
+  `origin/main`, rien de non commité hormis le dossier non suivi `Claude outputs/`.
+- **Vérification** : le commit `01d7458` ("Récupère scripts/players.txt…") avait remis
+  dans le dépôt public le fichier `scripts/players.txt`, qui contient le nom et l'identifiant
+  Toernooibase d'une tierce personne. Il était sur `origin/main` et sur la branche
+  `claude/vigilant-brahmagupta-buxtul`. Ce commit était le seul à toucher ce fichier ;
+  `data/player-photos.json` n'était pas concerné.
+- **Constat CLAUDE.md** : plusieurs fonctionnalités livrées (aide clavier, récents/favoris/
+  filtres, thème "Miel doré", pill dirty, PDF repensé…) figuraient encore au backlog.
+  Corrigé en fin de session.
+- **Purge**, avec confirmation à chaque étape destructive :
+  1. deux miroirs de sauvegarde (`git clone --mirror`), un du local et un d'`origin` ;
+  2. `scripts/players.txt` ajouté au `.gitignore` et retiré de l'index (commit dédié), copie
+     du fichier gardée hors dépôt ;
+  3. `git filter-repo --path scripts/players.txt --invert-paths --force` sur toutes les
+     branches (78 commits réécrits, SHA modifiés à partir de `01d7458`). Un premier
+     lancement s'est arrêté sans rien réécrire : `filter-repo` demandait par une question
+     interactive s'il devait continuer la purge précédente (réponse « N »). Le fichier est
+     ensuite remis en local, non suivi ;
+  4. vérification qu'aucun commit d'aucune branche ne contenait plus les valeurs
+     recherchées.
+- **Publication** : la branche distante `claude/vigilant-brahmagupta-buxtul` ne contenait
+  aucun commit absent de `main` ; `git diff --stat` entre l'ancien `main` distant et le
+  nouveau ne montrait que `.gitignore` et `scripts/players.txt`. Force-push de `main`
+  (`--force-with-lease` avec valeur attendue explicite, car `filter-repo` avait supprimé les
+  refs distantes locales), puis suppression de cette branche. Aucune autre branche poussée.
+- **Vérifications distantes** : `git ls-remote` conforme, aucune occurrence des valeurs
+  dans `origin/main` après `fetch`, aucun `players.txt` suivi.
+- **Nettoyage** : suppression des deux miroirs et du ref temporaire `refs/old-origin-main`,
+  `git status` propre.
+- **Limite connue** : l'ancien commit peut rester accessible par son SHA chez GitHub (cache,
+  forks, PR éventuelles) tant que le support GitHub n'a pas lancé de nettoyage. Seule une
+  demande au support garantit la purge complète.
+- **Documentation** : CLAUDE.md remis à jour (section "Livré", backlog, clés localStorage) et
+  règle permanente ajoutée : aucune donnée nominative de joueurs suivie par git, vérification
+  `git check-ignore` avant tout commit touchant `scripts/`.
+
+## Ce qui manque (backlog actuel, voir CLAUDE.md section 3)
+
+- Persister en localStorage le thème du damier et le style de pion.
+- Réactiver le Service Worker (mode hors-ligne).
+- Style de pion "Toernooibase" (en pause).
+- Export en lot.
+- Conformité FMJD approfondie.
+- Puis Mobile, puis IA (volontairement pas commencés).
