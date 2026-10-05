@@ -6,3 +6,6 @@ node_modules/
 .dev.vars
 wrangler-account.json
 deploy.ps1
+
+# Données personnelles (noms + IDs Toernooibase), ne jamais suivre
+scripts/players.txt
