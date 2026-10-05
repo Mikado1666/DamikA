@@ -1118,11 +1118,81 @@ Session de maintenance, aucun code modifié.
   règle permanente ajoutée : aucune donnée nominative de joueurs suivie par git, vérification
   `git check-ignore` avant tout commit touchant `scripts/`.
 
+### Suite de la journée (chantiers Bibliothèque)
+
+Chronologique. Seuls les commits listés sont poussés ; la refonte compacte est EN COURS (non
+commitée).
+
+1. **Faux pill "Modifications non enregistrées" (`9150a3d`, poussé).** Ouvrir puis fermer
+   l'éditeur d'annotation d'un coup, sans rien changer, faisait apparaître le pill.
+   Cause : `closeCommentPopover()` appelait toujours `markActiveEntryDirty()`, qui passait à
+   vrai sans comparer. Les deux corrections précédentes (26 et 27/09) avaient posé une garde
+   `changed` handler par handler, d'où la récidive à chaque nouveau chemin d'édition.
+   Correction à la racine : `markActiveEntryDirty()` compare le contenu sérialisé (en-têtes,
+   coups, annotations, commentaires, via `entryContentKey()`) au snapshot enregistré ; le dirty
+   n'est vrai que s'il diffère. Ne plus ajouter de garde ad hoc dans un nouvel éditeur.
+2. **Tri Elo retiré (`fbcdee7`, poussé).** Question posée sur ce qu'il triait : l'Elo des
+   Blancs, avec repli sur celui des Noirs, et `-Infinity` (donc en fin/en tête selon le sens)
+   sans Elo. Retiré à la demande de Mickaël ; `CAHIER_DES_CHARGES.md` ligne 47 corrigée.
+3. **Menu de tri entier retiré (`d528e43`, poussé).** Simplification demandée : l'ordre de la
+   Bibliothèque est uniquement manuel (glisser-déposer), il ne reste que la recherche, les
+   filtres Toutes/Récentes/Favoris et l'ordre manuel. Aucun réglage de tri n'était persisté,
+   donc aucune migration. Le glisser-déposer reste désactivé pendant une recherche ou un filtre
+   (la position finale est calculée sur toute la liste). `CLAUDE.md` et le cahier des charges
+   mis à jour dans le même commit.
+   - **Bug connu, laissé tel quel sur instruction :** `renderLibrary()` calcule bien l'ordre de
+     `visibleIndexes` mais parcourt `library` dans son ordre d'origine, donc l'ordre "Récentes"
+     (le plus récemment ouvert en premier) n'est pas appliqué à l'écran.
+4. **Sélection de parties pour l'export : essayée puis abandonnée (rien commité).**
+   Ctrl/Cmd+clic, Maj+clic, barre "N sélectionnées", puis un export de la sélection (d'abord dans
+   le menu Exporter, ensuite dans la barre de sélection), puis un simple bouton "Exporter les N
+   parties affichées". Tout a été annulé (`git restore`) : trop lourd pour le besoin réel, on
+   raisonne en bibliothèque complète (l'export complet est "Sauvegarder la bibliothèque").
+   **Décision :** le menu Exporter du haut ne concerne que la partie affichée sur le plateau
+   (PDN, TXT, PNG, PDF, partage) et reste inchangé ; l'export de toute la bibliothèque passe par
+   "Sauvegarder la bibliothèque". Le libellé "Partie affichée" essayé dans ce menu n'a pas été
+   conservé.
+5. **Refonte compacte du panneau Bibliothèque : EN COURS, NON COMMITÉE** (fichiers modifiés :
+   `index.html`, `css/style.css`, `js/main.js`, plus une ligne `test-library-50.pdn` ajoutée à
+   `.gitignore`). Objectif : voir au moins 12 parties sans scroller à 100 % sur un écran 1080p,
+   avec 50 parties. Réalisé :
+   - en-tête sur une ligne : nom de la bibliothèque + "N parties" à gauche, trois boutons-icônes
+     carrés à droite (Ajouter, Sauvegarder, Ouvrir) ;
+   - recherche + deux bascules à icône, Récentes et Favoris (un second clic désactive le
+     filtre ; aucun filtre = toutes les parties) ; la ligne Toutes/Récentes/Favoris est
+     supprimée ;
+   - cartes sur 2 lignes, sans retour à la ligne, tronquées par "…" (joueurs + score, puis
+     tournoi · ronde ou "Partie libre"), numérotées selon la position dans la bibliothèque
+     COMPLÈTE (recalculée après un glisser-déposer, conservée pendant une recherche), texte
+     complet en info-bulle ;
+   - mesure avec 50 parties fictives : 15 cartes visibles sans scroller aux premières tailles ;
+   - retouche : textes agrandis (titre 16 px, cartes 54 px de haut, joueurs et score 15 px,
+     boutons 32 px), toutes ces tailles regroupées en variables `--lib-*` en tête du bloc
+     `#panel-library` de `css/style.css`. Après agrandissement, 13 cartes tiennent sans scroller ;
+   - le panneau de droite (Bloc 3) s'était élargi avec le texte plus gros, ce qui faisait
+     rétrécir le damier (`BoardRenderer.resize()` mesure la largeur réelle du panneau). Cause :
+     `.side-panel` en `flex: 0 0 350px` sans largeur maximale. Correctif écrit dans l'arbre de
+     travail : variable unique `--side-panel-w: 350px` (aussi utilisée par les formules
+     `max-width` de `.layout` et `.topbar-inner`), `.side-panel` en `width`/`max-width` fixes
+     avec `overflow: hidden`, et `min-width: 0` sur les conteneurs flex de la Bibliothèque.
+     Mesuré avec des noms et tournois très longs : panneau 350 px et damier 783×783 px,
+     identiques au commit `d528e43` ;
+   - **Reste à faire : validation du rendu par Mickaël**, puis commit et push. Ne rien ajouter
+     d'autre dans ce chantier ; décider de garder ou non la ligne `.gitignore`.
+6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
+   après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
+   section "En cours").
+7. **Fin de session.** Le serveur de dev local a été arrêté par le système (mémoire basse), ce
+   n'est pas un défaut du serveur : à relancer (`python -m http.server 8934`). Les tests ont
+   utilisé des fichiers fictifs ignorés par git, supprimés, et le localStorage du navigateur de
+   test a été restauré à chaque fois.
+
 ## Ce qui manque (backlog actuel, voir CLAUDE.md section 3)
 
-- Persister en localStorage le thème du damier et le style de pion.
-- Réactiver le Service Worker (mode hors-ligne).
-- Style de pion "Toernooibase" (en pause).
-- Export en lot.
-- Conformité FMJD approfondie.
-- Puis Mobile, puis IA (volontairement pas commencés).
+Dans l'ordre :
+1. Finir la Bibliothèque (refonte compacte : validation du rendu, commit, push).
+2. Mémoriser en localStorage le thème du damier et le style de pion.
+3. Réactiver le Service Worker (mode hors-ligne).
+4. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
+Plus tard : style de pion "Toernooibase" (en pause), export en lot, conformité FMJD
+approfondie, IA.

@@ -194,14 +194,31 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 `reference-pion-toernooibase-1/2.png`, retiré de `PIECE_STYLES` dans `js/render/board.js` ;
 `drawPieceToernooibase` existe toujours mais n'est plus branchée).
 
-**Backlog** (aucun chantier ouvert ; ne rien commencer sans demande) :
-- Persister en localStorage le thème du damier et le style de pion.
-- Réactiver le Service Worker (mode hors-ligne).
-- Style de pion "Toernooibase" (en pause, voir ci-dessus).
-- Export en lot.
-- Conformité FMJD approfondie.
-- Puis Mobile, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`), volontairement pas
-  commencés.
+**Backlog** (dans cet ordre ; ne rien commencer sans demande) :
+1. Finir la Bibliothèque (chantier en cours, voir ci-dessous).
+2. Mémoriser en localStorage le thème du damier et le style de pion.
+3. Réactiver le Service Worker (mode hors-ligne).
+4. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
+Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
+conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`).
+
+## 3 bis. En cours (état au 05/10/2026)
+
+**Refonte compacte de la Bibliothèque : NON COMMITÉE.** Fichiers modifiés : `index.html`,
+`css/style.css`, `js/main.js`, et une ligne `test-library-50.pdn` ajoutée à `.gitignore`.
+- Fait : en-tête sur une ligne (nom + "N parties", 3 boutons-icônes), recherche + bascules
+  Récentes/Favoris, cartes numérotées sur 2 lignes tronquées par "…", textes agrandis
+  (variables `--lib-*` en tête de `#panel-library`), largeur du Bloc 3 fixée par
+  `--side-panel-w: 350px` (+ `overflow: hidden` et `min-width: 0`), pour que le contenu ne la
+  fasse jamais varier ni rétrécir le damier. Mesuré : panneau 350 px et damier identique à
+  `d528e43`, 13 cartes visibles sans scroller avec 50 parties.
+- Reste : validation du rendu par Mickaël, puis commit et push ; décider de garder ou non la
+  ligne `.gitignore`. Relancer le serveur de dev (arrêté par le système, mémoire basse).
+- Bug connu laissé tel quel : l'ordre "Récentes" n'est pas appliqué à l'écran
+  (`renderLibrary()` parcourt `library` dans son ordre d'origine).
+
+**Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
+pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
 
 ## 4. Points de vigilance
 
