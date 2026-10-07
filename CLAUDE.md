@@ -69,7 +69,7 @@ sw.js                 service worker (désactivé côté client)
   (405), **jamais depuis `.board-wrap`** (boucle de dépendance avec `--board-px` : damier
   bloqué en petit). Lire le commentaire de `resize()` avant d'y toucher.
 - Variable `--board-px` sur `:root` ; `.layout` et `.topbar-inner` partagent la même
-  formule `max-width: calc(var(--board-px, 950px) + 268px + 350px + 52px + 48px)`.
+  formule `max-width: calc(var(--board-px, 950px) + 268px + var(--side-panel-w) + 52px + 48px)`.
   `.board-column` épouse `width: var(--board-px)`, pas de `flex-grow`. Plafond 950px,
   plancher 280px. Police des coordonnées plafonnée à 12px.
 
