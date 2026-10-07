@@ -110,9 +110,29 @@ sw.js                 service worker (désactivé côté client)
   fonction de sync. Le titre d'une entrée dérive toujours de `headers.White/Black` ;
   le renommage libre (`headers.Label`) a été retiré (nettoyé dans `renderLibrary()`).
 - localStorage : `damika:library-state` (PDN de la bibliothèque, index actif, PDN courant,
-  `libraryDirty`), `damika:player-photo-registry`, `damika:sound-muted`,
-  `damika:sound-volume`, `damika:ui-theme` (sombre / clair "Miel doré"),
-  `damika:piece-size`, `damika:arrow-duration`. `scheduleSave()` débattue 400 ms + flush sur `beforeunload`.
+  `libraryDirty`, `entryIds`, `originals` = versions d'origine, format version 2),
+  `damika:player-photo-registry`, `damika:sound-muted`, `damika:sound-volume`,
+  `damika:ui-theme` (sombre / clair "Miel doré"), `damika:piece-size`, `damika:arrow-duration`,
+  `damika:side-tab` (onglet actif du panneau de droite, `moves` ou `library`, restauré au F5).
+  `scheduleSave()` débattue 400 ms + flush sur `beforeunload`.
+- **Enregistrement automatique : toute modification d'une partie EXISTANTE de la bibliothèque
+  (coup, commentaire, symbole, diagramme, en-tête) est enregistrée automatiquement et en
+  silence**, par un seul point d'entrée, `activeEntryModified()` (recopie `game` dans
+  `library[i].moves` via `commitActiveEntryMoves()`, puis `scheduleSave()`). Il n'y a plus de
+  bandeau "Modifications non enregistrées", ni de dirty state de l'entrée, ni de mode "confirmé", ni de
+  snapshot d'annulation (`libraryDirty` subsiste : il ne sert qu'au garde-fou "bibliothèque non sauvegardée dans un fichier"). Un petit "✓ Enregistré" (`#save-indicator`) confirme l'écriture. Une
+  partie neuve (`libraryActiveIndex < 0`) garde le comportement d'avant. Ctrl+S = écriture immédiate
+  (`flushSaveNow()`).
+- **Sécurité : version d'origine.** À la première modification d'une partie, son état d'ouverture
+  est conservé une seule fois (`ensureOriginalVersion()`, jamais écrasé), persisté dans
+  `localStorage` (`originals`, indexé par `entryIds`, identifiant par entrée via un `WeakMap` qui
+  suit l'objet lors des réordonnancements). Le bouton "↺ Revenir à la version d'origine" (en-tête
+  de la Bibliothèque ET pied de "Coups joués", classe commune `.revert-original-btn`, un seul code)
+  n'apparaît que si la partie diffère de son origine ; confirmation, puis restauration ; la copie
+  d'origine reste en place. À ne pas confondre avec Rétablir (redo des coups).
+- **Forme canonique d'une entrée** : celle de `parsePdn()` (notation NUE + champ `annotation` +
+  `comment`), jamais `32-28!` dans `notation` (`currentGameAsLibraryEntry()` la produit ;
+  `loadGameFromPdn()` rejoue la notation contre le moteur).
 - "Ouvrir une bibliothèque" et "Coller" **remplacent** (garde-fou `confirmModal()` si non
   sauvegardée) ; "Importer" **ajoute**. Après tout ajout, la DERNIÈRE partie ajoutée devient
   l'entrée active (`libraryActiveIndex = length - 1` + `loadParsedGame()`). Un import à
@@ -184,8 +204,8 @@ Relief, Bois gravé) ; taille des pions réglable (Petit/Normal/Grand) ; durée 
 la flèche du dernier coup réglable ; thème clair "Miel doré" ; aide clavier (touche `?`) ;
 import/export PDN, TXT, PNG ; export PDF repensé (fond clair, diagrammes sur les coups
 annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, ordre manuel par drag&drop,
-édition inline, recherche texte, fichiers récents, favoris, filtres Toutes/Récentes/Favoris) ; pill "Modifications non
-enregistrées" (état dirty de l'entrée active) ; commentaires de coup et symboles
+édition inline, recherche texte, fichiers récents, favoris, filtres Toutes/Récentes/Favoris) ; enregistrement automatique des parties
+de la bibliothèque + retour à la version d'origine ; commentaires de coup et symboles
 d'annotation (`!`, `?`, `!!`, `??`) ; Bloc 1 "Plaque tournoi" (Elo, titre, score libre,
 photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visuelle Damika ;
 "Nouvelle partie" ; navigation molette ; déploiement public.
@@ -197,8 +217,8 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 **Backlog** (dans cet ordre ; ne rien commencer sans demande) :
 1. Export PDF avec diagrammes (à tester).
 2. Mémoriser en localStorage le thème du damier et le style de pion.
-3. Réactiver le Service Worker (mode hors-ligne).
-4. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
+3. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
+4. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
 conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`).
 
@@ -212,14 +232,20 @@ variables `--lib-*` en tête de `#panel-library`. Pas de menu de tri ni d'export
 affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
 - Champs d'une carte (nom, score…) éditables seulement sur la carte DÉJÀ active ; un clic sur une
   carte non active ne fait que l'ouvrir (`contenteditable` basculé dans le clic, sans `renderLibrary()`).
-- **Bug de perte des coups corrigé** : `library[i].moves` n'était jamais mis à jour (les coups
-  vivent dans `game`, seul `headers` est partagé par référence). `commitActiveEntryMoves()`
-  l'écrit à "Enregistrer" et en mode "confirmé". Toute nouvelle voie de sauvegarde d'une partie
-  doit l'appeler.
+- **Perte des coups à l'enregistrement : corrigée en deux temps.** `library[i].moves` n'était
+  jamais mis à jour (les coups vivent dans `game`, seul `headers` est partagé par référence).
+  Le premier correctif (`d9ad790`, docs `19336ce`, déjà poussés) ajoutait
+  `commitActiveEntryMoves()` mais était INCOMPLET : il écrivait des coups à notation annotée
+  (`32-28!`) et `loadGameFromPdn()` (qui fait `split(/[x-]/).map(Number)`) tronquait la partie à ce
+  coup au changement de carte (symboles `!`/`?`/`!!`/`??` cassés, coups perdus). Le second temps
+  (commit de l'enregistrement automatique) passe `currentGameAsLibraryEntry()` en forme canonique
+  de `parsePdn()` et fait compter `annotation` dans `entryContentKey()`.
+- **Dette technique : plusieurs copies de l'état d'une partie subsistent** : `game`
+  (history/future, vérité vivante), `library[i].moves`, le `localStorage` (`pdnText` +
+  `currentGamePdn`) et les copies d'origine (`originals`). À unifier plus tard en dérivant `moves`
+  de `game` pour l'entrée active (option b : sérialisation, export et fingerprint à adapter).
 - Bug connu laissé tel quel : l'ordre "Récentes" n'est pas appliqué à l'écran
-  (`renderLibrary()` parcourt `library` dans son ordre d'origine). Limite connue : un export de la
-  bibliothèque pendant une modification non enregistrée écrit les en-têtes modifiés mais les
-  coups enregistrés.
+  (`renderLibrary()` parcourt `library` dans son ordre d'origine).
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
   `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur.
 

@@ -1151,48 +1151,62 @@ Chronologique.
    (PDN, TXT, PNG, PDF, partage) et reste inchangé ; l'export de toute la bibliothèque passe par
    "Sauvegarder la bibliothèque". Le libellé "Partie affichée" essayé dans ce menu n'a pas été
    conservé.
-5. **Refonte d'affichage du panneau Bibliothèque : CLOSE, validée par Mickaël, commitée et
-   poussée** (`9905d4c`, `6329f21`, `5719692`, puis le correctif `commitActiveEntryMoves`).
-   Apparence uniquement, sauf la règle de clic ci-dessous. Chronologie de la session :
-   1. **Menu "⋯" + barre unique.** Les trois actions existantes (Ajouter la partie, Sauvegarder la
-      bibliothèque, Ouvrir une bibliothèque) sont regroupées dans un menu "⋯" (mêmes boutons,
-      mêmes ids et écouteurs ; fermeture par clic extérieur, Échap ou choix d'une action).
-      Recherche + groupe segmenté Toutes / Récentes / Favoris sur une seule ligne (le bouton
-      "Toutes" est nouveau). Aucun menu de tri (retiré en `d528e43`, pas recréé) et aucun bouton
-      "Exporter N parties affichées" dans le code ; "Sauvegarder la bibliothèque" exporte toute la
-      bibliothèque, le menu Exporter du haut ne concerne que la partie affichée.
-   2. **Cartes compactes** (42 px), puis **cartes sur 3 lignes** : Blancs, Noirs (une ligne chacun,
-      sans ellipsis, retour à la ligne si un nom est vraiment trop long), score à droite centré
-      sur les deux noms, puis "Tournoi · Ronde X" (seul le tournoi est tronqué par "…", la ronde ne
-      rétrécit jamais : `libraryEntryMetaParts()` et deux `<span>`, espace insécable avant le "·").
-   3. **Panneau de droite élargi à 405 px** (`--side-panel-w`, était 350 px) ;
-      `BoardRenderer.resize()` mesure la largeur réelle du panneau, aucune constante JS à changer.
-   4. **Liseré et carte active** : liseré 1 px discret (`--lib-card-border`, mélange de `--text-2`),
-      coins arrondis, 5 px entre cartes ; carte active à liseré doré 2 px et fond `--gold-soft` ;
-      survol : seul le liseré s'éclaircit.
-   5. **Clic = sélection** : un clic sur une carte non active ne fait que l'ouvrir ; nom, score et
-      autres champs ne sont éditables (`contenteditable`) que sur la carte DÉJÀ active, sans curseur
-      ni survol d'édition ailleurs. `contenteditable` posé au rendu
-      (`buildEditableLibraryField()`) et basculé dans le clic de sélection, sans `renderLibrary()`
-      (piège du double-clic).
-   6. **Bug de perte des coups (antérieur à la session, jamais lié à la refonte).** Jouer un coup
-      sur une partie de la Bibliothèque puis "Enregistrer" ne conservait pas le coup : changer de
-      carte puis revenir rendait la partie dans son état initial. Cause : `headers` est partagé par
-      référence avec `library[i]`, mais les coups vivent dans `game` ; `library[i].moves` était une
-      copie prise au chargement, jamais mise à jour (aucune affectation de `.moves` dans aucune
-      version de `main.js`). "Enregistrer" ne figeait que le snapshot ; le changement de carte, la
-      sauvegarde et l'export de la bibliothèque relisaient les anciens coups. Le F5 masquait le bug
-      (la partie affichée est persistée à part, `currentGamePdn`). Correctif : `commitActiveEntryMoves()`
-      écrit coups et commentaires dans `library[libraryActiveIndex].moves`, appelée par
-      `saveActiveEntry()` et par le mode "confirmé" de `markActiveEntryDirty()`. Vérifié : 41-37
-      conservé après changement de carte, et remplacement des coups conservé après F5.
-      Limite connue non traitée : un export de la bibliothèque pendant une modification non
-      enregistrée écrit les en-têtes modifiés (référence partagée) mais les coups enregistrés.
-   7. **Méthode de test** : bibliothèque fictive de 50 parties sur `http://127.0.0.1:8934` (origine
-      distincte de `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur ; clics
-      simulés par événements de pointeur quand l'extension Chrome était déconnectée. Mesure :
-      11 cartes complètes visibles sans scroller avec 50 parties (fenêtre de 937 px de haut, 100 %),
-      pas de scroll global.
+5. **Session du 07/10/2026 : Bibliothèque (affichage, enregistrement automatique, sécurité).**
+   Chronologique ; chantier CLOS, validé par Mickaël.
+   1. **Menu "⋯" + barre unique** (`9905d4c`). Les trois actions existantes (Ajouter la partie,
+      Sauvegarder la bibliothèque, Ouvrir une bibliothèque) sont regroupées dans un menu "⋯" (mêmes
+      boutons, ids et écouteurs ; fermeture par clic extérieur, Échap ou choix d'une action).
+      Recherche + groupe segmenté Toutes / Récentes / Favoris sur une ligne. Aucun menu de tri
+      (retiré en `d528e43`) et aucun bouton "Exporter N parties affichées" dans le code :
+      "Sauvegarder la bibliothèque" exporte la bibliothèque entière, le menu Exporter du haut ne
+      concerne que la partie affichée.
+   2. **Cartes** : compactes (42 px) puis sur 3 lignes (Blancs, Noirs sans ellipsis, score à droite
+      centré, puis "Tournoi · Ronde X" où seul le tournoi est tronqué, `libraryEntryMetaParts()`) ;
+      panneau de droite élargi à 405 px (`--side-panel-w`, `BoardRenderer.resize()` mesure la
+      largeur réelle) ; liseré 1 px discret, coins arrondis, 5 px entre cartes, carte active à
+      liseré doré 2 px, survol = liseré seul (`6329f21` pour une ligne de docs).
+   3. **Clic = sélection** (`5719692`) : un clic sur une carte non active ne fait que l'ouvrir ; les
+      champs ne sont éditables (`contenteditable`) que sur la carte déjà active.
+   4. **Bug de perte des coups (antérieur à la session).** `library[i].moves` n'était jamais mis à
+      jour (les coups vivent dans `game`, seul `headers` est partagé par référence) : jouer un coup
+      puis "Enregistrer" puis changer de carte rendait la partie d'origine. Premier correctif
+      `d9ad790` (`commitActiveEntryMoves()`), docs `19336ce` : INCOMPLET. Il écrivait des coups à
+      notation annotée (`32-28!`) ; `loadGameFromPdn()` fait `split(/[x-]/).map(Number)`, `28!` donne
+      `NaN`, le coup est jugé illégal et la partie est tronquée à ce coup : symboles `!`/`?`/`!!`/`??`
+      cassés et coups perdus. Reproduit (symbole seul : partie vidée ; commentaire seul et
+      diagramme seul : tenaient). Cause : deux formes d'entrée de bibliothèque. Correctif : la forme
+      canonique de `parsePdn()` (notation nue + `annotation` + `comment`) partout, et `annotation`
+      compte dans `entryContentKey()`. Inventaire des copies de l'état d'une partie fait à cette
+      occasion : `game`, `library[i].moves`, snapshot, `localStorage` (`pdnText`, `currentGamePdn`).
+   5. **Enregistrement automatique (commit A).** Décision de Mickaël : toute modification d'une
+      partie existante s'enregistre toute seule, en silence. Supprimés : le bandeau rouge
+      "Modifications non enregistrées" et ses boutons, le dirty state, le "mode confirmé",
+      `activeEntrySnapshot`, `discardActiveEntryDraft`, le point rouge sur la carte, l'avertissement
+      `beforeunload`, les confirmations "perdra vos modifications". Un seul point d'entrée,
+      `activeEntryModified()` (coup, commentaire/symbole/diagramme à la fermeture de l'éditeur,
+      en-têtes à la validation du champ), qui ignore les appels sans changement, appelle
+      `commitActiveEntryMoves()` et `scheduleSave()` (débounce 400 ms). Ctrl+S = `flushSaveNow()`.
+      Petit "✓ Enregistré" discret (`#save-indicator`, `showSavedIndicator()`). Migration d'un
+      ancien état avec bandeau en attente (non testée).
+   6. **Version d'origine.** À la première modification d'une partie, son état d'ouverture est
+      conservé une seule fois (`ensureOriginalVersion()`), persisté (`originals` + `entryIds`,
+      `localStorage` version 2, identifiants par entrée via `WeakMap`, originaux des parties
+      supprimées abandonnés à l'écriture). Bouton "↺" (en-tête Bibliothèque ET pied de "Coups
+      joués", classe commune `.revert-original-btn`, un seul code), visible seulement si la partie
+      diffère de son origine ; confirmation, restauration (`headers` muté en place), copie
+      d'origine conservée.
+   7. **Onglet actif du panneau de droite restauré au F5** (commit B, clé `damika:side-tab`).
+   8. **Vérifications** (sur `http://127.0.0.1:8934`, origine distincte de `localhost`, pour ne pas
+      écraser la vraie bibliothèque ; clics simulés, l'extension Chrome a décroché plusieurs fois) :
+      un cas par type (coup, commentaire, symbole, diagramme, en-tête) avec changement de carte et
+      retour, F5, retour à la version d'origine, onglets après F5. Mesure : 11 cartes complètes
+      visibles sans scroller avec 50 parties (fenêtre de 937 px, 100 %). Non testés : vrais clics,
+      migration de l'ancien état, débounce sur une vraie rafale, thème clair pour tous les écrans.
+      Piège de test : un script CDP expiré continue de tourner dans la page ; il peut entrelacer ses
+      clics avec le script suivant (un commentaire a disparu sur la carte de test).
+   9. **Dette technique** : plusieurs copies de l'état d'une partie subsistent (`game`,
+      `library[i].moves`, `localStorage`, copies d'origine) ; à unifier plus tard en dérivant
+      `moves` de `game` pour l'entrée active (option b).
 6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
    après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
    section "En cours").
@@ -1206,7 +1220,7 @@ Chronologique.
 Dans l'ordre :
 1. Export PDF avec diagrammes (à tester).
 2. Mémoriser en localStorage le thème du damier et le style de pion.
-3. Réactiver le Service Worker (mode hors-ligne).
-4. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
+3. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
+4. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause), export en lot, conformité FMJD
 approfondie, IA.
