@@ -20,6 +20,19 @@ let game = new DraughtsGame();
 const canvas = document.getElementById('board-canvas');
 const renderer = new BoardRenderer(canvas);
 
+// Thème du damier et style de pion mémorisés (clés dans le style de `damika:piece-size`). Restaurés
+// ICI, juste après la création du renderer et avant tout rendu du damier (aucun flash du thème par
+// défaut). Valeur absente, invalide (thème/style qui n'existe plus) ou localStorage indisponible :
+// valeur par défaut du renderer, setBoardTheme()/setPieceStyle() ignorant les noms inconnus.
+const BOARD_THEME_KEY = 'damika:board-theme';
+const PIECE_STYLE_KEY = 'damika:piece-style';
+try {
+  const savedBoardTheme = localStorage.getItem(BOARD_THEME_KEY);
+  if (savedBoardTheme && Object.hasOwn(BOARD_THEMES, savedBoardTheme)) renderer.setBoardTheme(savedBoardTheme);
+  const savedPieceStyle = localStorage.getItem(PIECE_STYLE_KEY);
+  if (savedPieceStyle && Object.hasOwn(PIECE_STYLES, savedPieceStyle)) renderer.setPieceStyle(savedPieceStyle);
+} catch { /* localStorage indisponible : valeurs par défaut */ }
+
 // --- sons -------------------------------------------------------------------------------
 // move/capture/game-end : fichiers RÉELS du client Lidraughts (RoepStoep/lidraughts, thème
 // "standard", public/sound/standard/{Move,Capture,Victory}.mp3), récupérés en clair depuis
@@ -967,12 +980,29 @@ function applySpeedSlider() {
   renderer.animSpeedMs = ms;
   el.speedValue.textContent = label;
 }
-el.speedSlider.addEventListener('input', applySpeedSlider);
+// Vitesse mémorisée (position du curseur 1-10, partagée par l'animation des coups et la lecture
+// auto). Valeur absente/invalide ou localStorage indisponible : curseur laissé à sa valeur par défaut.
+const SPEED_KEY = 'damika:speed';
+try {
+  const savedSpeed = Number.parseInt(localStorage.getItem(SPEED_KEY), 10);
+  if (Number.isInteger(savedSpeed) && savedSpeed >= 1 && savedSpeed <= 10) el.speedSlider.value = String(savedSpeed);
+} catch { /* localStorage indisponible : vitesse par défaut */ }
+el.speedSlider.addEventListener('input', () => {
+  applySpeedSlider();
+  try { localStorage.setItem(SPEED_KEY, el.speedSlider.value); } catch { /* pas de mémorisation */ }
+});
 applySpeedSlider();
 
 // --- flèche du dernier coup (bouton toggle, retour Mickaël A7) -----------------------
+// Flèche activée ou non : mémorisée ('1'/'0'). Valeur absente/invalide : réglage par défaut du renderer.
+const ARROW_VISIBLE_KEY = 'damika:arrow-visible';
+try {
+  const savedArrow = localStorage.getItem(ARROW_VISIBLE_KEY);
+  if (savedArrow === '1' || savedArrow === '0') renderer.showArrow = savedArrow === '1';
+} catch { /* localStorage indisponible : réglage par défaut */ }
 el.btnToggleArrow.addEventListener('click', () => {
   renderer.showArrow = !renderer.showArrow;
+  try { localStorage.setItem(ARROW_VISIBLE_KEY, renderer.showArrow ? '1' : '0'); } catch { /* pas de mémorisation */ }
   el.btnToggleArrow.classList.toggle('active', renderer.showArrow);
   renderer.render();
 });
@@ -3290,9 +3320,8 @@ function loadSharedGameFromUrl() {
 }
 
 // --- thème du damier / style et taille des pions ---------------------------------------
-// Taille des pions : seul réglage des trois persisté pour l'instant (damier/style de pion
-// ne le sont pas encore, cf. leur absence de clé localStorage — hors périmètre de ce
-// chantier) — presets nommés (PIECE_SIZES), jamais un pourcentage libre.
+// Taille des pions (presets nommés PIECE_SIZES, jamais un pourcentage libre), thème du damier
+// et style de pion sont tous trois persistés (cf. BOARD_THEME_KEY/PIECE_STYLE_KEY en haut).
 const PIECE_SIZE_KEY = 'damika:piece-size';
 function pieceSizeKeyFromScale(scale) {
   return Object.keys(PIECE_SIZES).find((k) => PIECE_SIZES[k].scale === scale) || 'normal';
@@ -3317,8 +3346,14 @@ function renderThemeOptions(container, entries, activeId, onPick) {
   });
 }
 function refreshThemeMenuOptions() {
-  renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => renderer.setBoardTheme(v));
-  renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => renderer.setPieceStyle(v));
+  renderThemeOptions(el.boardThemeOptions, BOARD_THEMES, renderer.boardTheme, (v) => {
+    renderer.setBoardTheme(v);
+    try { localStorage.setItem(BOARD_THEME_KEY, v); } catch { /* pas de mémorisation */ }
+  });
+  renderThemeOptions(el.pieceStyleOptions, PIECE_STYLES, renderer.pieceStyle, (v) => {
+    renderer.setPieceStyle(v);
+    try { localStorage.setItem(PIECE_STYLE_KEY, v); } catch { /* pas de mémorisation */ }
+  });
   renderThemeOptions(el.pieceSizeOptions, PIECE_SIZES, pieceSizeKeyFromScale(renderer.pieceScale), (v) => {
     renderer.setPieceSize(v);
     localStorage.setItem(PIECE_SIZE_KEY, v);
