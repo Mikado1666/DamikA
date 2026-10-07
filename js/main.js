@@ -642,10 +642,17 @@ let commentPopoverIdx = null;
 // commentaire est déjà persisté tel quel partout, cf. currentGameAsLibraryEntry(),
 // serializeToPdn...), aucun schéma/format à faire évoluer. Retiré à l'affichage dans le
 // textarea, ré-ajouté à la fermeture si la case est cochée.
-const DIAGRAM_MARKER = '
-[diagramme]';
-function stripDiagramMarker(text) { return text.endsWith(DIAGRAM_MARKER) ? text.slice(0, -DIAGRAM_MARKER.length) : text; }
-function hasDiagramMarker(text) { return !!text && text.endsWith(DIAGRAM_MARKER); }
+// Détection tolérante : "[diagramme]" seul, ou en fin de texte avec ou sans "\n" devant. Le PDN
+// sérialisé (sanitizeComment() fait un trim()) perd le "\n" quand le commentaire se réduit au
+// marqueur ; le marqueur n'est jamais affiché (popover, PDF) : toujours retiré par
+// stripDiagramMarker().
+const DIAGRAM_TAG = '[diagramme]';
+function hasDiagramMarker(text) { return !!text && text.trimEnd().endsWith(DIAGRAM_TAG); }
+function stripDiagramMarker(text) {
+  if (!hasDiagramMarker(text)) return text || '';
+  return text.trimEnd().slice(0, -DIAGRAM_TAG.length).trimEnd();
+}
+function withDiagramMarker(text) { return text ? `${text}\n${DIAGRAM_TAG}` : DIAGRAM_TAG; }
 
 // Symbole d'annotation en cours d'édition dans le popover ouvert (null si aucun) — appliqué
 // au moteur seulement à la fermeture (closeCommentPopover), comme le texte du commentaire :
@@ -681,7 +688,7 @@ function closeCommentPopover(commit) {
   if (el.commentPopover.hidden) return;
   if (commit && commentPopoverIdx != null) {
     const text = el.commentTextarea.value.trim();
-    const comment = el.commentDiagramCheckbox.checked ? `${text}${DIAGRAM_MARKER}` : text;
+    const comment = el.commentDiagramCheckbox.checked ? withDiagramMarker(text) : text;
     game.setCommentAt(commentPopoverIdx, comment);
     game.setAnnotationAt(commentPopoverIdx, commentPopoverAnnotation);
     activeEntryModified();
