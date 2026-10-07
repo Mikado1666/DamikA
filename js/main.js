@@ -2357,12 +2357,23 @@ function markActiveEntryDirty() {
   // captureActiveEntrySnapshot() et le bloc dirty de restoreAppState()).
   if (activeEntryConfirmed) {
     activeEntrySnapshot = currentGameAsLibraryEntry();
+    commitActiveEntryMoves();
     libraryDirty = true;
     scheduleSave();
     return;
   }
   activeEntryDirty = true;
   updateUnsavedIndicator();
+}
+
+// Écrit les coups (et commentaires) de la partie affichée dans `library[libraryActiveIndex]`.
+// `headers` est partagé par référence avec l'entrée, mais les coups vivent dans `game` : sans
+// cette copie explicite, l'entrée garde ses coups d'origine (rechargée au changement de carte,
+// sérialisée à la sauvegarde/export de la bibliothèque) et un coup joué puis "enregistré" se perd.
+function commitActiveEntryMoves() {
+  if (libraryActiveIndex >= 0 && library[libraryActiveIndex]) {
+    library[libraryActiveIndex].moves = currentGameAsLibraryEntry().moves;
+  }
 }
 
 // Prend l'état courant (`headers`/`game`) comme nouvel instantané "dernière version
@@ -2403,6 +2414,7 @@ function saveActiveEntry() {
   // d'entrée) : ce premier "Enregistrer" volontaire sur cette partie fait entrer en mode
   // "confirmé" — cf. markActiveEntryDirty().
   activeEntryConfirmed = true;
+  commitActiveEntryMoves();
   libraryDirty = true;
   renderLibrary();
   scheduleSave();
