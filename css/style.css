@@ -429,91 +429,25 @@ body {
   font-weight: 700;
   color: var(--text-0);
 }
-/* Overlay flottant "modifications non enregistrées" (cf. #unsaved-bar dans index.html,
-   juste après <header>, EN DEHORS de .layout) : visible uniquement quand l'entrée de
-   bibliothèque active a été modifiée sans passer par "Enregistrer"/Ctrl+S — cf.
-   updateUnsavedIndicator() dans main.js. `position: fixed` : ne fait jamais partie du flux
-   normal, donc ne peut jamais pousser le contenu et casser la contrainte "tout tient sans
-   scroll à 100%", quel que soit l'onglet actif (Coups joués/Bibliothèque). Règle jumelle
-   `[hidden] { display: none; }` obligatoire (cf. CLAUDE.md) car `display: flex` est déclaré
-   ci-dessous. `animation` sur l'élément lui-même (pas une classe ajoutée en JS) : une
-   transition display:none → flex relance automatiquement l'animation à chaque fois qu'il
-   redevient visible, sans code JS supplémentaire. */
-.unsaved-float {
+/* Indicateur discret "✓ Enregistré" (cf. #save-indicator dans index.html) : petit libellé fixe en
+   bas de fenêtre, hors flux (aucun effet sur la mise en page), qui s'efface seul. */
+.save-indicator {
   position: fixed;
-  top: 82px;
+  bottom: 14px;
   left: 50%;
+  transform: translateX(-50%);
   z-index: 90;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  max-width: min(560px, calc(100vw - 32px));
-  padding: 13px 22px;
+  padding: 4px 12px;
   border-radius: 999px;
-  border: 1px solid var(--danger);
-  background: linear-gradient(135deg, rgba(226, 105, 79, 0.22), rgba(212, 175, 105, 0.14)), var(--panel);
-  box-shadow: var(--shadow-panel), 0 0 0 1px rgba(226, 105, 79, 0.25), 0 0 24px rgba(226, 105, 79, 0.25);
-  animation: unsavedSlideIn 0.35s ease-out;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: 12.5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
 }
-.unsaved-float[hidden] { display: none; }
-@keyframes unsavedSlideIn {
-  from { opacity: 0; transform: translate(-50%, -14px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-.unsaved-dot {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--danger);
-  animation: unsavedPulse 2.2s ease-in-out infinite;
-}
-/* Halo qui respire doucement autour du point — attire l'œil sans être gênant si l'édition
-   se prolonge (amplitude faible, pas de changement de taille du point lui-même). */
-@keyframes unsavedPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(226, 105, 79, 0.55); }
-  50% { box-shadow: 0 0 0 7px rgba(226, 105, 79, 0); }
-}
-.unsaved-label {
-  color: var(--accent-white);
-  font-size: 14.5px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.unsaved-btn {
-  flex: none;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  padding: 8px 15px;
-  font-size: 13.5px;
-  font-weight: 600;
-  transition: filter 0.15s, background 0.15s, color 0.15s;
-}
-.unsaved-btn-save {
-  border: none;
-  background: linear-gradient(180deg, #ffe3b0, var(--gold-chip));
-  color: #241a0d;
-}
-.unsaved-btn-save:hover { filter: brightness(1.08); }
-.unsaved-btn-revert {
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
-}
-.unsaved-btn-revert:hover { background: rgba(226, 105, 79, 0.15); }
-
-/* Même point que .unsaved-dot ci-dessus, mais accolé au titre d'une entrée de bibliothèque
-   (cf. renderLibrary() dans main.js) qui est l'entrée active ET a des modifications non
-   enregistrées. */
-.library-item-unsaved-dot {
-  display: inline-block;
-  margin-left: 6px;
-  color: var(--danger);
-  font-size: 10px;
-  vertical-align: middle;
-}
+.save-indicator.visible { opacity: 1; }
 
 .meta-chip-row {
   display: flex;
@@ -887,6 +821,7 @@ body {
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
+.library-icon-btn[hidden] { display: none; }
 .library-icon-btn:hover { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
 .library-icon-btn.active { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
 .library-item:hover { border-color: var(--lib-card-border-hover); }
@@ -1811,6 +1746,8 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 .text-btn:hover { background: var(--gold-soft); color: var(--gold); }
+/* Retour à la version d'origine (pied de "Coups joués") : icône seule, ne prend pas la place de Annuler/Rétablir. */
+#btn-revert-original-moves { flex: none; padding: 9px 14px; font-size: 18px; line-height: 1; }
 
 #easter-egg { cursor: default; }
 

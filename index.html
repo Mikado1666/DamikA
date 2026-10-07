@@ -86,17 +86,10 @@
     </div>
   </header>
 
-  <!-- Overlay flottant "modifications non enregistrées" (entrée de bibliothèque active
-       modifiée sans "Enregistrer"/Ctrl+S) — position: fixed, en dehors du flux normal pour
-       ne jamais affecter la mise en page (contrainte "tout tient sans scroll à 100%"), visible
-       quel que soit l'onglet actif (Coups joués/Bibliothèque). Cf. updateUnsavedIndicator()
-       dans main.js. -->
-  <div class="unsaved-float" id="unsaved-bar" hidden>
-    <span class="unsaved-dot" aria-hidden="true"></span>
-    <span class="unsaved-label">Modifications non enregistrées</span>
-    <button type="button" id="btn-save-entry" class="unsaved-btn unsaved-btn-save" title="Enregistrer dans la bibliothèque (Ctrl+S)">💾 Enregistrer</button>
-    <button type="button" id="btn-revert-entry" class="unsaved-btn unsaved-btn-revert" title="Annuler les modifications, revenir à la dernière version enregistrée">↺ Annuler</button>
-  </div>
+  <!-- Indicateur discret "Enregistré" (apparaît quelques secondes après un enregistrement
+       automatique d'une partie de la bibliothèque). position: fixed, hors flux, sans effet sur
+       la mise en page. Cf. showSavedIndicator() dans main.js. -->
+  <div class="save-indicator" id="save-indicator" aria-live="polite">✓ Enregistré</div>
 
   <main class="layout">
     <aside class="players-rail">
@@ -219,6 +212,7 @@
         <div class="panel-footer">
           <button id="btn-undo" class="text-btn">↺ Annuler</button>
           <button id="btn-redo" class="text-btn">↻ Rétablir</button>
+          <button type="button" id="btn-revert-original-moves" class="text-btn revert-original-btn" title="Revenir à la version d'origine de cette partie" aria-label="Revenir à la version d'origine" hidden>⟲</button>
         </div>
       </div>
       <div class="panel-body" id="panel-library" hidden>
@@ -228,6 +222,7 @@
             <div class="library-name" id="library-name" contenteditable="true" spellcheck="false" data-placeholder="Bibliothèque sans nom" title="Cliquer pour nommer la bibliothèque"></div>
             <span class="library-head-count" id="library-head-count"></span>
           </div>
+          <button type="button" id="btn-revert-original" class="library-icon-btn revert-original-btn" title="Revenir à la version d'origine de cette partie" aria-label="Revenir à la version d'origine" hidden>↺</button>
           <button type="button" id="btn-library-menu" class="library-icon-btn" title="Actions de la bibliothèque" aria-label="Actions de la bibliothèque" aria-haspopup="true" aria-expanded="false">⋯</button>
           <div class="library-menu" id="library-menu" hidden>
             <button type="button" id="btn-library-add-current" class="library-menu-item" title="Ajouter la partie actuellement affichée à la bibliothèque">➕ Ajouter la partie</button>
