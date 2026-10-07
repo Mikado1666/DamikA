@@ -2119,9 +2119,15 @@ function switchTab(tab) {
   el.tabLibrary.classList.toggle('active', tab === 'library');
   el.panelMoves.hidden = tab !== 'moves';
   el.panelLibrary.hidden = tab !== 'library';
+  try { localStorage.setItem('damika:side-tab', tab); } catch { /* localStorage indisponible : pas de mémorisation */ }
 }
 el.tabMoves.addEventListener('click', () => switchTab('moves'));
 el.tabLibrary.addEventListener('click', () => switchTab('library'));
+// Restaure l'onglet actif du panneau de droite après un F5 (valeur absente ou invalide : onglet par défaut).
+try {
+  const savedTab = localStorage.getItem('damika:side-tab');
+  if (savedTab === 'moves' || savedTab === 'library') switchTab(savedTab);
+} catch { /* localStorage indisponible */ }
 
 // --- nouvelle partie (reset complet) ---------------------------------------------------
 // Repart d'un DraughtsGame frais (position de départ standard) et remet les métadonnées
