@@ -1233,6 +1233,26 @@ Chronologique.
        plus haut qu'une page (repli en texte simple écrit mais jamais exécuté), damier retourné, un
        seul Elo renseigné, vrai téléchargement du fichier, anciennes données avec le saut de ligne
        devant `[diagramme]` sur un état réel.
+   13. **Persistance des réglages d'interface après F5.** Constat : le thème du damier et le style
+       de pion revenaient au défaut (seule la taille des pions était persistée). Ajoutés, avec le
+       même mécanisme (valeur lue avant le premier rendu, absente/invalide = défaut, `try/catch`,
+       `Object.hasOwn` pour ne pas accepter `constructor` comme thème) : `damika:board-theme`,
+       `damika:piece-style`. L'onglet actif du panneau de droite (`damika:side-tab`) était déjà
+       commité dans `7d8485d` : par erreur j'avais annoncé qu'il restait à commiter.
+   14. **Inventaire des réglages** : déjà persistés : thème clair/sombre (`damika:ui-theme`), durée
+       de la flèche (`damika:arrow-duration`), son coupé (`damika:sound-muted`), volume
+       (`damika:sound-volume`), taille des pions (`damika:piece-size`). Ajoutés dans cette passe :
+       vitesse d'animation et de lecture auto, un seul curseur (`damika:speed`, entier 1-10) ; flèche
+       du dernier coup activée ou non (`damika:arrow-visible`, `1`/`0`). Décisions de Mickaël : NE PAS
+       persister le retournement du plateau, ni le filtre Toutes/Récentes/Favoris et la recherche de
+       la Bibliothèque ; le plein écran ne peut pas l'être (geste utilisateur requis). Durée de la
+       flèche : rien changé, noté en dette technique (`damika:arrow-duration` accepte n'importe quelle
+       valeur).
+   15. **Vérifications** (clics simulés, `127.0.0.1:8934`) : thème Vert + style Relief puis F5,
+       restaurés ; valeurs invalides (`inexistant`, `constructor`, `abc`, `maybe`) : retour aux
+       défauts sans erreur console ; vitesse 9 et flèche coupée puis F5, restaurées. Non testés :
+       `localStorage` réellement indisponible, absence de flash (déduite de l'ordre d'exécution),
+       thème Ardoise et style Bois gravé.
 6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
    après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
    section "En cours").
@@ -1244,9 +1264,8 @@ Chronologique.
 ## Ce qui manque (backlog actuel, voir CLAUDE.md section 3)
 
 Dans l'ordre :
-1. Mémoriser en localStorage le thème du damier et le style de pion.
-2. Passe complète de peaufinage du PDF (V0 validée), avant Mobile.
-3. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
-4. Réactiver le Service Worker (mode hors-ligne), en dernier.
+1. Passe complète de vérification et de peaufinage (PDF compris, V0 validée), avant Mobile.
+2. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
+3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause), export en lot, conformité FMJD
 approfondie, IA.

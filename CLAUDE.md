@@ -109,12 +109,20 @@ sw.js                 service worker (désactivé côté client)
   `loadParsedGame()` et `restoreAppState()`). Ne jamais réintroduire de copie ni de
   fonction de sync. Le titre d'une entrée dérive toujours de `headers.White/Black` ;
   le renommage libre (`headers.Label`) a été retiré (nettoyé dans `renderLibrary()`).
-- localStorage : `damika:library-state` (PDN de la bibliothèque, index actif, PDN courant,
-  `libraryDirty`, `entryIds`, `originals` = versions d'origine, format version 2),
-  `damika:player-photo-registry`, `damika:sound-muted`, `damika:sound-volume`,
-  `damika:ui-theme` (sombre / clair "Miel doré"), `damika:piece-size`, `damika:arrow-duration`,
-  `damika:side-tab` (onglet actif du panneau de droite, `moves` ou `library`, restauré au F5).
-  `scheduleSave()` débattue 400 ms + flush sur `beforeunload`.
+- **Clés localStorage (liste complète)** : `damika:library-state` (PDN de la bibliothèque, index
+  actif, PDN courant, `libraryDirty`, `entryIds`, `originals` = versions d'origine, format
+  version 2), `damika:library-extras` (favoris et récents, par empreinte), `damika:player-photo-registry`,
+  et les réglages d'interface : `damika:ui-theme` (sombre / clair "Miel doré"), `damika:board-theme`
+  (`bois`, `ardoise`, `vert`, `beige`), `damika:piece-style` (`classique`, `relief`, `bois gravé`),
+  `damika:piece-size`, `damika:speed` (curseur 1-10, partagé animation + lecture auto),
+  `damika:arrow-visible` (`1`/`0`, flèche du dernier coup), `damika:arrow-duration`,
+  `damika:sound-muted`, `damika:sound-volume`, `damika:side-tab` (`moves` ou `library`).
+  Mécanisme commun des réglages : valeur lue AVANT le premier rendu, absente/invalide = défaut,
+  accès dans un `try/catch` (`Object.hasOwn` pour valider un nom de thème/style). `scheduleSave()`
+  débattue 400 ms + flush sur `beforeunload`.
+- **Réglages volontairement NON persistés** : retournement du plateau (`flipped`), filtre
+  Toutes/Récentes/Favoris et texte de recherche de la Bibliothèque, plein écran (interdit sans geste
+  de l'utilisateur).
 - **Enregistrement automatique : toute modification d'une partie EXISTANTE de la bibliothèque
   (coup, commentaire, symbole, diagramme, en-tête) est enregistrée automatiquement et en
   silence**, par un seul point d'entrée, `activeEntryModified()` (recopie `game` dans
@@ -219,7 +227,7 @@ sw.js                 service worker (désactivé côté client)
 **Livré et validé** : moteur FMJD complet (dont promotion en cours de rafle : seulement si le
 pion s'arrête sur la dernière rangée) ; plateau responsive ; 3 styles de pions (Classique,
 Relief, Bois gravé) ; taille des pions réglable (Petit/Normal/Grand) ; durée d'affichage de
-la flèche du dernier coup réglable ; thème clair "Miel doré" ; aide clavier (touche `?`) ;
+la flèche du dernier coup réglable ; réglages d'interface persistés après F5 ; thème clair "Miel doré" ; aide clavier (touche `?`) ;
 import/export PDN, TXT, PNG ; export PDF style livre (fond clair, blocs diagramme + commentaire
 sur les coups annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, ordre manuel par drag&drop,
 édition inline, recherche texte, fichiers récents, favoris, filtres Toutes/Récentes/Favoris) ; enregistrement automatique des parties
@@ -233,10 +241,9 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 `drawPieceToernooibase` existe toujours mais n'est plus branchée).
 
 **Backlog** (dans cet ordre ; ne rien commencer sans demande) :
-1. Mémoriser en localStorage le thème du damier et le style de pion.
-2. Passe complète de peaufinage du PDF (V0 validée), avant Mobile.
-3. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
-4. Réactiver le Service Worker (mode hors-ligne), en dernier.
+1. Passe complète de vérification et de peaufinage (PDF compris, V0 validée), avant Mobile.
+2. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
+3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
 conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`).
 
@@ -262,6 +269,9 @@ affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
   (history/future, vérité vivante), `library[i].moves`, le `localStorage` (`pdnText` +
   `currentGamePdn`) et les copies d'origine (`originals`). À unifier plus tard en dérivant `moves`
   de `game` pour l'entrée active (option b : sérialisation, export et fingerprint à adapter).
+- **Dette technique : `damika:arrow-duration` accepte n'importe quelle valeur** (`Number(...) || 0`,
+  par exemple `99` ou un négatif) au lieu des seules durées proposées par les boutons ; à durcir
+  plus tard (valider contre les `data-duration` des boutons).
 - Bug connu laissé tel quel : l'ordre "Récentes" n'est pas appliqué à l'écran
   (`renderLibrary()` parcourt `library` dans son ordre d'origine).
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
