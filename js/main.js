@@ -1597,7 +1597,8 @@ function setLibraryFieldValue(idx, key, rawVal) {
 function buildEditableLibraryField(key, text, extraClass, idx) {
   const span = document.createElement('span');
   span.className = `library-item-field${extraClass ? ` ${extraClass}` : ''}`;
-  span.contentEditable = 'true';
+  // Éditable seulement sur la carte DÉJÀ active : un clic sur une autre carte ne fait que l'ouvrir.
+  span.contentEditable = String(idx === libraryActiveIndex);
   span.spellcheck = false;
   span.dataset.field = key;
   span.textContent = text;
@@ -1958,8 +1959,12 @@ function renderLibrary() {
       libraryActiveIndex = idx;
       loadParsedGame(entry, { silent: true });
       recordLibraryRecent(entry);
-      el.libraryList.querySelectorAll('.library-item.active').forEach((n) => n.classList.remove('active'));
+      el.libraryList.querySelectorAll('.library-item.active').forEach((n) => {
+        n.classList.remove('active');
+        n.querySelectorAll('.library-item-field').forEach((f) => { f.contentEditable = 'false'; });
+      });
       li.classList.add('active');
+      li.querySelectorAll('.library-item-field').forEach((f) => { f.contentEditable = 'true'; });
     });
     el.libraryList.appendChild(li);
   });

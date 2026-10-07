@@ -1178,6 +1178,14 @@ Chronologique.
      noms), pas de scroll global ;
    - tests faits sur `http://127.0.0.1:8934` (origine distincte de `localhost`) pour ne pas
      toucher à la vraie bibliothèque du navigateur de Mickaël.
+   - **Édition des champs d'une carte (commit séparé)** : un clic sur une carte non active ne
+     fait que l'ouvrir ; nom, score et autres champs ne deviennent éditables (`contenteditable`)
+     que sur la carte DÉJÀ active. Les champs d'une carte non active n'ont ni curseur texte ni
+     survol d'édition (règles CSS sous `.library-item.active`). `contenteditable` est posé au rendu
+     (`buildEditableLibraryField()`) et mis à jour dans le clic de sélection, sans `renderLibrary()`
+     (cf. piège du double-clic). Vérifié par clics programmatiques (extension Chrome déconnectée
+     avant le test au clic réel) : carte activée, aucun champ en focus, les autres cartes restent
+     non éditables.
 6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
    après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
    section "En cours").

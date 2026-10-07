@@ -946,14 +946,16 @@ body {
    avec le Bloc 1 via la MÊME référence d'objet, cf. setLibraryFieldValue()/
    renderEditableLibraryTitle() dans main.js — pas une copie qui pourrait diverger). */
 .library-item-field {
-  user-select: text;
+  user-select: none;
   outline: none;
-  cursor: text;
+  cursor: inherit;
   border-radius: 4px;
   padding: 0 3px;
   margin: 0 -3px;
 }
-.library-item-field:hover, .library-item-field:focus { background: var(--gold-soft); color: var(--gold); }
+/* Aspect "champ éditable" (curseur texte, survol) seulement sur la carte active. */
+.library-item.active .library-item-field { user-select: text; cursor: text; }
+.library-item.active .library-item-field:hover, .library-item.active .library-item-field:focus { background: var(--gold-soft); color: var(--gold); }
 .library-item-score { flex: none; margin-left: auto; font-size: var(--lib-score-size); font-weight: 700; color: var(--text-1); }
 .library-item-meta {
   font-size: var(--lib-line2-size);

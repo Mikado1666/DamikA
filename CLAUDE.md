@@ -209,6 +209,8 @@ carte active à liseré doré 2 px, menu "⋯" (Ajouter / Sauvegarder / Ouvrir),
 recherche + Toutes/Récentes/Favoris, panneau de droite à 405 px (`--side-panel-w`). Tailles
 réglables dans les variables `--lib-*` en tête de `#panel-library`. Pas de menu de tri ni
 d'export "N parties affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
+- Champs d'une carte (nom, score…) éditables seulement sur la carte DÉJÀ active ; un clic sur une
+  carte non active ne fait que l'ouvrir (`contenteditable` basculé dans le clic, sans `renderLibrary()`).
 - Bug connu laissé tel quel : l'ordre "Récentes" n'est pas appliqué à l'écran
   (`renderLibrary()` parcourt `library` dans son ordre d'origine).
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
