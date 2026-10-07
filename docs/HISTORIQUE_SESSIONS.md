@@ -1120,8 +1120,7 @@ Session de maintenance, aucun code modifié.
 
 ### Suite de la journée (chantiers Bibliothèque)
 
-Chronologique. Seuls les commits listés sont poussés ; la refonte compacte est EN COURS (non
-commitée).
+Chronologique.
 
 1. **Faux pill "Modifications non enregistrées" (`9150a3d`, poussé).** Ouvrir puis fermer
    l'éditeur d'annotation d'un coup, sans rien changer, faisait apparaître le pill.
@@ -1152,33 +1151,33 @@ commitée).
    (PDN, TXT, PNG, PDF, partage) et reste inchangé ; l'export de toute la bibliothèque passe par
    "Sauvegarder la bibliothèque". Le libellé "Partie affichée" essayé dans ce menu n'a pas été
    conservé.
-5. **Refonte compacte du panneau Bibliothèque : EN COURS, NON COMMITÉE** (fichiers modifiés :
-   `index.html`, `css/style.css`, `js/main.js`, plus une ligne `test-library-50.pdn` ajoutée à
-   `.gitignore`). Objectif : voir au moins 12 parties sans scroller à 100 % sur un écran 1080p,
-   avec 50 parties. Réalisé :
-   - en-tête sur une ligne : nom de la bibliothèque + "N parties" à gauche, trois boutons-icônes
-     carrés à droite (Ajouter, Sauvegarder, Ouvrir) ;
-   - recherche + deux bascules à icône, Récentes et Favoris (un second clic désactive le
-     filtre ; aucun filtre = toutes les parties) ; la ligne Toutes/Récentes/Favoris est
-     supprimée ;
-   - cartes sur 2 lignes, sans retour à la ligne, tronquées par "…" (joueurs + score, puis
-     tournoi · ronde ou "Partie libre"), numérotées selon la position dans la bibliothèque
-     COMPLÈTE (recalculée après un glisser-déposer, conservée pendant une recherche), texte
-     complet en info-bulle ;
-   - mesure avec 50 parties fictives : 15 cartes visibles sans scroller aux premières tailles ;
-   - retouche : textes agrandis (titre 16 px, cartes 54 px de haut, joueurs et score 15 px,
-     boutons 32 px), toutes ces tailles regroupées en variables `--lib-*` en tête du bloc
-     `#panel-library` de `css/style.css`. Après agrandissement, 13 cartes tiennent sans scroller ;
-   - le panneau de droite (Bloc 3) s'était élargi avec le texte plus gros, ce qui faisait
-     rétrécir le damier (`BoardRenderer.resize()` mesure la largeur réelle du panneau). Cause :
-     `.side-panel` en `flex: 0 0 350px` sans largeur maximale. Correctif écrit dans l'arbre de
-     travail : variable unique `--side-panel-w: 350px` (aussi utilisée par les formules
-     `max-width` de `.layout` et `.topbar-inner`), `.side-panel` en `width`/`max-width` fixes
-     avec `overflow: hidden`, et `min-width: 0` sur les conteneurs flex de la Bibliothèque.
-     Mesuré avec des noms et tournois très longs : panneau 350 px et damier 783×783 px,
-     identiques au commit `d528e43` ;
-   - **Reste à faire : validation du rendu par Mickaël**, puis commit et push. Ne rien ajouter
-     d'autre dans ce chantier ; décider de garder ou non la ligne `.gitignore`.
+5. **Refonte d'affichage du panneau Bibliothèque : TERMINÉE, validée par Mickaël, commitée et
+   poussée** (fichiers : `index.html`, `css/style.css`, `js/main.js`, plus une ligne
+   `test-library-50.pdn` conservée dans `.gitignore`). Apparence uniquement, aucun changement de
+   comportement. Étapes, dans l'ordre :
+   - en-tête : nom de la bibliothèque + "N parties" ; les trois actions existantes (Ajouter la
+     partie, Sauvegarder la bibliothèque, Ouvrir une bibliothèque) sont regroupées dans un menu
+     "⋯" (mêmes boutons et mêmes écouteurs, ids inchangés ; fermeture par clic extérieur, Échap ou
+     choix d'une action) ;
+   - une seule barre de contrôle : recherche + groupe segmenté Toutes / Récentes / Favoris (le
+     bouton "Toutes" est nouveau, un second clic sur Récentes/Favoris revient toujours à Toutes) ;
+   - aucun menu de tri (retiré en `d528e43`, pas recréé) et aucun bouton "Exporter N parties
+     affichées" dans le code : l'export de la bibliothèque entière est "Sauvegarder la
+     bibliothèque", le menu Exporter du haut ne concerne que la partie affichée ;
+   - **cartes sur 3 lignes** : Blancs, Noirs (une ligne chacun, sans ellipsis, retour à la ligne
+     si un nom est vraiment trop long), score à droite centré sur les deux noms, puis
+     "Tournoi · Ronde X" (seul le tournoi est tronqué par "…", la ronde ne rétrécit jamais :
+     `libraryEntryMetaParts()` et deux `<span>`) ;
+   - **panneau de droite élargi à 405 px** (`--side-panel-w`, était 350 px) ; `BoardRenderer.resize()`
+     mesure la largeur réelle du panneau, aucune constante JS à changer ;
+   - cartes avec liseré de 1 px discret (`--lib-card-border`, mélange de `--text-2`), coins
+     arrondis, 5 px entre les cartes ; carte active : liseré doré de 2 px + fond `--gold-soft` ;
+     survol : seul le liseré s'éclaircit ;
+   - mesure avec 50 parties fictives, fenêtre 937 px de haut à 100 % : 11 cartes complètes
+     visibles sans scroller (objectif initial de 12 abandonné au profit de la lisibilité des
+     noms), pas de scroll global ;
+   - tests faits sur `http://127.0.0.1:8934` (origine distincte de `localhost`) pour ne pas
+     toucher à la vraie bibliothèque du navigateur de Mickaël.
 6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
    après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
    section "En cours").
@@ -1190,9 +1189,8 @@ commitée).
 ## Ce qui manque (backlog actuel, voir CLAUDE.md section 3)
 
 Dans l'ordre :
-1. Finir la Bibliothèque (refonte compacte : validation du rendu, commit, push).
-2. Mémoriser en localStorage le thème du damier et le style de pion.
-3. Réactiver le Service Worker (mode hors-ligne).
-4. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
+1. Mémoriser en localStorage le thème du damier et le style de pion.
+2. Réactiver le Service Worker (mode hors-ligne).
+3. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
 Plus tard : style de pion "Toernooibase" (en pause), export en lot, conformité FMJD
 approfondie, IA.

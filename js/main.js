@@ -199,8 +199,11 @@ function toggleLibraryFavorite(entry) {
 function setLibraryFilter(filter) {
   libraryFilter = filter;
   el.libraryFilterAll.classList.toggle('active', filter === 'all');
+  el.libraryFilterAll.setAttribute('aria-pressed', String(filter === 'all'));
   el.libraryFilterRecent.classList.toggle('active', filter === 'recent');
+  el.libraryFilterRecent.setAttribute('aria-pressed', String(filter === 'recent'));
   el.libraryFilterFavorites.classList.toggle('active', filter === 'favorites');
+  el.libraryFilterFavorites.setAttribute('aria-pressed', String(filter === 'favorites'));
   renderLibrary();
 }
 
@@ -385,13 +388,15 @@ const el = {
   libraryList: document.getElementById('library-list'),
   librarySearchRow: document.getElementById('library-search-row'),
   librarySearchInput: document.getElementById('library-search-input'),
-  libraryFilters: document.getElementById('library-filters'),
   libraryEmpty: document.getElementById('library-empty'),
   libraryFilterEmpty: document.getElementById('library-filter-empty'),
   libraryFilterAll: document.getElementById('library-filter-all'),
   libraryFilterRecent: document.getElementById('library-filter-recent'),
+  libraryMenuBtn: document.getElementById('btn-library-menu'),
+  libraryMenu: document.getElementById('library-menu'),
   libraryFilterFavorites: document.getElementById('library-filter-favorites'),
   libraryName: document.getElementById('library-name'),
+  libraryHeadCount: document.getElementById('library-head-count'),
   libraryCount: document.getElementById('library-count'),
   btnLibrarySave: document.getElementById('btn-library-save'),
   btnLibraryOpen: document.getElementById('btn-library-open'),
@@ -429,9 +434,28 @@ const el = {
   photoCloseBtn: document.getElementById('player-photo-close'),
 };
 
+// Menu "⋯" de l'en-tête : ouvre/ferme seulement le panneau ; les boutons qu'il contient gardent
+// leurs écouteurs d'origine. Fermé par clic extérieur, Échap ou choix d'une action.
+function setLibraryMenuOpen(open) {
+  el.libraryMenu.hidden = !open;
+  el.libraryMenuBtn.setAttribute('aria-expanded', String(open));
+}
+el.libraryMenuBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setLibraryMenuOpen(el.libraryMenu.hidden);
+});
+el.libraryMenu.addEventListener('click', () => setLibraryMenuOpen(false));
+document.addEventListener('click', (e) => {
+  if (!el.libraryMenu.hidden && !e.target.closest('#library-menu')) setLibraryMenuOpen(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !el.libraryMenu.hidden) setLibraryMenuOpen(false);
+});
+
 el.libraryFilterAll.addEventListener('click', () => setLibraryFilter('all'));
-el.libraryFilterRecent.addEventListener('click', () => setLibraryFilter('recent'));
-el.libraryFilterFavorites.addEventListener('click', () => setLibraryFilter('favorites'));
+// Bascules : un clic active le filtre, un second clic sur le même bouton le désactive (= toutes).
+el.libraryFilterRecent.addEventListener('click', () => setLibraryFilter(libraryFilter === 'recent' ? 'all' : 'recent'));
+el.libraryFilterFavorites.addEventListener('click', () => setLibraryFilter(libraryFilter === 'favorites' ? 'all' : 'favorites'));
 el.librarySearchInput.addEventListener('input', () => {
   librarySearchQuery = normalizeSearchText(el.librarySearchInput.value.trim());
   renderLibrary();
@@ -1586,13 +1610,31 @@ function renderEditableLibraryTitle(entry, idx, container) {
   const whiteText = entry.headers.White ? formatPlayerName(entry.headers.White) : 'Blancs';
   const blackText = entry.headers.Black ? formatPlayerName(entry.headers.Black) : 'Noirs';
   const scoreText = entry.headers.Result && entry.headers.Result !== '*' ? entry.headers.Result : '—';
-  container.append(
-    buildEditableLibraryField('White', whiteText, null, idx),
-    document.createTextNode(' — '),
-    buildEditableLibraryField('Black', blackText, 'library-item-black', idx),
-    document.createTextNode(' '),
-    buildEditableLibraryField('Result', scoreText, 'library-item-score', idx),
-  );
+  const names = document.createElement('span');
+  names.className = 'library-item-names';
+  // Une ligne par joueur (Blancs puis Noirs), sans ellipsis : un nom trop long passe à la ligne.
+  const whiteLine = document.createElement('span');
+  whiteLine.className = 'library-item-name-line';
+  whiteLine.append(buildEditableLibraryField('White', whiteText, null, idx));
+  const blackLine = document.createElement('span');
+  blackLine.className = 'library-item-name-line';
+  blackLine.append(buildEditableLibraryField('Black', blackText, 'library-item-black', idx));
+  names.append(whiteLine, blackLine);
+  container.append(names, buildEditableLibraryField('Result', scoreText, 'library-item-score', idx));
+}
+
+// 3ᵉ ligne de la carte : "tournoi · ronde", ou "Partie libre" si aucun des deux n'est renseigné.
+// Renvoie les deux morceaux séparément : seul le tournoi est tronqué par "…", la ronde reste visible.
+function libraryEntryMetaParts(entry) {
+  const round = String(entry.headers.Round || '').trim();
+  const roundText = (!round || round === '?' || round === '-') ? '' : (/^\d+$/.test(round) ? `Ronde ${round}` : round);
+  const event = String(entry.headers.Event || '').trim();
+  if (!event && !roundText) return { event: 'Partie libre', round: '' };
+  return { event, round: roundText };
+}
+function libraryEntryMetaText(entry) {
+  const { event, round } = libraryEntryMetaParts(entry);
+  return [event, round].filter(Boolean).join(' · ');
 }
 
 // Sérialise la bibliothèque en y encodant `libraryName` (si renseigné) comme un en-tête
@@ -1785,7 +1827,7 @@ function renderLibrary() {
   el.libraryEmpty.hidden = library.length > 0;
   el.libraryCount.hidden = library.length === 0;
   el.libraryCount.textContent = String(library.length);
-  el.libraryFilters.hidden = library.length === 0;
+  el.libraryHeadCount.textContent = library.length === 0 ? '' : `${library.length} partie${library.length > 1 ? 's' : ''}`;
   el.librarySearchRow.hidden = library.length === 0;
 
   const visibleIndexes = library.map((entry, idx) => idx).filter((idx) => {
@@ -1859,8 +1901,28 @@ function renderLibrary() {
     }
     const meta = document.createElement('div');
     meta.className = 'library-item-meta';
-    meta.textContent = entry.headers.Event || '';
+    const metaParts = libraryEntryMetaParts(entry);
+    const metaEvent = document.createElement('span');
+    metaEvent.className = 'library-item-meta-event';
+    metaEvent.textContent = metaParts.event;
+    meta.appendChild(metaEvent);
+    if (metaParts.event && metaParts.round) {
+      const metaRound = document.createElement('span');
+      metaRound.className = 'library-item-meta-round';
+      metaRound.textContent = ` · ${metaParts.round}`;
+      meta.appendChild(metaRound);
+    } else if (metaParts.round) {
+      metaEvent.textContent = metaParts.round;
+    }
     info.append(title, meta);
+    // Numéro = position dans l'ordre manuel de la bibliothèque COMPLÈTE (recalculé à chaque
+    // rendu, donc après un drag&drop ; inchangé par une recherche ou un filtre).
+    const num = document.createElement('span');
+    num.className = 'library-item-num';
+    num.textContent = String(idx + 1);
+    // Texte complet en info-bulle (les lignes sont tronquées par "…") ; les boutons étoile /
+    // supprimer ont leur propre info-bulle.
+    li.title = `${libraryEntryTitle(entry)}${entry.headers.Result && entry.headers.Result !== '*' ? ` (${entry.headers.Result})` : ''} · ${libraryEntryMetaText(entry)}`;
 
     const isFavorite = libraryFavorites.has(gameFingerprint(entry));
     const starBtn = document.createElement('button');
@@ -1881,7 +1943,7 @@ function renderLibrary() {
       deleteLibraryEntry(idx);
     });
 
-    li.append(dragHandle, info, starBtn, deleteBtn);
+    li.append(dragHandle, num, info, starBtn, deleteBtn);
     li.addEventListener('click', async () => {
       // Un drag qui vient de se terminer déclenche quand même un 'click' natif au relâchement
       // (même élément, même souris) — sans ce garde-fou, réordonner une entrée la sélectionnait

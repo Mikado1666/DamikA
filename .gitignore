@@ -9,3 +9,6 @@ deploy.ps1
 
 # Données personnelles (noms + IDs Toernooibase), ne jamais suivre
 scripts/players.txt
+
+# Bibliothèque de test fictive (jamais commitée)
+test-library-50.pdn

@@ -8,6 +8,9 @@
   --text-0: #f2e9d8;
   --text-1: #c9bba0;
   --text-2: #8c7c63;
+  /* Largeur du panneau de droite (Bloc 3) : valeur UNIQUE et FIXE, jamais élargie par son contenu
+     (sinon BoardRenderer.resize(), qui mesure ce panneau, rétrécit le damier). */
+  --side-panel-w: 405px;
   --gold: #d4af69;
   --gold-soft: rgba(212, 175, 105, 0.18);
   --gold-dim: #8a6b3c;
@@ -177,7 +180,7 @@ body {
   padding: 12px 24px;
   /* Formule IDENTIQUE à .layout (voir ce commentaire pour le détail) — les deux DOIVENT
      rester synchronisées pour que gauche/droite du header retombent pile sur bloc 1/3. */
-  max-width: calc(var(--board-px, 950px) + 268px + 350px + 52px + 48px);
+  max-width: calc(var(--board-px, 950px) + 268px + var(--side-panel-w) + 52px + 48px);
   width: 100%;
   margin: 0 auto;
 }
@@ -784,54 +787,123 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 .panel-body[hidden] { display: none; }
 
+/* ---------- Bibliothèque : tailles réglables (à ajuster ici, nulle part ailleurs) ---------- */
+#panel-library {
+  --lib-title-size: 16px;      /* nom de la bibliothèque */
+  --lib-count-size: 13px;      /* "N parties" */
+  --lib-search-h: 34px;        /* hauteur du champ de recherche */
+  --lib-search-size: 14px;     /* texte + placeholder de la recherche */
+  --lib-icon-btn: 32px;        /* côté des boutons-icônes (en-tête + bascules) */
+  --lib-icon-size: 18px;       /* taille de l'icône dans ces boutons */
+  --lib-card-h: 42px;          /* hauteur minimale d'une carte */
+  --lib-num-size: 12px;        /* numéro de la partie */
+  --lib-line1-size: 14px;      /* ligne 1 : joueurs */
+  --lib-score-size: 14px;      /* score */
+  --lib-line2-size: 12px;      /* ligne 2 : tournoi · ronde */
+  --lib-card-border: color-mix(in srgb, var(--text-2) 28%, transparent);        /* liseré discret */
+  --lib-card-border-hover: color-mix(in srgb, var(--text-2) 55%, transparent);  /* survol */
+  --lib-action-size: 22px;     /* zone cliquable étoile / croix de suppression */
+}
+
 .library-list {
   list-style: none;
+  min-width: 0;
   margin: 0;
   padding: 7px;
   overflow-y: auto;
   flex: 1;
 }
+/* Carte compacte : exactement 2 lignes (joueurs + score / tournoi · ronde), sans retour à la
+   ligne, ~48 px de haut. Numéro de la partie (position dans la bibliothèque complète) à gauche. */
 .library-item {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--lib-card-h);
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 2px 6px 2px 4px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  margin-bottom: 3px;
-  border: 1px solid transparent;
+  margin-bottom: 5px;
+  border: 1px solid var(--lib-card-border);
 }
+.library-item-num {
+  flex: none;
+  width: 24px;
+  text-align: right;
+  font-size: var(--lib-num-size);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.library-item.active .library-item-num { color: var(--gold); font-weight: 700; }
+/* En-tête compact de la Bibliothèque, sur UNE ligne : nom + nombre de parties à gauche,
+   trois boutons-icônes carrés à droite. */
+.library-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 6px;
+  flex-shrink: 0;
+}
+.library-head-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
 .library-name {
-  font-size: 17px;
+  flex: 0 1 auto;
+  min-width: 24px;
+  font-size: var(--lib-title-size);
   font-weight: 700;
   color: var(--text-0);
-  padding: 6px 8px;
-  margin-bottom: 8px;
+  padding: 2px 5px;
+  margin-left: -5px;
   border-radius: var(--radius-sm);
   cursor: text;
-  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .library-name:hover, .library-name:focus { background: var(--gold-soft); color: var(--gold); outline: none; }
 .library-name:empty::before { content: attr(data-placeholder); color: var(--text-2); font-weight: 400; }
-.library-item:hover { background: var(--gold-soft); }
-.library-item.active { border-color: var(--gold); background: var(--gold-soft); }
+.library-head-count { flex: none; font-size: var(--lib-count-size); color: var(--text-2); white-space: nowrap; }
+/* Bouton-icône carré (en-tête + bascules de filtre). */
+.library-icon-btn {
+  flex: none;
+  width: var(--lib-icon-btn);
+  height: var(--lib-icon-btn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: var(--lib-icon-size);
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.library-icon-btn:hover { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
+.library-icon-btn.active { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
+.library-item:hover { border-color: var(--lib-card-border-hover); }
+.library-item.active { background: var(--gold-soft); border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
 /* Poignée de glisser-déposer (réordonnancement manuel) : discrète comme le bouton supprimer,
    révélée seulement au survol de la ligne — pas de rangée d'icônes permanente, même logique
    que .library-item-delete. Curseur "grab" pour signaler l'affordance avant même le drag. */
 .library-item-drag {
   flex-shrink: 0;
   align-self: center;
-  width: 18px;
+  width: 12px;
   text-align: center;
   color: var(--text-2);
   opacity: 0;
   cursor: grab;
   transition: opacity 0.15s;
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1;
   touch-action: none; /* évite le scroll tactile pendant le drag, cf. startLibraryDrag() */
 }
@@ -853,11 +925,23 @@ body {
 .library-item-placeholder {
   border: 1px dashed var(--panel-border);
   border-radius: var(--radius-sm);
-  margin-bottom: 3px;
+  margin-bottom: 5px;
   box-sizing: border-box;
 }
 .library-item-info { min-width: 0; flex: 1; }
-.library-item-title { font-size: 15.5px; color: var(--text-0); font-weight: 600; }
+.library-item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--lib-line1-size);
+  line-height: 1.3;
+  color: var(--text-0);
+  font-weight: 600;
+}
+/* Un joueur par ligne, pleine largeur, sans "…" (retour à la ligne si vraiment trop long) ;
+   le score reste à droite, centré verticalement sur les deux lignes de noms. */
+.library-item-names { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.library-item-name-line { display: block; overflow-wrap: anywhere; }
 /* Champs éditables au clic directement sur la carte Bibliothèque (nom, score — synchronisés
    avec le Bloc 1 via la MÊME référence d'objet, cf. setLibraryFieldValue()/
    renderEditableLibraryTitle() dans main.js — pas une copie qui pourrait diverger). */
@@ -870,8 +954,17 @@ body {
   margin: 0 -3px;
 }
 .library-item-field:hover, .library-item-field:focus { background: var(--gold-soft); color: var(--gold); }
-.library-item-score { font-weight: 700; color: var(--text-1); }
-.library-item-meta { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.library-item-score { flex: none; margin-left: auto; font-size: var(--lib-score-size); font-weight: 700; color: var(--text-1); }
+.library-item-meta {
+  font-size: var(--lib-line2-size);
+  line-height: 1.25;
+  color: var(--text-2);
+  display: flex;
+  white-space: nowrap;
+}
+/* Seul le tournoi rétrécit (avec "…") ; " · Ronde X" ne rétrécit jamais. */
+.library-item-meta-event { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.library-item-meta-round { flex: none; }
 /* Couleur fixe pour identifier le joueur Noirs dans le titre bibliothèque — même famille
    bronze que l'anneau photo Noirs du Bloc 1 (`.player-avatar-ring[data-side-ring="black"]`),
    indépendant du résultat de la partie (retour Mickaël : pas de mise en évidence dynamique
@@ -884,8 +977,8 @@ body {
    liste, pas de rangée d'icônes permanente qui alourdirait chaque ligne. */
 .library-item-delete {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: var(--lib-action-size);
+  height: var(--lib-action-size);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -894,7 +987,7 @@ body {
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
   opacity: 0;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
@@ -916,59 +1009,94 @@ body {
 }
 .library-empty[hidden] { display: none; }
 
-/* Recherche + tri : une ligne au-dessus des filtres, même famille visuelle (fond --bg-2,
+/* Recherche + bascules Récentes/Favoris sur une ligne, même famille visuelle (fond --bg-2,
    bordure --panel-border, dorée au focus) que les autres champs du panneau. */
 .library-search-row {
   display: flex;
+  min-width: 0;
+  align-items: center;
   gap: 6px;
-  padding: 0 7px 8px;
+  padding: 0 8px 6px;
   flex-shrink: 0;
 }
 .library-search-row[hidden] { display: none; }
 .library-search-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 9px;
+  height: var(--lib-search-h);
+  box-sizing: border-box;
+  padding: 0 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--panel-border);
   background: var(--bg-2);
   color: var(--text-0);
-  font-size: 13px;
+  font-size: var(--lib-search-size);
   font-family: inherit;
 }
-.library-search-input::placeholder { color: var(--text-2); }
-.library-search-input:focus { outline: none; border-color: var(--gold); }
-
-/* Filtres Toutes/Récentes/Favoris : mêmes pastilles que .panel-tab (fond --gold-soft, texte
-   --gold à l'état actif), en plus compact pour tenir sur une seule ligne dans le panneau. */
+/* Filtres Toutes / Récentes / Favoris : groupe segmenté à droite du champ de recherche. */
 .library-filters {
+  flex: none;
   display: flex;
-  gap: 6px;
-  padding: 0 7px 8px;
-  flex-shrink: 0;
-}
-.library-filters[hidden] { display: none; }
-.library-filter-btn {
-  flex: 1;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
   border: 1px solid var(--panel-border);
-  background: transparent;
-  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.library-filter-btn {
+  height: calc(var(--lib-search-h) - 2px);
+  padding: 0 8px;
+  border: none;
+  border-right: 1px solid var(--panel-border);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-family: inherit;
   font-size: 12.5px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
 }
-.library-filter-btn:hover:not(.active) { color: var(--text-0); }
-.library-filter-btn.active { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
+.library-filter-btn:last-child { border-right: none; }
+.library-filter-btn:hover { background: var(--gold-soft); color: var(--gold); }
+.library-filter-btn.active { background: var(--gold-soft); color: var(--gold); font-weight: 700; }
+
+/* Menu "⋯" de l'en-tête (Ajouter / Sauvegarder / Ouvrir). Positionné dans #panel-library
+   (overflow: hidden) : il reste donc dans les 350 px du panneau. */
+.library-head { position: relative; }
+.library-menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-panel);
+}
+.library-menu[hidden] { display: none; }
+.library-menu-item {
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-0);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.library-menu-item:hover { background: var(--gold-soft); color: var(--gold); }
+
+.library-search-input::placeholder { color: var(--text-2); }
+.library-search-input:focus { outline: none; border-color: var(--gold); }
 
 /* Étoile favori : même discrétion que .library-item-delete (visible seulement au survol de
    la carte), sauf quand la partie est déjà marquée favorite (toujours visible, pleine). */
 .library-item-star {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: var(--lib-action-size);
+  height: var(--lib-action-size);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -977,7 +1105,7 @@ body {
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
@@ -1010,7 +1138,7 @@ body {
      bloc dans cette boîte désormais toujours exactement à la bonne taille. Formule
      IDENTIQUE à .topbar-inner (même 48px de padding, même 718px de coûts fixes) — les
      deux DOIVENT rester synchronisées. */
-  max-width: calc(var(--board-px, 950px) + 268px + 350px + 52px + 48px);
+  max-width: calc(var(--board-px, 950px) + 268px + var(--side-panel-w) + 52px + 48px);
   width: 100%;
   margin: 0 auto;
   align-items: stretch;
@@ -1438,7 +1566,11 @@ body {
 
 /* ---------- Side panel ---------- */
 .side-panel {
-  flex: 0 0 350px;
+  flex: 0 0 var(--side-panel-w);
+  width: var(--side-panel-w);
+  min-width: 0;
+  max-width: var(--side-panel-w);
+  overflow: hidden; /* le contenu (noms/tournois longs) est tronqué par "…", jamais élargi */
   display: flex;
   flex-direction: column;
   min-height: 0;
