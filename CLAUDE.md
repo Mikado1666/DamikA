@@ -195,24 +195,31 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 `drawPieceToernooibase` existe toujours mais n'est plus branchée).
 
 **Backlog** (dans cet ordre ; ne rien commencer sans demande) :
-1. Mémoriser en localStorage le thème du damier et le style de pion.
-2. Réactiver le Service Worker (mode hors-ligne).
-3. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
+1. Export PDF avec diagrammes (à tester).
+2. Mémoriser en localStorage le thème du damier et le style de pion.
+3. Réactiver le Service Worker (mode hors-ligne).
+4. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
 conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`).
 
-## 3 bis. Dernier chantier terminé (état au 07/10/2026)
+## 3 bis. Dernier chantier clos (état au 07/10/2026)
 
-**Refonte d'affichage de la Bibliothèque : livrée, validée, commitée.** Cartes sur 3 lignes
-(Blancs, Noirs, "Tournoi · Ronde X" ; seul le tournoi est tronqué), liseré 1 px + coins arrondis,
-carte active à liseré doré 2 px, menu "⋯" (Ajouter / Sauvegarder / Ouvrir), barre unique
-recherche + Toutes/Récentes/Favoris, panneau de droite à 405 px (`--side-panel-w`). Tailles
-réglables dans les variables `--lib-*` en tête de `#panel-library`. Pas de menu de tri ni
-d'export "N parties affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
+**Chantier Bibliothèque : CLOS** (validé, commité, poussé). Cartes sur 3 lignes (Blancs, Noirs,
+"Tournoi · Ronde X" ; seul le tournoi est tronqué), liseré 1 px + coins arrondis, carte active à
+liseré doré 2 px, menu "⋯" (Ajouter / Sauvegarder / Ouvrir), barre unique recherche +
+Toutes/Récentes/Favoris, panneau de droite à 405 px (`--side-panel-w`). Tailles réglables dans les
+variables `--lib-*` en tête de `#panel-library`. Pas de menu de tri ni d'export "N parties
+affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
 - Champs d'une carte (nom, score…) éditables seulement sur la carte DÉJÀ active ; un clic sur une
   carte non active ne fait que l'ouvrir (`contenteditable` basculé dans le clic, sans `renderLibrary()`).
+- **Bug de perte des coups corrigé** : `library[i].moves` n'était jamais mis à jour (les coups
+  vivent dans `game`, seul `headers` est partagé par référence). `commitActiveEntryMoves()`
+  l'écrit à "Enregistrer" et en mode "confirmé". Toute nouvelle voie de sauvegarde d'une partie
+  doit l'appeler.
 - Bug connu laissé tel quel : l'ordre "Récentes" n'est pas appliqué à l'écran
-  (`renderLibrary()` parcourt `library` dans son ordre d'origine).
+  (`renderLibrary()` parcourt `library` dans son ordre d'origine). Limite connue : un export de la
+  bibliothèque pendant une modification non enregistrée écrit les en-têtes modifiés mais les
+  coups enregistrés.
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
   `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur.
 

@@ -1151,41 +1151,48 @@ Chronologique.
    (PDN, TXT, PNG, PDF, partage) et reste inchangé ; l'export de toute la bibliothèque passe par
    "Sauvegarder la bibliothèque". Le libellé "Partie affichée" essayé dans ce menu n'a pas été
    conservé.
-5. **Refonte d'affichage du panneau Bibliothèque : TERMINÉE, validée par Mickaël, commitée et
-   poussée** (fichiers : `index.html`, `css/style.css`, `js/main.js`, plus une ligne
-   `test-library-50.pdn` conservée dans `.gitignore`). Apparence uniquement, aucun changement de
-   comportement. Étapes, dans l'ordre :
-   - en-tête : nom de la bibliothèque + "N parties" ; les trois actions existantes (Ajouter la
-     partie, Sauvegarder la bibliothèque, Ouvrir une bibliothèque) sont regroupées dans un menu
-     "⋯" (mêmes boutons et mêmes écouteurs, ids inchangés ; fermeture par clic extérieur, Échap ou
-     choix d'une action) ;
-   - une seule barre de contrôle : recherche + groupe segmenté Toutes / Récentes / Favoris (le
-     bouton "Toutes" est nouveau, un second clic sur Récentes/Favoris revient toujours à Toutes) ;
-   - aucun menu de tri (retiré en `d528e43`, pas recréé) et aucun bouton "Exporter N parties
-     affichées" dans le code : l'export de la bibliothèque entière est "Sauvegarder la
-     bibliothèque", le menu Exporter du haut ne concerne que la partie affichée ;
-   - **cartes sur 3 lignes** : Blancs, Noirs (une ligne chacun, sans ellipsis, retour à la ligne
-     si un nom est vraiment trop long), score à droite centré sur les deux noms, puis
-     "Tournoi · Ronde X" (seul le tournoi est tronqué par "…", la ronde ne rétrécit jamais :
-     `libraryEntryMetaParts()` et deux `<span>`) ;
-   - **panneau de droite élargi à 405 px** (`--side-panel-w`, était 350 px) ; `BoardRenderer.resize()`
-     mesure la largeur réelle du panneau, aucune constante JS à changer ;
-   - cartes avec liseré de 1 px discret (`--lib-card-border`, mélange de `--text-2`), coins
-     arrondis, 5 px entre les cartes ; carte active : liseré doré de 2 px + fond `--gold-soft` ;
-     survol : seul le liseré s'éclaircit ;
-   - mesure avec 50 parties fictives, fenêtre 937 px de haut à 100 % : 11 cartes complètes
-     visibles sans scroller (objectif initial de 12 abandonné au profit de la lisibilité des
-     noms), pas de scroll global ;
-   - tests faits sur `http://127.0.0.1:8934` (origine distincte de `localhost`) pour ne pas
-     toucher à la vraie bibliothèque du navigateur de Mickaël.
-   - **Édition des champs d'une carte (commit séparé)** : un clic sur une carte non active ne
-     fait que l'ouvrir ; nom, score et autres champs ne deviennent éditables (`contenteditable`)
-     que sur la carte DÉJÀ active. Les champs d'une carte non active n'ont ni curseur texte ni
-     survol d'édition (règles CSS sous `.library-item.active`). `contenteditable` est posé au rendu
-     (`buildEditableLibraryField()`) et mis à jour dans le clic de sélection, sans `renderLibrary()`
-     (cf. piège du double-clic). Vérifié par clics programmatiques (extension Chrome déconnectée
-     avant le test au clic réel) : carte activée, aucun champ en focus, les autres cartes restent
-     non éditables.
+5. **Refonte d'affichage du panneau Bibliothèque : CLOSE, validée par Mickaël, commitée et
+   poussée** (`9905d4c`, `6329f21`, `5719692`, puis le correctif `commitActiveEntryMoves`).
+   Apparence uniquement, sauf la règle de clic ci-dessous. Chronologie de la session :
+   1. **Menu "⋯" + barre unique.** Les trois actions existantes (Ajouter la partie, Sauvegarder la
+      bibliothèque, Ouvrir une bibliothèque) sont regroupées dans un menu "⋯" (mêmes boutons,
+      mêmes ids et écouteurs ; fermeture par clic extérieur, Échap ou choix d'une action).
+      Recherche + groupe segmenté Toutes / Récentes / Favoris sur une seule ligne (le bouton
+      "Toutes" est nouveau). Aucun menu de tri (retiré en `d528e43`, pas recréé) et aucun bouton
+      "Exporter N parties affichées" dans le code ; "Sauvegarder la bibliothèque" exporte toute la
+      bibliothèque, le menu Exporter du haut ne concerne que la partie affichée.
+   2. **Cartes compactes** (42 px), puis **cartes sur 3 lignes** : Blancs, Noirs (une ligne chacun,
+      sans ellipsis, retour à la ligne si un nom est vraiment trop long), score à droite centré
+      sur les deux noms, puis "Tournoi · Ronde X" (seul le tournoi est tronqué par "…", la ronde ne
+      rétrécit jamais : `libraryEntryMetaParts()` et deux `<span>`, espace insécable avant le "·").
+   3. **Panneau de droite élargi à 405 px** (`--side-panel-w`, était 350 px) ;
+      `BoardRenderer.resize()` mesure la largeur réelle du panneau, aucune constante JS à changer.
+   4. **Liseré et carte active** : liseré 1 px discret (`--lib-card-border`, mélange de `--text-2`),
+      coins arrondis, 5 px entre cartes ; carte active à liseré doré 2 px et fond `--gold-soft` ;
+      survol : seul le liseré s'éclaircit.
+   5. **Clic = sélection** : un clic sur une carte non active ne fait que l'ouvrir ; nom, score et
+      autres champs ne sont éditables (`contenteditable`) que sur la carte DÉJÀ active, sans curseur
+      ni survol d'édition ailleurs. `contenteditable` posé au rendu
+      (`buildEditableLibraryField()`) et basculé dans le clic de sélection, sans `renderLibrary()`
+      (piège du double-clic).
+   6. **Bug de perte des coups (antérieur à la session, jamais lié à la refonte).** Jouer un coup
+      sur une partie de la Bibliothèque puis "Enregistrer" ne conservait pas le coup : changer de
+      carte puis revenir rendait la partie dans son état initial. Cause : `headers` est partagé par
+      référence avec `library[i]`, mais les coups vivent dans `game` ; `library[i].moves` était une
+      copie prise au chargement, jamais mise à jour (aucune affectation de `.moves` dans aucune
+      version de `main.js`). "Enregistrer" ne figeait que le snapshot ; le changement de carte, la
+      sauvegarde et l'export de la bibliothèque relisaient les anciens coups. Le F5 masquait le bug
+      (la partie affichée est persistée à part, `currentGamePdn`). Correctif : `commitActiveEntryMoves()`
+      écrit coups et commentaires dans `library[libraryActiveIndex].moves`, appelée par
+      `saveActiveEntry()` et par le mode "confirmé" de `markActiveEntryDirty()`. Vérifié : 41-37
+      conservé après changement de carte, et remplacement des coups conservé après F5.
+      Limite connue non traitée : un export de la bibliothèque pendant une modification non
+      enregistrée écrit les en-têtes modifiés (référence partagée) mais les coups enregistrés.
+   7. **Méthode de test** : bibliothèque fictive de 50 parties sur `http://127.0.0.1:8934` (origine
+      distincte de `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur ; clics
+      simulés par événements de pointeur quand l'extension Chrome était déconnectée. Mesure :
+      11 cartes complètes visibles sans scroller avec 50 parties (fenêtre de 937 px de haut, 100 %),
+      pas de scroll global.
 6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
    après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
    section "En cours").
@@ -1197,8 +1204,9 @@ Chronologique.
 ## Ce qui manque (backlog actuel, voir CLAUDE.md section 3)
 
 Dans l'ordre :
-1. Mémoriser en localStorage le thème du damier et le style de pion.
-2. Réactiver le Service Worker (mode hors-ligne).
-3. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
+1. Export PDF avec diagrammes (à tester).
+2. Mémoriser en localStorage le thème du damier et le style de pion.
+3. Réactiver le Service Worker (mode hors-ligne).
+4. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
 Plus tard : style de pion "Toernooibase" (en pause), export en lot, conformité FMJD
 approfondie, IA.
