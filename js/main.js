@@ -1,5 +1,5 @@
 import {
-  DraughtsGame, WHITE, BLACK, countPieces, computeTempoDifferential, hasAnyKing,
+  DraughtsGame, WHITE, BLACK, countPieces, computeTempoDifferential, hasAnyKing, squareToRC,
 } from './engine/rules.js';
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { parsePdn } from './pdn/parser.js';
@@ -642,7 +642,8 @@ let commentPopoverIdx = null;
 // commentaire est déjà persisté tel quel partout, cf. currentGameAsLibraryEntry(),
 // serializeToPdn...), aucun schéma/format à faire évoluer. Retiré à l'affichage dans le
 // textarea, ré-ajouté à la fermeture si la case est cochée.
-const DIAGRAM_MARKER = '\n[diagramme]';
+const DIAGRAM_MARKER = '
+[diagramme]';
 function stripDiagramMarker(text) { return text.endsWith(DIAGRAM_MARKER) ? text.slice(0, -DIAGRAM_MARKER.length) : text; }
 function hasDiagramMarker(text) { return !!text && text.endsWith(DIAGRAM_MARKER); }
 
@@ -2728,46 +2729,33 @@ async function exportBoardImage(format = 'png') {
   return new Promise((resolve) => out.toBlob(resolve, mime, format === 'jpeg' ? 0.92 : undefined));
 }
 
-// Capture le damier à la position FINALE de la partie (toutes les prises/coups joués),
-// indépendamment de la position actuellement affichée/naviguée par l'utilisateur (contraire
-// à exportBoardImage() ci-dessus, qui capture la position courante — cf. demande Mickaël).
-// jumpToPly() navigue le jeu réel puis revient à l'index de départ ; les 2 sauts se font de
-// façon synchrone (pas d'animation, cf. son implémentation) donc dans la même frame que le
-// reste de cette fonction — le navigateur ne peint jamais l'état intermédiaire, aucun
-// flash visible pour l'utilisateur.
-// `targetIdx` : index "dernier coup joué" au sens de jumpToPly() (history.length-1 une fois
-// ce coup joué) — capture un diagramme "à la volée" sur un coup annoté précis (cf.
-// exportGamePdf()) : seuls ces diagrammes explicitement ajoutés par l'utilisateur
-// apparaissent dans le PDF, plus de diagramme de position finale automatique.
-function boardImageDataUrlAtPly(targetIdx) {
+// Position (plateau + camp au trait) APRÈS le coup `ply` (1-indexé), pour un diagramme vectoriel
+// du PDF. Comme l'ancien export par capture du canvas, on navigue le jeu réel (jumpToPly) puis
+// on revient à l'index de départ ; les sauts sont synchrones (aucun flash visible). Le plateau
+// est copié : `game.board` est remplacé à chaque coup, mais ses cases pourraient être partagées.
+function boardAtPly(ply) {
   const originalIdx = game.history.length - 1;
+  const targetIdx = ply - 1;
   if (targetIdx !== originalIdx) jumpToPly(targetIdx);
-  // Flèche du dernier coup masquée ici aussi (export "propre", sans annotation, même
-  // demande que pour l'export Image — retour Mickaël) : basculée le temps de la capture,
-  // restaurée juste après, comme dans exportBoardImage().
-  const originalShowArrow = renderer.showArrow;
-  renderer.showArrow = false;
-  renderer.render();
-  const dataUrl = renderer.canvas.toDataURL('image/png');
-  renderer.showArrow = originalShowArrow;
-  renderer.render();
+  const snapshot = {
+    board: game.board.map((p) => (p ? { ...p } : p)),
+    side: game.sideToMove,
+  };
   if (targetIdx !== originalIdx) jumpToPly(originalIdx);
-  return dataUrl;
+  return snapshot;
 }
 
-// PDF complet : en-tête + notation intégrale, avec commentaires/diagrammes insérés dans le
-// flux au coup annoté (cf. section "notation" plus bas). Thème "papier" clair, indépendant
-// du thème sombre/clair de l'app (cf. constantes PAPER/INK/... ci-dessous).
-// PDF pensé comme un document imprimable/partageable — fond clair papier, PAS le thème
-// sombre de l'app (retour Mickaël : un export "brut de l'interface" ne se lit ni ne
-// s'imprime bien). En-tête compact, notation en grille resserrée — tient sur une seule page
-// tant qu'aucun coup n'est annoté ; un coup annoté (commentaire et/ou diagramme) interrompt
-// la grille pour s'afficher à sa place exacte dans le flux, ce qui peut alors déborder sur
-// plusieurs pages selon le nombre d'annotations.
+// PDF "Partie complète", mise en page façon livre : en-tête centré, notation en TEXTE CONTINU qui
+// passe à la ligne, et un BLOC (fond teinté, diagramme vectoriel à gauche + texte à droite) juste
+// après chaque coup qui porte un commentaire/diagramme. Fond clair "papier", indépendant du thème
+// sombre/clair de l'app. Un bloc n'est jamais coupé entre deux pages ; s'il ne tient pas dans la
+// place restante, il est reporté en haut de la page suivante (avec la mention du coup concerné)
+// et la notation continue de remplir la page courante. Rendu uniquement : le contenu exporté
+// (coups, commentaires, diagrammes, en-têtes) est inchangé.
 function exportGamePdf() {
   // Figée ICI, avant tout autre traitement : la notation dérive de cette même liste,
   // reflétant l'état de `game` en mémoire au moment de l'export — sauvegardée ou non, quelle
-  // que soit la position actuellement naviguée/affichée (retour Mickaël).
+  // que soit la position actuellement naviguée/affichée.
   const moves = fullMoveList(game);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -2775,17 +2763,20 @@ function exportGamePdf() {
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 42;
   const contentW = pageW - margin * 2;
+  const footerReserve = 22;                       // place réservée au pied de page
+  const bottomLimit = pageH - margin - footerReserve + 6;
 
-  // Palette "papier" dédiée à ce document — indépendante du thème (clair/sombre) de
-  // l'interface : un export destiné à être imprimé/partagé doit rester lisible et neutre
-  // quel que soit le thème choisi dans l'app au moment de l'export.
+  // Palette "papier" dédiée à ce document.
   const PAPER = '#fdfbf6';
   const INK = '#241a10';
   const INK_MUTED = '#6b5d47';
   const ACCENT = '#9a6b1f';
   const RULE = '#d8cbb0';
+  const BLOCK_BG = '#f4ecdb';
   const WHITE_MOVE = INK;
   const BLACK_MOVE = '#7a3418';
+  const BOARD_LIGHT = '#f2e6c9';
+  const BOARD_DARK = '#b08a58';
 
   function fillPage() {
     doc.setFillColor(PAPER);
@@ -2793,178 +2784,391 @@ function exportGamePdf() {
   }
   fillPage();
 
-  const meta = matchMetaLines();
-
-  // --- en-tête compact : noms/Elo, tournoi/ronde/date, score --------------------------------
-  let y = margin + 4;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.setTextColor(INK);
-  doc.text(`${meta.white}  —  ${meta.black}`, pageW / 2, y, { align: 'center' });
-  y += 18;
-
-  const eloLine = [
-    meta.whiteElo ? `${meta.white} : Elo ${meta.whiteElo}` : null,
-    meta.blackElo ? `${meta.black} : Elo ${meta.blackElo}` : null,
-  ].filter(Boolean).join('   ·   ');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10.5);
-  doc.setTextColor(INK_MUTED);
-  if (eloLine) { doc.text(eloLine, pageW / 2, y, { align: 'center' }); y += 15; }
-  if (meta.tournamentLine) { doc.text(meta.tournamentLine, pageW / 2, y, { align: 'center' }); y += 15; }
-  if (meta.scoreLine) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(ACCENT);
-    y += 4;
-    doc.text(meta.scoreLine, pageW / 2, y, { align: 'center' });
-    y += 10;
-  }
-  y += 10;
-  doc.setDrawColor(RULE);
-  doc.setLineWidth(0.75);
-  doc.line(margin, y, pageW - margin, y);
-  y += 22;
-
-  // --- notation --------------------------------------------------------------------------
-  // Structure de base : 2 colonnes Blancs/Noirs, "N.  coup-blancs   coup-noirs", un seul
-  // flux vertical (plus de blocs de colonnes multiples façon journal — retour Mickaël, ça
-  // cassait la lecture chronologique). Exception : dès qu'un coup (Blancs OU Noirs) a un
-  // commentaire/diagramme, sa ligne n'affiche QUE ce coup seul dans sa colonne d'origine —
-  // le commentaire/diagramme suit pleine largeur — puis son vis-à-vis (l'autre coup de LA
-  // MÊME paire) s'affiche juste en dessous, sur sa propre ligne sans numéro visible, avant
-  // de reprendre la numérotation normale au coup suivant. Chaque coup Noirs reste TOUJOURS
-  // associé à son propre numéro de coup d'origine (retour Mickaël : pas de report/fusion
-  // avec la paire suivante, pas de décalage permanent de la numérotation).
-  const pairs = [];
-  for (let idx = 0; idx < moves.length; idx += 2) {
-    pairs.push({ n: idx / 2 + 1, white: moves[idx], black: moves[idx + 1] });
-  }
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(ACCENT);
-  doc.text('NOTATION', margin, y);
-  y += 18;
-
-  const fontSize = 10.5;
-  const lineH = fontSize + 5;
-
-  function ensureSpace(neededH) {
-    if (y + neededH > pageH - margin) { doc.addPage(); fillPage(); y = margin; }
-  }
-
-  // Pastille + "Trait aux Blancs/Noirs" centrés sous un diagramme.
-  function renderTurnLabel(centerX, baselineY, side, fs) {
-    const label = `Trait aux ${side === WHITE ? 'Blancs' : 'Noirs'}`;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(fs);
-    const dotR = fs * 0.41;
-    const dotGap = fs * 0.64;
-    const labelW = doc.getTextWidth(label);
-    const groupX = centerX - (dotR * 2 + dotGap + labelW) / 2;
-    const dotCx = groupX + dotR;
-    const dotCy = baselineY - fs * 0.24;
+  // Pion ○ / ● dessiné (pas de glyphe : helvetica standard ne l'a pas). `cx, cy` = centre.
+  function drawPawn(cx, cy, r, side) {
     doc.setDrawColor(INK);
     doc.setLineWidth(0.8);
     doc.setFillColor(side === WHITE ? '#ffffff' : INK);
-    doc.circle(dotCx, dotCy, dotR, 'FD');
+    doc.circle(cx, cy, r, 'FD');
+  }
+
+  // Coupe un mot plus large que `maxW` en morceaux, pour qu'un texte ne déborde jamais.
+  function breakLongWord(word, maxW) {
+    const parts = [];
+    let cur = '';
+    for (const ch of word) {
+      if (cur && doc.getTextWidth(cur + ch) > maxW) { parts.push(cur); cur = ch; } else cur += ch;
+    }
+    if (cur) parts.push(cur);
+    return parts;
+  }
+  // Retour à la ligne glouton, retours à la ligne du texte respectés, mots longs coupés.
+  // La police doit déjà être réglée sur `doc`.
+  function wrapText(text, maxW) {
+    const out = [];
+    String(text).split('\n').forEach((paragraph) => {
+      const words = paragraph.split(/\s+/).filter(Boolean).flatMap((w) => (
+        doc.getTextWidth(w) > maxW ? breakLongWord(w, maxW) : [w]
+      ));
+      if (words.length === 0) { out.push(''); return; }
+      let line = '';
+      words.forEach((w) => {
+        const candidate = line ? `${line} ${w}` : w;
+        if (line && doc.getTextWidth(candidate) > maxW) { out.push(line); line = w; } else line = candidate;
+      });
+      out.push(line);
+    });
+    return out;
+  }
+
+  // --- en-tête centré -------------------------------------------------------------------
+  // N'affiche une information que si elle existe dans les en-têtes (aucun tiret ni ligne vide).
+  const whiteName = headers.White ? formatPlayerName(headers.White) : null;
+  const blackName = headers.Black ? formatPlayerName(headers.Black) : null;
+  const whiteElo = headers.WhiteElo || headers.WhiteRating;
+  const blackElo = headers.BlackElo || headers.BlackRating;
+  const [whiteScore, blackScore] = parseResultScore(headers.Result);
+  const isSet = (v) => v && v !== '—' && v !== '?' && v !== '-';
+  const tournamentLine = [
+    headers.Event && headers.Event !== 'Partie libre' ? headers.Event : null,
+    isSet(headers.Round) ? `Ronde ${headers.Round}` : null,
+    isSet(headers.Date) ? formatPdnDate(headers.Date) : null,
+  ].filter(Boolean).join(' · ');
+  const eloLine = [
+    whiteElo ? `${whiteName || 'Blancs'} : Elo ${whiteElo}` : null,
+    blackElo ? `${blackName || 'Noirs'} : Elo ${blackElo}` : null,
+  ].filter(Boolean).join('   ·   ');
+  const scoreLine = whiteScore !== null && blackScore !== null ? `Score ${whiteScore}-${blackScore}` : '';
+
+  let y = margin + 8;
+  // Segments d'un joueur : [pion] "Nom" (gras) + " (Blancs)" (normal). Sans nom : juste "Blancs".
+  function playerSegments(name, sideLabel) {
+    return name
+      ? [{ t: name, bold: true }, { t: ` (${sideLabel})`, bold: false }]
+      : [{ t: sideLabel, bold: true }];
+  }
+  function segmentsWidth(segs, fs) {
+    return segs.reduce((sum, s) => {
+      doc.setFont('helvetica', s.bold ? 'bold' : 'normal');
+      doc.setFontSize(fs);
+      return sum + doc.getTextWidth(s.t);
+    }, 0);
+  }
+  // Dessine un groupe [pion + segments] dont le bord gauche est `x`, ligne de base `baseline`.
+  function drawPlayer(x, baseline, side, segs, fs) {
+    const r = fs * 0.36;
+    drawPawn(x + r, baseline - fs * 0.3, r, side);
+    let cx = x + r * 2 + fs * 0.4;
+    segs.forEach((s) => {
+      doc.setFont('helvetica', s.bold ? 'bold' : 'normal');
+      doc.setFontSize(fs);
+      doc.setTextColor(INK);
+      doc.text(s.t, cx, baseline);
+      cx += doc.getTextWidth(s.t);
+    });
+  }
+  const wSegs = playerSegments(whiteName, 'Blancs');
+  const bSegs = playerSegments(blackName, 'Noirs');
+  const NAME_FS = 16;
+  const pawnW = (fs) => fs * 0.72 + fs * 0.4;
+  const dashW = (() => { doc.setFont('helvetica', 'bold'); doc.setFontSize(NAME_FS); return doc.getTextWidth('—'); })();
+  const sepGap = 14;
+  const wW = pawnW(NAME_FS) + segmentsWidth(wSegs, NAME_FS);
+  const bW = pawnW(NAME_FS) + segmentsWidth(bSegs, NAME_FS);
+  const oneLineW = wW + sepGap + dashW + sepGap + bW;
+  if (oneLineW <= contentW) {
+    let x = (pageW - oneLineW) / 2;
+    drawPlayer(x, y, WHITE, wSegs, NAME_FS);
+    x += wW + sepGap;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(NAME_FS); doc.setTextColor(INK_MUTED);
+    doc.text('—', x, y);
+    x += dashW + sepGap;
+    drawPlayer(x, y, BLACK, bSegs, NAME_FS);
+    y += 20;
+  } else {
+    // Trop large : un joueur par ligne.
+    drawPlayer((pageW - wW) / 2, y, WHITE, wSegs, NAME_FS); y += 20;
+    drawPlayer((pageW - bW) / 2, y, BLACK, bSegs, NAME_FS); y += 20;
+  }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(INK_MUTED);
+  y += 2;
+  [tournamentLine, eloLine].filter(Boolean).forEach((line) => {
+    doc.text(line, pageW / 2, y, { align: 'center' });
+    y += 14;
+  });
+  if (scoreLine) {
+    doc.setFont('helvetica', 'bold');
     doc.setTextColor(ACCENT);
-    doc.text(label, groupX + dotR * 2 + dotGap, baselineY);
+    doc.text(scoreLine, pageW / 2, y, { align: 'center' });
+    y += 14;
   }
+  y += 4;
+  doc.setDrawColor(RULE);
+  doc.setLineWidth(0.75);
+  doc.line(margin, y, pageW - margin, y);
+  y += 24;
 
-  // Commentaire (+ diagramme éventuel) inséré juste SOUS le coup, pleine largeur (une seule
-  // colonne, plus de contrainte de largeur voisine) — `ply` = numéro 1-indexé ;
-  // boardImageDataUrlAtPly() attend l'index "dernier coup joué" façon jumpToPly (ply - 1).
-  function renderAnnotation(ply, moveInfo) {
-    const withDiagram = hasDiagramMarker(moveInfo.comment);
-    const text = withDiagram ? stripDiagramMarker(moveInfo.comment) : moveInfo.comment;
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(9);
-    const wrapped = text ? doc.splitTextToSize(text, contentW - 16) : [];
-    for (const wline of wrapped) {
-      ensureSpace(13);
-      doc.setTextColor(INK_MUTED);
-      doc.text(wline, margin + 14, y);
-      y += 13;
-    }
-    if (withDiagram) {
-      const diagramSize = Math.min(170, contentW);
-      y += 4;
-      ensureSpace(diagramSize + 10 + 9 + 8 + 20);
-      const dx = (pageW - diagramSize) / 2;
-      const durl = boardImageDataUrlAtPly(ply - 1);
-      doc.addImage(durl, 'PNG', dx, y, diagramSize, diagramSize);
-      doc.setDrawColor(RULE);
-      doc.setLineWidth(1);
-      doc.rect(dx, y, diagramSize, diagramSize);
-      y += diagramSize + 12;
-      const sideToMoveHere = ply % 2 === 0 ? WHITE : BLACK;
-      renderTurnLabel(pageW / 2, y, sideToMoveHere, 9);
-      // Espace généreux après un diagramme (contre un coup suivant perçu "collé", retour
-      // Mickaël) ; plus modeste pour un commentaire texte seul.
-      y += 22;
-    } else {
-      y += 8;
-    }
-  }
-
-  pairs.forEach(({ n, white, black }) => {
-    const whitePly = n * 2 - 1;
-    const blackPly = n * 2;
-    const whiteAnnotated = !!(white && white.comment);
-    const blackAnnotated = !!(black && black.comment);
-
-    ensureSpace(lineH);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(fontSize);
-    doc.setTextColor(INK_MUTED);
-    doc.text(`${n}.`, margin, y);
-    doc.setTextColor(WHITE_MOVE);
-    doc.text(moveNotation(white), margin + 24, y);
-    if (black && !whiteAnnotated) {
-      // Cas normal : les Noirs de CETTE paire s'affichent sur la même ligne que les
-      // Blancs. Si les Blancs sont annotés, les Noirs sont reportés juste en dessous
-      // (cf. plus bas) plutôt qu'affichés ici, pour ne jamais les mélanger à la paire
-      // suivante.
-      doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(black), margin + 110, y);
-    }
-    y += lineH;
-
-    if (whiteAnnotated) renderAnnotation(whitePly, white);
-
-    if (whiteAnnotated && black) {
-      // Réponse des Noirs à CE coup Blancs annoté : sur sa propre ligne, sans numéro
-      // affiché, mais toujours rattachée à la paire n (retour Mickaël — jamais accrochée
-      // au numéro de la paire suivante).
-      ensureSpace(lineH);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(fontSize);
-      doc.setTextColor(BLACK_MOVE);
-      doc.text(moveNotation(black), margin + 110, y);
-      y += lineH;
-    }
-
-    if (blackAnnotated) renderAnnotation(blackPly, black);
+  // --- diagrammes : positions capturées AVANT de dessiner (la capture navigue le jeu) -------
+  const diagrams = new Map();
+  moves.forEach((m, i) => {
+    if (hasDiagramMarker(m.comment)) diagrams.set(i + 1, boardAtPly(i + 1));
   });
 
-  y += 6;
+  // Diagramme vectoriel net (cases, pions, dames, numéros de cases de bord lisibles). Orienté
+  // comme le damier de l'app (`flipped`). `size` = côté total, numéros compris.
+  function drawDiagram(x, top, size, snap) {
+    const labelW = 15;
+    const bs = size - labelW - 3;
+    const bx = x + labelW;
+    const by = top + 3;
+    const cell = bs / 10;
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        const sr = flipped ? 9 - row : row;
+        const sc = flipped ? 9 - col : col;
+        doc.setFillColor((row + col) % 2 === 1 ? BOARD_DARK : BOARD_LIGHT);
+        doc.rect(bx + sc * cell, by + sr * cell, cell, cell, 'F');
+      }
+    }
+    doc.setDrawColor(INK);
+    doc.setLineWidth(0.9);
+    doc.rect(bx, by, bs, bs);
+    for (let sq = 1; sq <= 50; sq++) {
+      const piece = snap.board[sq];
+      if (!piece) continue;
+      const [row, col] = squareToRC(sq);
+      const sr = flipped ? 9 - row : row;
+      const sc = flipped ? 9 - col : col;
+      const cx = bx + sc * cell + cell / 2;
+      const cy = by + sr * cell + cell / 2;
+      const isWhite = piece.color === WHITE;
+      doc.setDrawColor(INK);
+      doc.setLineWidth(0.8);
+      doc.setFillColor(isWhite ? '#ffffff' : '#2a1d12');
+      doc.circle(cx, cy, cell * 0.41, 'FD');
+      if (piece.king) {
+        doc.setDrawColor(isWhite ? INK : BOARD_LIGHT);
+        doc.setLineWidth(1.3);
+        doc.circle(cx, cy, cell * 0.21, 'S');
+      }
+    }
+    // Numéros de cases : colonne de gauche et rangée du bas (comme le damier de l'app).
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(INK);
+    for (let sq = 1; sq <= 50; sq++) {
+      const [row, col] = squareToRC(sq);
+      const sr = flipped ? 9 - row : row;
+      const sc = flipped ? 9 - col : col;
+      if (col === (flipped ? 9 : 0)) {
+        doc.text(String(sq), bx - 3, by + sr * cell + cell / 2 + 2.6, { align: 'right' });
+      }
+      if (row === (flipped ? 0 : 9)) {
+        doc.text(String(sq), bx + sc * cell + cell / 2, by + bs + 9.5, { align: 'center' });
+      }
+    }
+  }
 
-  // Plus de diagramme de position finale automatique : seuls les diagrammes explicitement
-  // insérés par l'utilisateur sur des coups précis apparaissent dans ce PDF (retour Mickaël).
-  // Footer ancré en bas de la DERNIÈRE page utilisée (marque + date) — nouvelle page si ce
-  // qui précède n'a pas laissé assez de place pour lui.
-  const footerH = 26;
-  const footerY = pageH - margin + 6;
-  if (y + 10 > pageH - margin - footerH) { doc.addPage(); fillPage(); }
+  // --- bloc commentaire (+ diagramme) ------------------------------------------------------
+  const BLOCK_PAD = 7.5;
+  const DIAGRAM_SIZE = 136;                       // ≈ 4,8 cm
+  const DIAGRAM_GAP = 14;
+  const COMMENT_FS = 9.5;
+  const COMMENT_LH = 13;
+  const floats = [];                              // blocs reportés en haut de la page suivante
 
-  // --- pied de page ---
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(INK_MUTED);
+  // Prépare un bloc : mesures + contenu. `caption` = mention du coup quand le bloc est reporté.
+  function prepareBlock(ply, move, caption) {
+    const withDiagram = diagrams.has(ply);
+    const text = withDiagram ? stripDiagramMarker(move.comment) : move.comment;
+    const textW = contentW - BLOCK_PAD * 2 - (withDiagram ? DIAGRAM_SIZE + DIAGRAM_GAP : 0);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(COMMENT_FS);
+    const lines = text && text.trim() ? wrapText(text.trim(), textW) : [];
+    const captionH = caption ? 15 : 0;
+    const turnH = withDiagram ? 20 : 0;
+    const textH = captionH + turnH + lines.length * COMMENT_LH;
+    const height = BLOCK_PAD * 2 + Math.max(withDiagram ? DIAGRAM_SIZE - 4 : 0, textH);
+    return { ply, withDiagram, lines, caption, height, textW };
+  }
+
+  function drawBlock(block, top) {
+    doc.setFillColor(BLOCK_BG);
+    doc.roundedRect(margin, top, contentW, block.height, 6, 6, 'F');
+    const textX = margin + BLOCK_PAD + (block.withDiagram ? DIAGRAM_SIZE + DIAGRAM_GAP : 0);
+    if (block.withDiagram) drawDiagram(margin + BLOCK_PAD, top + BLOCK_PAD, DIAGRAM_SIZE, diagrams.get(block.ply));
+    let ty = top + BLOCK_PAD + 9;
+    if (block.caption) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      doc.setTextColor(INK_MUTED);
+      doc.text(block.caption, textX, ty);
+      ty += 15;
+    }
+    if (block.withDiagram) {
+      const side = diagrams.get(block.ply).side;
+      drawPawn(textX + 4.5, ty - 3.4, 4.5, side);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(ACCENT);
+      doc.text(`Trait aux ${side === WHITE ? 'Blancs' : 'Noirs'}`, textX + 15, ty);
+      ty += 20;
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(COMMENT_FS);
+    doc.setTextColor(INK);
+    block.lines.forEach((line) => {
+      doc.text(line, textX, ty);
+      ty += COMMENT_LH;
+    });
+  }
+
+  // Nouvelle page : les blocs reportés y sont posés en premier. Renvoie le Y après eux.
+  function startNewPage() {
+    doc.addPage();
+    fillPage();
+    let top = margin;
+    while (floats.length) {
+      const block = floats[0];
+      if (top > margin && top + block.height > bottomLimit) break;
+      floats.shift();
+      drawBlock(block, top);
+      top += block.height + 6;
+    }
+    return top;
+  }
+
+  // --- notation en texte continu ---------------------------------------------------------
+  const FS = 10.5;
+  const LINE_H = FS + 6;
+  let cx = margin;
+  let baseline = y + FS * 0.8;                    // ligne de base de la ligne courante
+  let lineHasText = false;
+
+  function newLine() {
+    baseline += LINE_H;
+    cx = margin;
+    lineHasText = false;
+    if (baseline > bottomLimit) {
+      baseline = startNewPage() + FS * 0.8;
+    }
+  }
+
+  // Pose une unité insécable (ex. "12." + coup, jamais séparés par un retour à la ligne).
+  // `pageStartLabel` : repère "N..." ajouté si cette unité se retrouve en tête de page (un coup
+  // Noirs sans numéro en haut d'une page serait un coup sans repère).
+  function putUnit(segments, pageStartLabel) {
+    const pagesBefore = doc.internal.getNumberOfPages();
+    const spaceW = (() => { doc.setFont('helvetica', 'normal'); doc.setFontSize(FS); return doc.getTextWidth(' '); })();
+    const widths = segments.map((s) => {
+      doc.setFont('helvetica', s.bold ? 'bold' : 'normal');
+      doc.setFontSize(FS);
+      return doc.getTextWidth(s.t);
+    });
+    const unitW = widths.reduce((a, b) => a + b, 0) + spaceW * (segments.length - 1);
+    if (lineHasText && cx + unitW > margin + contentW) newLine();
+    else if (!lineHasText && baseline > bottomLimit) baseline = startNewPage() + FS * 0.8;
+    if (pageStartLabel && doc.internal.getNumberOfPages() > pagesBefore) {
+      segments = [pageStartLabel, ...segments];
+      widths.unshift((() => { doc.setFont('helvetica', 'bold'); doc.setFontSize(FS); return doc.getTextWidth(pageStartLabel.t); })());
+    }
+    if (lineHasText) cx += spaceW * 1.6;           // espace entre deux unités
+    segments.forEach((s, i) => {
+      doc.setFont('helvetica', s.bold ? 'bold' : 'normal');
+      doc.setFontSize(FS);
+      doc.setTextColor(s.color);
+      doc.text(s.t, cx, baseline);
+      cx += widths[i] + (i < segments.length - 1 ? spaceW : 0);
+    });
+    lineHasText = true;
+  }
+
+  // Place un bloc juste après le coup qui vient d'être posé : tout de suite s'il tient dans la
+  // place restante (la notation reprend sur la ligne suivante), sinon reporté en page suivante.
+  // Retourne true si le bloc a été posé ici.
+  function placeBlock(ply, move, caption) {
+    if (floats.length > 0) { floats.push(prepareBlock(ply, move, caption)); return false; }
+    const block = prepareBlock(ply, move, null);
+    const top = baseline + 5;
+    if (top + block.height <= bottomLimit) {
+      drawBlock(block, top);
+      baseline = top + block.height + 6 + FS * 0.8;
+      cx = margin;
+      lineHasText = false;
+      return true;
+    }
+    // Bloc plus haut qu'une page entière : repli en texte simple, paginé ligne à ligne.
+    if (block.height > bottomLimit - margin) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(COMMENT_FS);
+      doc.setTextColor(INK);
+      const lines = wrapText(stripDiagramMarker(move.comment).trim(), contentW);
+      newLine();
+      lines.forEach((line) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(COMMENT_FS);
+        doc.setTextColor(INK);
+        doc.text(line, margin, baseline);
+        baseline += COMMENT_LH;
+        if (baseline > bottomLimit) baseline = startNewPage() + FS * 0.8;
+      });
+      cx = margin;
+      lineHasText = false;
+      return true;
+    }
+    floats.push(prepareBlock(ply, move, caption));
+    return false;
+  }
+
+  let resumeLabelPly = -1;                        // coup Noirs à faire précéder de "N..." après un bloc
+  moves.forEach((m, i) => {
+    const ply = i + 1;
+    const n = Math.ceil(ply / 2);
+    const isWhiteMove = ply % 2 === 1;
+    const annotated = !!(m.annotation || m.comment);
+    const color = isWhiteMove ? WHITE_MOVE : BLACK_MOVE;
+    const moveSeg = { t: moveNotation(m), bold: annotated, color };
+    const needsLabel = isWhiteMove || resumeLabelPly === ply;
+    if (isWhiteMove) {
+      putUnit([{ t: `${n}.`, bold: true, color: INK_MUTED }, moveSeg]);
+    } else if (needsLabel) {
+      putUnit([{ t: `${n}...`, bold: true, color: INK_MUTED }, moveSeg]);
+    } else {
+      putUnit([moveSeg], { t: `${n}...`, bold: true, color: INK_MUTED });
+    }
+    if (m.comment) {
+      const caption = `Après ${n}${isWhiteMove ? '.' : '...'} ${moveNotation(m)}`;
+      const placedHere = placeBlock(ply, m, caption);
+      // Un bloc posé ici interrompt la ligne : si ce coup est blanc, la réponse des Noirs
+      // reprend avec son numéro ("12... coup") pour ne pas être un coup sans repère.
+      if (placedHere && isWhiteMove) resumeLabelPly = ply + 1;
+    }
+  });
+  // Blocs encore reportés : à la suite, sur de nouvelles pages si besoin.
+  while (floats.length) {
+    const block = floats[0];
+    const top = baseline + 5;
+    if (top + block.height <= bottomLimit) {
+      floats.shift();
+      drawBlock(block, top);
+      baseline = top + block.height + 6 + FS * 0.8;
+    } else {
+      baseline = startNewPage() + FS * 0.8;     // pose elle-même les blocs reportés qui tiennent
+    }
+  }
+
+  // --- pied de page sur chaque page : marque, date, numéro ----------------------------------
+  const pageCount = doc.internal.getNumberOfPages();
   const exportDate = new Date().toLocaleDateString('fr-FR');
-  doc.text(`DamikA — exporté le ${exportDate}`, pageW / 2, footerY, { align: 'center' });
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(INK_MUTED);
+    doc.text(`DamikA — exporté le ${exportDate}  ·  page ${p}/${pageCount}`, pageW / 2, pageH - margin + 10, { align: 'center' });
+  }
 
   return doc.output('blob');
 }
