@@ -147,8 +147,26 @@ sw.js                 service worker (désactivé côté client)
   la bibliothèque locale, paramètre retiré ensuite (`history.replaceState`). QR sur fond
   blanc. Avertissement si lien > ~2000 caractères.
 - Export : `saveTextWithPicker()` (File System Access API, repli téléchargement direct ;
-  une annulation n'écrit rien). PDF : jsPDF local, rectangle de fond redessiné sur
-  CHAQUE page ; diagramme final obtenu en naviguant le vrai jeu puis en revenant.
+  une annulation n'écrit rien). PDF : jsPDF local (`exportGamePdf()`), rectangle de fond redessiné sur
+  CHAQUE page.
+- **Export PDF "Partie complète" (style livre, V0 validée, à peaufiner lors de la passe complète
+  avant Mobile)** : en-tête centré (pions ○/● dessinés, tournoi · ronde · date, Elo, score,
+  seulement si présents), notation en TEXTE CONTINU (numéro en gras, coups annotés en gras avec
+  leur symbole, repère "N..." pour un coup Noirs en tête de ligne après un bloc ou de page), puis un
+  BLOC teinté après chaque coup commenté : diagramme à gauche (≈ 4,8 cm, **dessiné en vectoriel**
+  par `drawDiagram()`, couleurs "papier", orientation du damier de l'app, numéros de bord lisibles),
+  "Trait aux Blancs/Noirs" + commentaire à droite (retours à la ligne respectés, mots longs coupés
+  par `wrapText()`). Un bloc n'est jamais coupé entre deux pages : s'il ne tient pas, il est
+  **reporté en haut de la page suivante** avec la mention "Après N. xx-xx" pendant que la notation
+  remplit la page. Pied de page "DamikA — exporté le … · page i/n" sur chaque page. Les positions
+  des diagrammes sont lues avant le dessin par `boardAtPly()` (navigue le vrai jeu puis revient).
+  Réglages en tête : `BLOCK_PAD`, `DIAGRAM_SIZE`, `COMMENT_FS`, `FS`.
+- **Marqueur de diagramme** (le commentaire d'un coup porte l'indicateur "inclure un diagramme") :
+  stocké DANS le texte du commentaire, `[diagramme]` seul (diagramme sans texte) ou
+  `texte` + saut de ligne + `[diagramme]`. `hasDiagramMarker()` est tolérant (fin de texte, avec ou
+  sans saut de ligne, car `sanitizeComment()` du serializer fait un `trim()`),
+  `stripDiagramMarker()` le retire toujours (jamais affiché), `withDiagramMarker()` l'écrit. Ne pas
+  réintroduire de test strict sur le saut de ligne.
 
 ### Photos joueurs
 - Fichier local compressé via `<canvas>` (160×160 JPEG 0.8) ; **URL externe stockée telle
@@ -202,8 +220,8 @@ sw.js                 service worker (désactivé côté client)
 pion s'arrête sur la dernière rangée) ; plateau responsive ; 3 styles de pions (Classique,
 Relief, Bois gravé) ; taille des pions réglable (Petit/Normal/Grand) ; durée d'affichage de
 la flèche du dernier coup réglable ; thème clair "Miel doré" ; aide clavier (touche `?`) ;
-import/export PDN, TXT, PNG ; export PDF repensé (fond clair, diagrammes sur les coups
-annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, ordre manuel par drag&drop,
+import/export PDN, TXT, PNG ; export PDF style livre (fond clair, blocs diagramme + commentaire
+sur les coups annotés) ; Bibliothèque persistante (Sauvegarder/Ouvrir, ordre manuel par drag&drop,
 édition inline, recherche texte, fichiers récents, favoris, filtres Toutes/Récentes/Favoris) ; enregistrement automatique des parties
 de la bibliothèque + retour à la version d'origine ; commentaires de coup et symboles
 d'annotation (`!`, `?`, `!!`, `??`) ; Bloc 1 "Plaque tournoi" (Elo, titre, score libre,
@@ -215,8 +233,8 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 `drawPieceToernooibase` existe toujours mais n'est plus branchée).
 
 **Backlog** (dans cet ordre ; ne rien commencer sans demande) :
-1. Export PDF avec diagrammes (à tester).
-2. Mémoriser en localStorage le thème du damier et le style de pion.
+1. Mémoriser en localStorage le thème du damier et le style de pion.
+2. Passe complète de peaufinage du PDF (V0 validée), avant Mobile.
 3. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
 4. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,

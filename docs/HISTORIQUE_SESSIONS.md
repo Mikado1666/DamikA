@@ -1207,6 +1207,32 @@ Chronologique.
    9. **Dette technique** : plusieurs copies de l'état d'une partie subsistent (`game`,
       `library[i].moves`, `localStorage`, copies d'origine) ; à unifier plus tard en dérivant
       `moves` de `game` pour l'entrée active (option b).
+   10. **Refonte de l'export "Partie complète (PDF)", style livre (V0 validée, `2e549e1`).**
+       Problèmes de départ : trop d'espace vide, coups orphelins séparés de leur numéro par un
+       diagramme, notation en 2 colonnes sans repères, commentaires qui débordent, coordonnées des
+       diagrammes illisibles. Nouveau rendu (rendu uniquement) : en-tête centré (pions ○/● dessinés,
+       tournoi · ronde · date, Elo, score, seulement si présents, filet fin) ; notation en texte
+       continu qui passe à la ligne, numéro en gras, coups annotés en gras avec symbole, repère
+       "N..." après un bloc ou en tête de page ; bloc teinté après chaque coup commenté (diagramme à
+       gauche, "Trait aux Blancs/Noirs" + commentaire à droite, retours à la ligne respectés, mots
+       longs coupés) ; diagramme **dessiné en vectoriel** (`drawDiagram()`, numéros de bord lisibles à
+       cette taille) à la place de la capture du canvas (`boardAtPly()` lit la position en naviguant
+       le vrai jeu) ; bloc jamais coupé entre deux pages : reporté en haut de la page suivante avec la
+       mention "Après N. xx-xx" tandis que la notation remplit la page ; pied de page avec numéro de
+       page ; resserrement des blocs (padding 10 → 7,5 pt, espaces 8/10 → 5/6 pt).
+   11. **Bug du marqueur de diagramme (`eec1199`).** Un diagramme posé sans commentaire perdait son
+       marqueur après un F5 : le commentaire était sérialisé `[diagramme]` (le `trim()` de
+       `sanitizeComment()` retire le saut de ligne devant) alors que `hasDiagramMarker()` exigeait
+       un saut de ligne avant `[diagramme]` ; le PDF affichait alors un bloc de texte "[diagramme]"
+       sans diagramme. Correctif : `hasDiagramMarker()` tolérant, `stripDiagramMarker()` (jamais
+       affiché), `withDiagramMarker()`. Format de stockage inchangé. Vérifié (diagramme sans puis
+       avec commentaire) : pose, changement de carte et retour, F5, export PDN puis réimport,
+       export PDF.
+   12. **Limites de test (PDF)** : clics simulés ; PDF relu dans la visionneuse de Chrome, pas
+       imprimé ; pages suivantes du PDF de test peu relues après le resserrage ; non testés : bloc
+       plus haut qu'une page (repli en texte simple écrit mais jamais exécuté), damier retourné, un
+       seul Elo renseigné, vrai téléchargement du fichier, anciennes données avec le saut de ligne
+       devant `[diagramme]` sur un état réel.
 6. **Ordre des chantiers.** Chantier "persister le thème du damier et le style de pion" reporté
    après la refonte. Règle de méthode actée : un seul chantier à la fois (voir CLAUDE.md,
    section "En cours").
@@ -1218,8 +1244,8 @@ Chronologique.
 ## Ce qui manque (backlog actuel, voir CLAUDE.md section 3)
 
 Dans l'ordre :
-1. Export PDF avec diagrammes (à tester).
-2. Mémoriser en localStorage le thème du damier et le style de pion.
+1. Mémoriser en localStorage le thème du damier et le style de pion.
+2. Passe complète de peaufinage du PDF (V0 validée), avant Mobile.
 3. Mobile (dont le bug du lien de partage qui affiche un écran noir sur téléphone).
 4. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause), export en lot, conformité FMJD
