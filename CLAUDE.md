@@ -13,8 +13,10 @@ index.html            structure, aucune logique
 css/style.css         tout le style (thème sombre, variables CSS en tête)
 js/engine/rules.js    moteur de règles pur, source de vérité
 js/ai/fastboard.js    moteur RAPIDE de recherche (Int8Array 50 cases), pas utilisé par l'UI
-js/ai/worker.js       Web Worker du moteur rapide (messages), pas encore branché à l'UI
-tests/                tests Node sans framework (perft, test différentiel, worker, bench)
+js/ai/eval.js         évaluation statique (centipions, poids dans EVAL_WEIGHTS), pas utilisée par l'UI
+js/ai/search.js       recherche alpha-bêta + quiescence + TT : analyse(position, options)
+js/ai/worker.js       Web Worker (moves, perft, analyse, stop), pas encore branché à l'UI
+tests/                tests Node sans framework (moteur, évaluation, recherche, worker)
 js/render/board.js    BoardRenderer (canvas)
 js/pdn/               parser.js, loader.js, serializer.js, storage.js
 js/main.js            état de l'appli, écouteurs DOM, rendu
@@ -37,7 +39,11 @@ sw.js                 service worker (désactivé côté client)
   `node tests/perft.mjs 9 6` (perft position initiale vs références + rules.js),
   `node tests/diff.mjs` (différentiel rapide vs rules.js, parties aléatoires + positions
   aléatoires + PDN), `node tests/perft-positions.mjs`, `node tests/worker.mjs`,
-  `node tests/bench.mjs`. Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
+  `node tests/bench.mjs`. Étage 2a (IA) : `node tests/eval-symmetry.mjs`,
+  `node tests/search-consistency.mjs` (~1 min), `node tests/tactics.mjs`, `node tests/mate.mjs`,
+  `node tests/match.mjs` (~70 s), `node tests/search-perf.mjs`, `node tests/worker-analyse.mjs`.
+  `tests/solver.mjs` = solveur indépendant (rules.js seul) ; `tests/mine-positions.mjs` régénère
+  `tests/data/` (positions sans aucun nom de joueur, suivies par git). Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
   joueurs). Pour l'interface, il n'y a pas de suite de tests. Pour tester une position : listener temporaire
   `damika:setBoard` (et `damika:dump`) en bas de `main.js` (pose `game.board`,
   `sideToMove`, vide `history`/`future`, `selectedSquare = null`, `refreshUI()`),
@@ -264,8 +270,9 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 2. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
-conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : l'étage 1
-(moteur rapide) est fait, voir §3 bis ; restent évaluation, recherche alpha-bêta, barre d'évaluation.
+conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
+(moteur rapide) et 2a (recherche + évaluation) sont faits, voir §3 bis ; restent la barre d'évaluation
+dans la liseuse (2b) et l'apprentissage (3).
 
 ## 3 bis. Dernier chantier clos (état au 07/10/2026)
 
@@ -310,6 +317,32 @@ contre ~0,7 M pour `rules.js`. Un bug de `rules.js` a été trouvé et corrigé 
 traversables par la dame, voir « Moteur et modèle de données »), en 2 lignes, à commiter à part.
 Reste à faire : tester avec les vraies parties de la Bibliothèque (déposer des PDN dans
 `tests/pdn-local/` puis `node tests/diff.mjs`), puis étage suivant (évaluation, alpha-bêta, liseuse).
+
+**Chantier IA, Étage 2a « recherche + évaluation » (18/10/2026) : TERMINÉ, EN ATTENTE DE VALIDATION, NON COMMITÉ.**
+`js/ai/eval.js`, `js/ai/search.js`, messages `analyse`/`stop` dans `js/ai/worker.js`. Aucune
+modification de l'interface, de `rules.js` ni de `fastboard.js`. Conventions à connaître :
+- `analyse(position, { maxDepth, maxTimeMs, onProgress })` (async, cède la main entre deux profondeurs) et
+  `analyseSync` renvoient `{ score, mate, bestMove, bestMoveNotation, pv, pvNotation, depth, nodes, nps,
+  timeMs, stopped }`. `score` : centipions, point de vue des BLANCS. `mate` : `null` ou
+  `{ winner: 'w'|'b', in: N }` (N coups du camp gagnant ; `in: 0` = camp au trait déjà sans coup).
+  `bestMove` et `pv` au format de `rules.js` (comme `generateUiMoves`) ; défauts : 1 000 ms, profondeur 64.
+- Évaluation : indépendante du camp au trait, antisymétrique exactement (miroir = rotation 180° +
+  couleurs). Pion 100, dame 300. Tous les poids sont dans `EVAL_WEIGHTS` ; `createEvaluator(poids)` pour
+  l'étage 3. Avancement (non linéaire) et tempo (linéaire) sont deux termes distincts voulus.
+- Recherche : négamax alpha-bêta, approfondissement itératif (profondeur 1 toujours terminée, itération
+  interrompue par le temps écartée), quiescence tant qu'une prise est possible (16 demi-coups max),
+  score de mat `±(30000 - ply)`. Table de transposition (Zobrist, hash tenu dans `search.js`) ACTIVE par
+  défaut (`TT_DEFAULT`) car scores strictement identiques avec et sans (tests) : elle ne réutilise une
+  entrée que calculée à la profondeur EXACTE demandée (sinon les scores changeraient), donc la PV peut
+  être raccourcie. Toute modification de la recherche doit garder `tests/search-consistency.mjs` vert.
+- Worker : un `stop` est pris en compte à la fin de la profondeur en cours (la recherche synchrone ne
+  lit pas ses messages) ; arrêt immédiat = `worker.terminate()` côté fil principal. `maxTimeMs`
+  interrompt en plein milieu de profondeur.
+- Performance (machine de dev, 1 s) : profondeur 9 à 13 selon la position, ~0,6 à 1 M nœuds/s.
+- Pas de détection de répétition ni de règle des 25 coups de dames (finales de dames pouvant tourner en
+  rond), pas de livre d'ouvertures, poids non calibrés (estimés à la main).
+Reste à faire : étage 2b (barre d'évaluation, score, meilleur coup dans la liseuse), puis étage 3
+(apprentissage des poids).
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
