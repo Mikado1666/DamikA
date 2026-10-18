@@ -12,6 +12,9 @@ thèmes/styles de pions). Récits de session détaillés : `docs/HISTORIQUE_SESS
 index.html            structure, aucune logique
 css/style.css         tout le style (thème sombre, variables CSS en tête)
 js/engine/rules.js    moteur de règles pur, source de vérité
+js/ai/fastboard.js    moteur RAPIDE de recherche (Int8Array 50 cases), pas utilisé par l'UI
+js/ai/worker.js       Web Worker du moteur rapide (messages), pas encore branché à l'UI
+tests/                tests Node sans framework (perft, test différentiel, worker, bench)
 js/render/board.js    BoardRenderer (canvas)
 js/pdn/               parser.js, loader.js, serializer.js, storage.js
 js/main.js            état de l'appli, écouteurs DOM, rendu
@@ -30,7 +33,12 @@ sw.js                 service worker (désactivé côté client)
 - Le Service Worker est désactivé volontairement (`js/main.js`, tout en bas : il se
   désenregistre). Pour le réactiver : `navigator.serviceWorker.register('sw.js')` + bump
   `CACHE_NAME` dans `sw.js`.
-- Pas de suite de tests. Pour tester une position : listener temporaire
+- Tests Node du MOTEUR uniquement (`tests/`, aucun framework, aucun navigateur) :
+  `node tests/perft.mjs 9 6` (perft position initiale vs références + rules.js),
+  `node tests/diff.mjs` (différentiel rapide vs rules.js, parties aléatoires + positions
+  aléatoires + PDN), `node tests/perft-positions.mjs`, `node tests/worker.mjs`,
+  `node tests/bench.mjs`. Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
+  joueurs). Pour l'interface, il n'y a pas de suite de tests. Pour tester une position : listener temporaire
   `damika:setBoard` (et `damika:dump`) en bas de `main.js` (pose `game.board`,
   `sideToMove`, vide `history`/`future`, `selectedSquare = null`, `refreshUI()`),
   déclenché via `CustomEvent`. **Toujours retirer avant commit.**
@@ -75,7 +83,18 @@ sw.js                 service worker (désactivé côté client)
 
 ### Moteur et modèle de données
 - `generateLegalMoves(board, color)` → `{ captures, simples, mustCapture }`, grande prise
-  incluse : seule source de vérité de la légalité, ne jamais la dupliquer.
+  incluse : source de vérité de la légalité POUR L'INTERFACE, ne jamais la dupliquer dans l'UI.
+  Exception assumée : `js/ai/fastboard.js` est un second moteur, destiné à la recherche (IA), validé
+  coup pour coup contre `rules.js` par `tests/diff.mjs` et par perft. Toute modification de règle doit
+  être faite dans les deux, puis `node tests/diff.mjs` doit rester sans divergence.
+- **Pièces prises en cours de rafle : elles restent sur le plateau et BLOQUENT** jusqu'à la fin de la
+  rafle (jamais traversables ni atterrissables, y compris par la dame). Bug corrigé le 18/10/2026 dans
+  `findCaptureSequences` (branche dame de `rules.js`) : elles étaient traitées comme des cases vides.
+  Pour un pion, atterrir sur une pièce prise est géométriquement impossible (parité de rangée) : la
+  condition `!deadSet.has(landSq)` (branche pion) est donc sans effet.
+- Convention de comptage des coups (perft, `FastBoard.generateMoves()`) : deux rafles de même
+  départ, même arrivée et mêmes pièces prises = UN coup (convention Gilbert/Boomstra du World Draughts
+  Forum). `generateMoves(false)` liste tous les chemins, comme `rules.js`.
 - Étape de capture `{ from, to, capturedThisStep, promoted }` : `from`/`to` = cette étape,
   pas la séquence. Chemin complet : `[seq[0].from, ...seq.map(s => s.to)]`.
 - Notation FMJD : une rafle = départ×arrivée (`27x9`), jamais le chemin complet ; le
@@ -245,7 +264,8 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 2. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
-conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`).
+conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : l'étage 1
+(moteur rapide) est fait, voir §3 bis ; restent évaluation, recherche alpha-bêta, barre d'évaluation.
 
 ## 3 bis. Dernier chantier clos (état au 07/10/2026)
 
@@ -276,6 +296,20 @@ affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
   (`renderLibrary()` parcourt `library` dans son ordre d'origine).
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
   `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur.
+
+**Chantier IA, Étage 1 « moteur rapide » (18/10/2026) : TERMINÉ, EN ATTENTE DE VALIDATION, NON COMMITÉ.**
+`js/ai/fastboard.js` (plateau Int8Array(50), codes 0 vide / 1 pion blanc / 2 pion noir / 3 dame
+blanche / 4 dame noire, cases en index 0..49 en interne, 1..50 seulement aux frontières de
+conversion), `js/ai/worker.js` (messages `ping` / `moves` / `perft` / `divide`, gestionnaire
+`handleMessage` exporté et testé sous Node ; le vrai Web Worker n'a pas été lancé dans un navigateur),
+`tests/`. Pas d'IA, pas d'évaluation, pas d'UI. Validation : perft de la position initiale identique
+aux références publiées jusqu'à la profondeur 11 (1 665 861 398) ; différentiel contre `rules.js` sans
+divergence sur ~720 000 positions ; perft sur positions aléatoires sans divergence. Vitesse : ~5,5 M
+nœuds/s depuis la position initiale, ~12 M en milieu de partie (comptage en bloc au dernier niveau),
+contre ~0,7 M pour `rules.js`. Un bug de `rules.js` a été trouvé et corrigé (pièces prises
+traversables par la dame, voir « Moteur et modèle de données »), en 2 lignes, à commiter à part.
+Reste à faire : tester avec les vraies parties de la Bibliothèque (déposer des PDN dans
+`tests/pdn-local/` puis `node tests/diff.mjs`), puis étage suivant (évaluation, alpha-bêta, liseuse).
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
