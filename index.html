@@ -163,6 +163,17 @@
     <section class="board-column">
 
       <div class="board-stage">
+        <div class="eval-bar" id="eval-bar" hidden aria-hidden="true">
+          <div class="eval-bar-white" id="eval-bar-white"></div>
+          <div class="eval-bar-ticks" aria-hidden="true">
+            <i class="eval-bar-tick" data-k="-2"></i><i class="eval-bar-tick" data-k="-1"></i><i class="eval-bar-tick" data-k="-0.5"></i>
+            <i class="eval-bar-tick eval-bar-tick-center" data-k="0"></i>
+            <i class="eval-bar-tick" data-k="0.5"></i><i class="eval-bar-tick" data-k="1"></i><i class="eval-bar-tick" data-k="2"></i>
+          </div>
+          <div class="eval-bar-zone" aria-hidden="true"></div>
+          <div class="eval-bar-light" aria-hidden="true"></div>
+          <div class="eval-bar-line"></div>
+        </div>
         <div class="board-wrap">
           <canvas id="board-canvas"></canvas>
         </div>
@@ -172,6 +183,19 @@
         <span class="tempo-delta" id="tempo-delta" title="Compteur de temps (théorie des finales)">0</span>
         <span class="status-sep">·</span>
         <span id="status-text">Trait aux Blancs</span>
+      </div>
+
+      <div class="analysis-strip" id="analysis-strip" hidden>
+        <div class="analysis-plate" id="analysis-plate" data-adv="even">
+          <span class="analysis-score" id="analysis-score">…</span>
+        </div>
+        <div class="analysis-side">
+          <span class="analysis-meta" id="analysis-meta"></span>
+          <span class="analysis-best" id="analysis-best" hidden>
+            Meilleur : <strong class="analysis-best-move" id="analysis-best-move"></strong>
+            <span class="analysis-pv" id="analysis-pv"></span>
+          </span>
+        </div>
       </div>
 
       <div class="controls-bar">
@@ -199,6 +223,8 @@
             </div>
           </div>
         </div>
+        <div class="ctrl-sep"></div>
+        <button id="btn-analysis" class="ctrl-btn ctrl-btn-text" title="Analyse du moteur : barre d'évaluation et meilleur coup (A)" aria-pressed="false">Analyse</button>
       </div>
     </section>
 
@@ -328,6 +354,7 @@
         <div class="help-row"><div class="help-keys"><kbd>→</kbd></div><span>Coup suivant</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Espace</kbd></div><span>Lecture automatique (marche/pause)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>F</kbd></div><span>Retourner le plateau</span></div>
+        <div class="help-row"><div class="help-keys"><kbd>A</kbd></div><span>Analyse du moteur (barre d'évaluation, score, meilleur coup)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Ctrl</kbd><span class="help-key-plus">+</span><kbd>S</kbd></div><span>Enregistrer les modifications de la partie active</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Ctrl</kbd><span class="help-key-plus">+</span><kbd>V</kbd></div><span>Coller une partie (presse-papier)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Échap</kbd></div><span>Fermer la fenêtre ouverte (commentaire, photo, cette aide...)</span></div>

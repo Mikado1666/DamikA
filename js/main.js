@@ -2,6 +2,11 @@ import {
   DraughtsGame, WHITE, BLACK, countPieces, computeTempoDifferential, hasAnyKing, squareToRC,
 } from './engine/rules.js';
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
+import { createAnalysisController } from './ai/analysis-controller.js';
+import {
+  barFraction, formatHeadline, formatMeta, formatLine, formatScore, moveSquares, shouldShowMove,
+  advantageTier, isBigSwing, tickFractions, equalZoneFractions,
+} from './ai/analysis-format.js';
 import { parsePdn } from './pdn/parser.js';
 import { loadGameFromPdn } from './pdn/loader.js';
 import { serializeToPdn, serializeToTxt, serializeLibraryToPdn, serializeLibraryEntryToPdn } from './pdn/serializer.js';
@@ -440,7 +445,185 @@ const el = {
   photoFetchToernooibaseBtn: document.getElementById('player-photo-fetch-toernooibase'),
   photoRemoveBtn: document.getElementById('player-photo-remove'),
   photoCloseBtn: document.getElementById('player-photo-close'),
+  // Analyse du moteur (étage 2b)
+  btnAnalysis: document.getElementById('btn-analysis'),
+  evalBar: document.getElementById('eval-bar'),
+  layoutRoot: document.querySelector('.layout'),
+  evalBarWhite: document.getElementById('eval-bar-white'),
+  analysisStrip: document.getElementById('analysis-strip'),
+  analysisPlate: document.getElementById('analysis-plate'),
+  evalBarTicks: document.querySelectorAll('.eval-bar-tick'),
+  analysisScore: document.getElementById('analysis-score'),
+  analysisMeta: document.getElementById('analysis-meta'),
+  analysisBest: document.getElementById('analysis-best'),
+  analysisBestMove: document.getElementById('analysis-best-move'),
+  analysisPv: document.getElementById('analysis-pv'),
 };
+
+// --- Analyse du moteur : barre d'évaluation, score, meilleur coup (étage 2b) -------------------
+// Interrupteur (bouton + touche A), DÉSACTIVÉ à chaque lancement et volontairement NON persisté.
+// Actif, il relance l'analyse à chaque changement de position affichée (appel dans
+// renderBoardState()) ; coupé, rien ne tourne (le Worker est détruit). ISOLATION : ce bloc ne fait
+// que LIRE game.board / game.sideToMove ; il n'appelle ni refreshUI(), ni scheduleSave(), ni
+// activeEntryModified(), et ne touche ni à la partie, ni à la Bibliothèque, ni à la sauvegarde.
+// Le cycle de vie du Worker est dans js/ai/analysis-controller.js, la mise en forme dans
+// js/ai/analysis-format.js (fonctions pures testées sous Node, cf. tests/).
+let analysisHasText = false; // un score a déjà été affiché (pour garder l'ancien, atténué, pendant l'attente)
+let analysisShownCp = null;  // score (centipions) actuellement affiché, null si mat / rien : base de l'interpolation
+let analysisFraction = null; // part de blanc actuellement affichée par la jauge (détecte les gros changements)
+let analysisTweenFrame = null;
+const analysisReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+// Repères de la jauge (0, ±1, ±2, ±3 pions) : positions calculées avec barFraction(), donc exactes
+// quelle que soit l'échelle de la sigmoïde. Posées une seule fois.
+{
+  const ticks = new Map(tickFractions().map((t) => [t.k, t.white]));
+  el.evalBarTicks.forEach((tick) => tick.style.setProperty('--p', String(ticks.get(Number(tick.dataset.k)))));
+  // Zone d'équilibre dorée (bande centrale) : bas et haut en part de blanc, symétriques.
+  const zone = equalZoneFractions();
+  el.evalBar.style.setProperty('--zone-lo', String(zone.low));
+  el.evalBar.style.setProperty('--zone-hi', String(zone.high));
+}
+
+function cancelAnalysisTween() {
+  if (analysisTweenFrame !== null) { cancelAnimationFrame(analysisTweenFrame); analysisTweenFrame = null; }
+}
+
+// Le nombre glisse vers sa nouvelle valeur (0,3 s) au lieu de sauter ; direct si mouvement réduit.
+function setAnalysisScoreText(result) {
+  cancelAnalysisTween();
+  const target = result.mate ? null : result.score;
+  const final = formatHeadline(result);
+  if (target === null || analysisShownCp === null || analysisReducedMotion.matches || analysisShownCp === target) {
+    el.analysisScore.textContent = final;
+    analysisShownCp = target;
+    return;
+  }
+  const from = analysisShownCp;
+  const t0 = performance.now();
+  const DURATION = 300;
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / DURATION);
+    const eased = 1 - Math.pow(1 - t, 3);
+    if (t < 1) {
+      el.analysisScore.textContent = formatScore(from + (target - from) * eased);
+      analysisTweenFrame = requestAnimationFrame(step);
+    } else {
+      el.analysisScore.textContent = final;
+      analysisTweenFrame = null;
+    }
+  };
+  analysisShownCp = target;
+  analysisTweenFrame = requestAnimationFrame(step);
+}
+
+function renderAnalysis({ phase, result }) {
+  const on = phase !== 'off';
+  el.btnAnalysis.classList.toggle('active', on);
+  el.btnAnalysis.setAttribute('aria-pressed', String(on));
+  el.evalBar.hidden = !on;
+  el.analysisStrip.hidden = !on;
+  if (!on) {
+    cancelAnalysisTween();
+    renderer.setBestMove(null);
+    analysisHasText = false;
+    analysisShownCp = null;
+    analysisFraction = null;
+    el.evalBar.classList.remove('mate', 'pulse', 'stale');
+    el.analysisPlate.classList.remove('is-mate');
+    el.layoutRoot.classList.remove('analysis-on');
+    return;
+  }
+  // Pendant l'analyse, le rail joueurs réserve 18 px à sa droite pour la jauge élargie (les largeurs
+  // du rail, du damier et les formules de layout ne changent pas, cf. CLAUDE.md).
+  el.layoutRoot.classList.add('analysis-on');
+  const stale = phase === 'waiting' || phase === 'error';
+  el.evalBar.classList.toggle('stale', stale);
+  el.analysisStrip.classList.toggle('stale', stale);
+  if (phase === 'waiting' || phase === 'error' || !result) {
+    renderer.setBestMove(null);
+    el.analysisBest.hidden = true;
+    if (phase === 'error') {
+      cancelAnalysisTween();
+      el.analysisScore.textContent = 'Analyse indisponible';
+      el.analysisMeta.textContent = '';
+      el.analysisPlate.dataset.adv = 'even';
+      el.analysisPlate.classList.remove('is-mate');
+      analysisHasText = false;
+      analysisShownCp = null;
+    } else if (!analysisHasText) {
+      el.analysisScore.textContent = '…';
+      el.analysisMeta.textContent = '';
+    }
+    return;
+  }
+  analysisHasText = true;
+  const fraction = barFraction(result);
+  el.evalBar.style.setProperty('--fill', (fraction * 100).toFixed(1));
+  // Gros changement de score : impulsion lumineuse (classe retirée à la fin de l'animation).
+  if (!analysisReducedMotion.matches && isBigSwing(analysisFraction, fraction)) {
+    el.evalBar.classList.remove('pulse');
+    void el.evalBar.offsetWidth; // relance l'animation si elle était déjà en cours
+    el.evalBar.classList.add('pulse');
+  }
+  analysisFraction = fraction;
+  const isMate = !!result.mate;
+  el.evalBar.classList.toggle('mate', isMate);
+  el.analysisPlate.classList.toggle('is-mate', isMate);
+  // Camp qui a l'avantage et niveau de lumière (0 à 5) d'après le barème (analysis-format.js).
+  const tier = advantageTier(result);
+  el.evalBar.dataset.adv = tier.side;
+  el.analysisPlate.dataset.adv = tier.side;
+  el.evalBar.style.setProperty('--lit', String(tier.light));
+  el.analysisPlate.style.setProperty('--lit', String(tier.light));
+  setAnalysisScoreText(result);
+  el.analysisMeta.textContent = formatMeta(result);
+  // Flèche et ligne « Meilleur » seulement à partir de MIN_DEPTH_FOR_MOVE : avant, le coup change
+  // à chaque itération et la flèche clignoterait. La barre et le score, eux, vivent dès la profondeur 1.
+  if (shouldShowMove(result)) {
+    const line = formatLine(result.pvNotation);
+    renderer.setBestMove(moveSquares(result.bestMove));
+    el.analysisBestMove.textContent = line.best;
+    el.analysisPv.textContent = line.rest.length ? `· ${line.rest.join(' ')}${line.truncated ? ' …' : ''}` : '';
+    el.analysisBest.hidden = false;
+  } else {
+    renderer.setBestMove(null);
+    el.analysisBest.hidden = true;
+  }
+}
+el.evalBar.addEventListener('animationend', () => el.evalBar.classList.remove('pulse'));
+
+const analysisController = createAnalysisController({
+  createWorker: () => new Worker(new URL('./ai/worker.js', import.meta.url), { type: 'module' }),
+  onChange: renderAnalysis,
+});
+
+function requestAnalysis() {
+  if (analysisController.enabled) {
+    analysisController.request({ board: game.board, side: game.sideToMove });
+  }
+}
+
+function toggleAnalysis() {
+  if (analysisController.enabled) {
+    analysisController.disable();
+    return;
+  }
+  try {
+    analysisController.enable();
+    requestAnalysis();
+  } catch (err) {
+    analysisController.disable();
+    showToast("L'analyse n'a pas pu démarrer sur ce navigateur", 'error');
+  }
+}
+el.btnAnalysis.addEventListener('click', toggleAnalysis);
+
+// Modale ou popover ouvert : le raccourci A ne doit rien déclencher (cf. écouteur clavier global).
+function isModalOpen() {
+  return !!document.querySelector('.confirm-overlay:not([hidden]), .dropzone-overlay:not([hidden])')
+    || !el.photoPopover.hidden || !el.commentPopover.hidden;
+}
 
 // Menu "⋯" de l'en-tête : ouvre/ferme seulement le panneau ; les boutons qu'il contient gardent
 // leurs écouteurs d'origine. Fermé par clic extérieur, Échap ou choix d'une action.
@@ -568,6 +751,7 @@ function renderBoardState() {
     lastMove,
   });
   scheduleArrowHideTimer();
+  requestAnalysis();
 }
 
 function renderMoveList() {
@@ -1063,6 +1247,7 @@ function toggleFlip() {
   // rester cohérent avec l'orientation du plateau — uniquement visuel (`order` flex en CSS,
   // cf. .players-rail.flipped dans style.css), aucune donnée ni le DOM lui-même ne bougent.
   el.playersRail.classList.toggle('flipped', flipped);
+  el.evalBar.classList.toggle('flipped', flipped); // les Blancs restent du côté des Blancs
   syncHeaderFieldsFromState();
 }
 el.btnFlip.addEventListener('click', toggleFlip);
@@ -1136,6 +1321,12 @@ window.addEventListener('keydown', (e) => {
     case 'ArrowRight': e.preventDefault(); stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); break;
     case ' ': e.preventDefault(); isPlaying ? stopAutoplay() : startAutoplay(); break;
     case 'f': case 'F': toggleFlip(); break;
+    // Analyse : ignorée avec Ctrl/Cmd/Alt (Ctrl+A = tout sélectionner), en répétition de touche et
+    // quand une modale est ouverte (le garde ci-dessus écarte déjà les champs de saisie).
+    case 'a': case 'A':
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || isModalOpen()) break;
+      toggleAnalysis();
+      break;
     case '?': openHelpOverlay(); break;
     case 'Escape': if (!el.helpOverlay.hidden) closeHelpOverlay(); break;
     default: break;

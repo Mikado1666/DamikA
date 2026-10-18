@@ -61,6 +61,10 @@ export class BoardRenderer {
     // navigation — showArrow reste la préférence permanente de l'utilisateur, jamais modifiée
     // par le minuteur.
     this.arrowHiddenByTimer = false;
+    // Meilleur coup proposé par l'analyse (étage 2b) : { squares } comme lastMove, ou null.
+    // Posé par main.js via setBestMove() ; indépendant de la flèche du dernier coup (bouton,
+    // minuteur), qui reste affichée comme avant.
+    this.bestMove = null;
     this.showCoords = true;
     this.boardTheme = DEFAULT_BOARD_THEME;
     this.pieceStyle = DEFAULT_PIECE_STYLE;
@@ -97,6 +101,7 @@ export class BoardRenderer {
       selectStroke: v('--select-stroke'), selectGlow: v('--select-glow'),
       mandatoryRGB: v('--mandatory-color'), targetColor: v('--target-color'),
       arrowColor: v('--arrow-color'),
+      bestArrowColor: v('--best-arrow-color'),
     };
   }
 
@@ -203,6 +208,12 @@ export class BoardRenderer {
 
   setFlipped(flipped) {
     this.flipped = flipped;
+    this.render();
+  }
+
+  // squares = [départ, ...arrivées] (numéros FMJD 1..50) ou null pour effacer la flèche.
+  setBestMove(squares) {
+    this.bestMove = squares && squares.length >= 2 ? { squares } : null;
     this.render();
   }
 
@@ -313,6 +324,7 @@ export class BoardRenderer {
     if (this.showCoords) this._drawCoords();
     this._drawHighlights();
     if (this.showArrow && !this.arrowHiddenByTimer && this.lastMove) this._drawLastMoveArrow();
+    if (this.bestMove) this._drawBestMoveArrow();
     this._drawPieces();
     if (this.selectedSquare != null) this._drawSelection();
   }
@@ -474,6 +486,14 @@ export class BoardRenderer {
       return this._cellCenter(row, col);
     });
     drawMovePath(this.ctx, points, this.cell, this._themeColors.arrowColor);
+  }
+
+  _drawBestMoveArrow() {
+    const points = this.bestMove.squares.map((sq) => {
+      const [row, col] = squareToRC(sq);
+      return this._cellCenter(row, col);
+    });
+    drawMovePath(this.ctx, points, this.cell, this._themeColors.bestArrowColor);
   }
 
   _drawPieces() {

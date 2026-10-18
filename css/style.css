@@ -55,6 +55,26 @@
   --mandatory-color: 255, 140, 40;
   --target-color: rgba(120, 220, 180, 0.55);
   --arrow-color: #5bc8ff;
+  /* Analyse (étage 2b) : flèche du MEILLEUR coup (distincte de --arrow-color, dernier coup),
+     barre d'évaluation (part blanche / part sombre). */
+  --best-arrow-color: #7ddc6a;
+  --eval-white-1: #fffaf0;
+  --eval-white-2: #e6d4ab;
+  --eval-dark-1: #7a6c5e;
+  --eval-dark-2: #3d342c;
+  --eval-border: rgba(226, 190, 120, 0.9);
+  --eval-glow: rgba(255, 205, 100, 0.85);
+  --eval-light: rgba(255, 210, 110, 1);
+  --eval-zone: rgba(255, 200, 80, 0.38);
+  --eval-tick: rgba(170, 156, 136, 0.95);
+  /* Plaque de score (grand nombre sous le damier) : un fond par camp qui a l'avantage. */
+  --plate-white-bg: linear-gradient(180deg, #fff8e6 0%, #ecdcb6 100%);
+  --plate-white-fg: #2a1c0a;
+  --plate-black-bg: linear-gradient(180deg, #403730 0%, #161210 100%);
+  --plate-black-fg: #f6ecd8;
+  --plate-even-bg: linear-gradient(180deg, #2c2116 0%, #1a130c 100%);
+  --plate-mate-bg: linear-gradient(180deg, #ffe9a8 0%, #d9a441 100%);
+  --plate-mate-fg: #2a1805;
   --black-name-accent: #c9a06a;
   /* Fond des chips/boutons "pleins" (elo-badge, .tab-badge, bouton lecture, coup courant) :
      DISTINCT de --gold (couleur d'accent TEXTE, assombrie en thème clair pour rester lisible
@@ -126,6 +146,23 @@
   --mandatory-color: 200, 70, 10;
   --target-color: rgba(30, 130, 110, 0.55);
   --arrow-color: #1f7a8c;
+  --best-arrow-color: #1f8f3a;
+  --eval-white-1: #ffffff;
+  --eval-white-2: #f0e2bd;
+  --eval-dark-1: #6a5846;
+  --eval-dark-2: #2c2118;
+  --eval-border: rgba(143, 94, 24, 0.95);
+  --eval-glow: rgba(200, 130, 20, 0.8);
+  --eval-light: rgba(255, 186, 60, 1);
+  --eval-zone: rgba(224, 150, 20, 0.4);
+  --eval-tick: rgba(120, 98, 66, 0.95);
+  --plate-white-bg: linear-gradient(180deg, #ffffff 0%, #f1e3c0 100%);
+  --plate-white-fg: #3a2408;
+  --plate-black-bg: linear-gradient(180deg, #5a4838 0%, #2a2018 100%);
+  --plate-black-fg: #fbf1de;
+  --plate-even-bg: linear-gradient(180deg, #fbf1de 0%, #efdcae 100%);
+  --plate-mate-bg: linear-gradient(180deg, #ffe08a 0%, #e0a52e 100%);
+  --plate-mate-fg: #3a2408;
   --black-name-accent: #7a4a12;
   --gold-chip: #dba62f;
 
@@ -1489,6 +1526,203 @@ body {
 }
 .ctrl-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
 .ctrl-btn.active:hover { background: var(--gold-chip); filter: brightness(1.08); }
+/* Bouton à libellé texte (« Analyse ») dans la barre de contrôles. */
+.ctrl-btn-text { width: auto; padding: 0 12px; font-size: 14px; font-weight: 600; }
+
+/* ---------- Analyse du moteur (étage 2b) ---------- */
+/* JAUGE d'évaluation verticale (Noirs en haut, Blancs en bas comme les cartes joueurs ; .flipped, basculé
+   par toggleFlip(), inverse jauge et damier ensemble). Posée en absolu à GAUCHE du damier, HORS du flux :
+   elle ne change pas la mesure du damier (BoardRenderer.resize() mesure #app moins la largeur RÉELLE du
+   rail, du panneau et de 2 écarts de 26px ; .layout et .topbar-inner figent 268 et 52 dans leur
+   max-width). C'est pourquoi les largeurs du rail et l'écart ne bougent JAMAIS : 38px de jauge + 4px de
+   respiration = 42px, soit les 26px d'écart + 16px pris sur les 18px que le rail réserve à sa droite
+   quand l'analyse est active (.layout.analysis-on .players-rail, plus bas). Hauteur et centrage calés sur
+   le cadre du damier (--frame-px, posé par resize() sur .board-column). Variables posées par main.js :
+   --fill (0..100 = part de blanc), --lit (0..5 = niveau de lumière du palier d'avantage), --zone-lo/hi
+   (bornes de la zone d'équilibre), --p sur chaque repère. data-adv = white | black | even. */
+.board-stage { position: relative; }
+.layout.analysis-on .players-rail { padding-right: 18px; }
+.eval-bar {
+  --fill: 50;
+  --lit: 0;
+  position: absolute;
+  right: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: var(--frame-px, 60%);
+  display: flex;
+  flex-direction: column-reverse;
+  /* Moitié sombre : graphite nettement plus clair que le fond de page, avec un dégradé interne. */
+  background: linear-gradient(90deg, var(--eval-dark-1), var(--eval-dark-2) 55%, var(--eval-dark-1));
+  border: 1.5px solid var(--eval-border);
+  border-radius: 14px;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: opacity 0.25s;
+}
+.eval-bar[hidden] { display: none; }
+.eval-bar.flipped { flex-direction: column; }
+.eval-bar-white {
+  height: calc(var(--fill) * 1%);
+  /* Moitié blanche : ivoire lumineux, léger relief. */
+  background: linear-gradient(90deg, var(--eval-white-2), var(--eval-white-1) 50%, var(--eval-white-2));
+  transition: height 0.6s cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+/* Zone d'équilibre dorée (≈ ±0,2 pion) : bande centrale translucide, symétrique donc identique en F. */
+.eval-bar-zone {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(var(--zone-lo, 0.45) * 100%);
+  height: calc((var(--zone-hi, 0.55) - var(--zone-lo, 0.45)) * 100%);
+  background: linear-gradient(180deg, transparent, var(--eval-zone) 30%, var(--eval-zone) 70%, transparent);
+}
+/* Lumière douce du camp qui a l'avantage : halo doré ancré sur son extrémité de la jauge, d'autant plus
+   marqué que le palier est haut (--lit 1 à 5) ; à l'équilibre, aucune lumière de camp (la zone dorée suffit). */
+.eval-bar-light {
+  --light-y: 100%;
+  position: absolute;
+  inset: 0;
+  opacity: calc(var(--lit, 0) * 0.17);
+  background: radial-gradient(130% 58% at 50% var(--light-y), var(--eval-light), transparent 75%);
+  transition: opacity 0.5s;
+}
+.eval-bar[data-adv="white"] .eval-bar-light { --light-y: 100%; }
+.eval-bar[data-adv="black"] .eval-bar-light { --light-y: 0%; }
+.eval-bar[data-adv="white"].flipped .eval-bar-light { --light-y: 0%; }
+.eval-bar[data-adv="black"].flipped .eval-bar-light { --light-y: 100%; }
+.eval-bar[data-adv="even"] .eval-bar-light { opacity: 0; }
+/* Ligne de séparation dorée avec halo : suit le niveau. */
+.eval-bar-line {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(var(--fill) * 1% - 1.5px);
+  height: 3px;
+  background: linear-gradient(90deg, #fff0c2, var(--gold), #fff0c2);
+  box-shadow: 0 0 9px 2px var(--eval-glow);
+  transition: bottom 0.6s cubic-bezier(0.22, 0.8, 0.24, 1), top 0.6s cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+.eval-bar.flipped .eval-bar-line { bottom: auto; top: calc(var(--fill) * 1% - 1.5px); }
+/* Repères à 0, ±0,5, ±1, ±2 pions (--p = part de blanc où tombe ce score, posée par main.js). */
+.eval-bar-ticks { position: absolute; inset: 0; }
+.eval-bar-tick {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(var(--p, 0.5) * 100% - 0.5px);
+  height: 1px;
+  background: linear-gradient(90deg, var(--eval-tick) 0 8px, transparent 8px calc(100% - 8px), var(--eval-tick) calc(100% - 8px));
+}
+.eval-bar.flipped .eval-bar-tick { bottom: auto; top: calc(var(--p, 0.5) * 100% - 0.5px); }
+/* Repère central net : entailles plus longues et plus épaisses. */
+.eval-bar-tick-center {
+  height: 2px;
+  bottom: calc(50% - 1px);
+  background: linear-gradient(90deg, var(--gold) 0 13px, transparent 13px calc(100% - 13px), var(--gold) calc(100% - 13px));
+}
+.eval-bar.flipped .eval-bar-tick-center { bottom: auto; top: calc(50% - 1px); }
+.eval-bar.stale { opacity: 0.55; }
+/* Gros changement de score : impulsion lumineuse (classe posée un instant par main.js). */
+.eval-bar.pulse { animation: evalPulse 0.7s ease-out; }
+@keyframes evalPulse {
+  0% { box-shadow: 0 0 0 0 var(--eval-glow), 0 4px 16px rgba(0, 0, 0, 0.4); }
+  35% { box-shadow: 0 0 22px 6px var(--eval-glow), 0 4px 16px rgba(0, 0, 0, 0.4); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 4px 16px rgba(0, 0, 0, 0.4); }
+}
+/* Mat : jauge pleine d'un côté, liseré et halo dorés, léger scintillement (inchangé). */
+.eval-bar.mate {
+  border-color: var(--gold);
+  box-shadow: 0 0 14px 2px var(--eval-glow), 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.eval-bar.mate::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 235, 170, 0.55) 50%, transparent 100%);
+  background-size: 100% 220%;
+  animation: evalShimmer 2.6s linear infinite;
+}
+@keyframes evalShimmer { from { background-position: 0 0; } to { background-position: 0 -220%; } }
+
+/* PLAQUE de score sous le damier : très grand nombre, fond selon le camp qui a l'avantage
+   (data-adv = white | black | even), « Mat en N » en or. Halo doré proportionnel au palier (--lit).
+   Même largeur que la ligne de statut et les contrôles (--frame-px). Chiffres tabulaires : la
+   largeur ne saute pas quand le score change. */
+.analysis-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 20px;
+  width: var(--frame-px, 100%);
+  max-width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.analysis-strip[hidden] { display: none; }
+.analysis-plate {
+  --lit: 0;
+  min-width: 210px;
+  padding: 2px 30px 6px;
+  border-radius: 16px;
+  border: 2px solid var(--eval-border);
+  text-align: center;
+  background: var(--plate-even-bg);
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.3),
+    0 0 calc(var(--lit) * 7px) calc(var(--lit) * 0.8px) rgba(255, 200, 90, calc(0.1 + var(--lit) * 0.1)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: opacity 0.25s, box-shadow 0.5s;
+}
+.analysis-score {
+  display: block;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 56px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  /* Équilibre : dégradé du wordmark DamikA. */
+  background-image: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.analysis-plate[data-adv="white"] { background: var(--plate-white-bg); }
+.analysis-plate[data-adv="black"] { background: var(--plate-black-bg); }
+.analysis-plate[data-adv="white"] .analysis-score,
+.analysis-plate[data-adv="black"] .analysis-score {
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+}
+.analysis-plate[data-adv="white"] .analysis-score { color: var(--plate-white-fg); }
+.analysis-plate[data-adv="black"] .analysis-score { color: var(--plate-black-fg); }
+.analysis-plate.is-mate {
+  background: var(--plate-mate-bg);
+  border-color: var(--gold);
+  box-shadow: 0 0 18px 2px var(--eval-glow), 0 3px 12px rgba(0, 0, 0, 0.3);
+}
+.analysis-plate.is-mate .analysis-score {
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--plate-mate-fg);
+  font-size: 30px;
+  line-height: 1.9;
+}
+.analysis-strip.stale .analysis-plate { opacity: 0.6; }
+.analysis-side { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0; }
+.analysis-meta { font-size: 12px; opacity: 0.8; }
+.analysis-best[hidden] { display: none; }
+.analysis-best-move { color: var(--best-arrow-color); font-weight: 700; }
+.analysis-pv { color: var(--text-2); }
+
+/* Mouvement réduit demandé par le système : plus d'animation ni de transition sur la jauge. */
+@media (prefers-reduced-motion: reduce) {
+  .eval-bar, .eval-bar-white, .eval-bar-line, .eval-bar-light, .analysis-plate { transition: none; }
+  .eval-bar.pulse, .eval-bar.mate::after { animation: none; }
+}
 
 .status-line {
   text-align: center;
