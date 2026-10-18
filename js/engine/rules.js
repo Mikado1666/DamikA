@@ -128,7 +128,7 @@ function findCaptureSequences(board, fromSquare, piece, deadSet) {
       while (inBounds(r, c)) {
         const sq = rcToSquare(r, c);
         const occ = sq != null ? board[sq] : undefined;
-        if (occ == null || (deadSet.has(sq))) {
+        if (occ == null) { // une pièce déjà prise (deadSet) reste sur le plateau et BLOQUE
           r += dr;
           c += dc;
           continue;
@@ -146,7 +146,7 @@ function findCaptureSequences(board, fromSquare, piece, deadSet) {
       while (inBounds(lr, lc)) {
         const lsq = rcToSquare(lr, lc);
         if (lsq == null) break;
-        if (board[lsq] != null && !deadSet.has(lsq)) break;
+        if (board[lsq] != null) break; // pièce vivante OU déjà prise : toutes deux bloquent
         landings.push(lsq);
         lr += dr;
         lc += dc;
