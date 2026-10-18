@@ -15,7 +15,9 @@ js/engine/rules.js    moteur de règles pur, source de vérité
 js/ai/fastboard.js    moteur RAPIDE de recherche (Int8Array 50 cases), pas utilisé par l'UI
 js/ai/eval.js         évaluation statique (centipions, poids dans EVAL_WEIGHTS), pas utilisée par l'UI
 js/ai/search.js       recherche alpha-bêta + quiescence + TT : analyse(position, options)
-js/ai/worker.js       Web Worker (moves, perft, analyse, stop), pas encore branché à l'UI
+js/ai/worker.js       Web Worker (moves, perft, analyse, stop), branché à l'UI par l'analyse (2b)
+js/ai/analysis-format.js  fonctions PURES d'affichage de l'analyse (barre, score, mat, coups)
+js/ai/analysis-controller.js  cycle de vie du Worker d'analyse (debounce, terminate, ids)
 tests/                tests Node sans framework (moteur, évaluation, recherche, worker)
 js/render/board.js    BoardRenderer (canvas)
 js/pdn/               parser.js, loader.js, serializer.js, storage.js
@@ -41,7 +43,7 @@ sw.js                 service worker (désactivé côté client)
   aléatoires + PDN), `node tests/perft-positions.mjs`, `node tests/worker.mjs`,
   `node tests/bench.mjs`. Étage 2a (IA) : `node tests/eval-symmetry.mjs`,
   `node tests/search-consistency.mjs` (~1 min), `node tests/tactics.mjs`, `node tests/mate.mjs`,
-  `node tests/match.mjs` (~70 s), `node tests/search-perf.mjs`, `node tests/worker-analyse.mjs`.
+  `node tests/match.mjs` (~70 s), `node tests/search-perf.mjs`, `node tests/worker-analyse.mjs`, `node tests/analysis-format.mjs`, `node tests/analysis-controller.mjs`.
   `tests/solver.mjs` = solveur indépendant (rules.js seul) ; `tests/mine-positions.mjs` régénère
   `tests/data/` (positions sans aucun nom de joueur, suivies par git). Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
   joueurs). Pour l'interface, il n'y a pas de suite de tests. Pour tester une position : listener temporaire
@@ -271,8 +273,8 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
 conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
-(moteur rapide) et 2a (recherche + évaluation) sont faits, voir §3 bis ; restent la barre d'évaluation
-dans la liseuse (2b) et l'apprentissage (3).
+(moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
+« État final du chantier IA » en §3 bis ; reste l'étage 3 (apprentissage des poids).
 
 ## 3 bis. Dernier chantier clos (état au 07/10/2026)
 
@@ -304,7 +306,7 @@ affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
   `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur.
 
-**Chantier IA, Étage 1 « moteur rapide » (18/10/2026) : TERMINÉ, EN ATTENTE DE VALIDATION, NON COMMITÉ.**
+**Chantier IA, Étage 1 « moteur rapide » (18/10/2026) : CLOS (validé, commité, poussé).**
 `js/ai/fastboard.js` (plateau Int8Array(50), codes 0 vide / 1 pion blanc / 2 pion noir / 3 dame
 blanche / 4 dame noire, cases en index 0..49 en interne, 1..50 seulement aux frontières de
 conversion), `js/ai/worker.js` (messages `ping` / `moves` / `perft` / `divide`, gestionnaire
@@ -316,9 +318,9 @@ nœuds/s depuis la position initiale, ~12 M en milieu de partie (comptage en blo
 contre ~0,7 M pour `rules.js`. Un bug de `rules.js` a été trouvé et corrigé (pièces prises
 traversables par la dame, voir « Moteur et modèle de données »), en 2 lignes, à commiter à part.
 Reste à faire : tester avec les vraies parties de la Bibliothèque (déposer des PDN dans
-`tests/pdn-local/` puis `node tests/diff.mjs`), puis étage suivant (évaluation, alpha-bêta, liseuse).
+`tests/pdn-local/` puis `node tests/diff.mjs`).
 
-**Chantier IA, Étage 2a « recherche + évaluation » (18/10/2026) : TERMINÉ, EN ATTENTE DE VALIDATION, NON COMMITÉ.**
+**Chantier IA, Étage 2a « recherche + évaluation » (18/10/2026) : CLOS (validé, commité, poussé).**
 `js/ai/eval.js`, `js/ai/search.js`, messages `analyse`/`stop` dans `js/ai/worker.js`. Aucune
 modification de l'interface, de `rules.js` ni de `fastboard.js`. Conventions à connaître :
 - `analyse(position, { maxDepth, maxTimeMs, onProgress })` (async, cède la main entre deux profondeurs) et
@@ -341,8 +343,89 @@ modification de l'interface, de `rules.js` ni de `fastboard.js`. Conventions à 
 - Performance (machine de dev, 1 s) : profondeur 9 à 13 selon la position, ~0,6 à 1 M nœuds/s.
 - Pas de détection de répétition ni de règle des 25 coups de dames (finales de dames pouvant tourner en
   rond), pas de livre d'ouvertures, poids non calibrés (estimés à la main).
-Reste à faire : étage 2b (barre d'évaluation, score, meilleur coup dans la liseuse), puis étage 3
-(apprentissage des poids).
+Reste à faire : étage 3 (apprentissage des poids) ; l'étage 2b (analyse dans la liseuse) suit ci-dessous.
+
+**Chantier IA, Étage 2b « analyse dans la liseuse » (18/10/2026) : CLOS (rendu validé par Mickaël, commité, poussé ; déploiement du site à la charge de Mickaël).**
+Bouton « Analyse » (`#btn-analysis`, fin de la barre de contrôles) + touche **A** : interrupteur
+DÉSACTIVÉ à chaque lancement, NON persisté (aucune clé localStorage), à ne pas persister. Actif :
+jauge d'évaluation verticale (`#eval-bar`, 38 px, `position:absolute`, HORS du flux, à gauche du damier),
+ligne `#analysis-strip` sous la ligne de statut : grande plaque de score `#analysis-plate`
+(Inter 800, 56 px ; `data-adv` = white / black / even ; « +0,8 » ou « Mat en N — les X gagnent »)
+puis, en petit, « indicatif · prof. N » et « Meilleur : 34-30 · ligne de 5 coups max » ; flèche verte
+`--best-arrow-color` du meilleur coup (`renderer.setBestMove(squares)`, indépendante de la flèche du
+dernier coup). Conventions :
+- **Largeur de la jauge sans toucher au layout** : `BoardRenderer.resize()` mesure `#app` moins la largeur
+  RÉELLE du rail (268), du panneau et de 2 écarts de 26 px, et `.layout`/`.topbar-inner` figent 268 et 52 dans
+  leur `max-width`. Donc le rail (268) et l'écart (26) ne bougent JAMAIS. Les 38 px de jauge (+ 4 px de
+  respiration) tiennent dans l'écart de 26 px + 16 des 18 px que le rail réserve à sa droite quand l'analyse
+  est active (`.layout.analysis-on .players-rail { padding-right: 18px }`, classe posée par `renderAnalysis()`)
+  : les cartes joueurs passent de 268 à 250 px pendant l'analyse. Vérifié aux tailles 1988×1103, 1440×900 et
+  1100×800 (damier carré, centré, sans chevauchement ni défilement horizontal, largeur identique analyse
+  active/coupée). Sous 900 px le layout passe en colonne et la jauge est hors écran (chantier Mobile : masquer
+  la jauge sous 900 px). Le damier perd de la HAUTEUR quand l'analyse est active (plaque + ligne ≈ 100 px) ;
+  il met plus de 500 ms à retrouver sa taille après la coupure (normal, ne pas le « corriger »).
+- Flèche et ligne « Meilleur » seulement à partir de la profondeur 4 (`MIN_DEPTH_FOR_MOVE` dans
+  `analysis-format.js`) ; barre et score dès la profondeur 1. Barre = sigmoïde
+  `1/(1+e^(-cp/BAR_SCALE_CP))`, **`BAR_SCALE_CP = 100`** (une seule constante : ±0,5 pion ≈ 62 %, ±1 ≈ 73 %,
+  ±2 ≈ 88 %, ±3 ≈ 95 % ; était 250), Blancs en bas, retournée par `.flipped` dans `toggleFlip()` ; mat = barre
+  pleine d'un côté.
+- **Paliers d'avantage** (barème de Mickaël, constante `ADVANTAGE_TIERS` dans `analysis-format.js`, appliquée à
+  la valeur AFFICHÉE arrondie au dixième) : égal ≤ 0,2 · mini > 0,2 · petit ≥ 0,5 · naissant ≥ 0,7 ·
+  avantage ≥ 0,9 · bel ≥ 1,5 · gros > 2 ; 5 niveaux de lumière (`--lit` 1 à 5 : mini 1, petit et naissant 2,
+  avantage 3, bel 4, gros 5 ; 0 = égal). Jamais de texte « Petit avantage » affiché.
+- Habillage (retouches 2b-bis/2b-ter, affichage seulement) : `--fill` (part de blanc, 0-100) posée par
+  `main.js` pilote la hauteur du blanc ET la ligne dorée (`.eval-bar-line`, halo), transition 0,6 s ; repères à
+  0, ±0,5, ±1, ±2 pions (`.eval-bar-tick`, `--p` par `tickFractions()`, donc fidèles à l'échelle) ; zone
+  d'équilibre dorée (`.eval-bar-zone`, `equalZoneFractions()`, ≈ ±0,2 pion) ; lumière du camp qui a
+  l'avantage (`.eval-bar-light`, halo doré ancré sur son extrémité, opacité = `--lit` × 0,17) et halo de la
+  plaque proportionnel à `--lit` ; impulsion `.pulse` si `isBigSwing` (**0,20** de barre ≈ 0,85 pion près de
+  l'équilibre ; était 0,12 avec l'échelle 250) ; `.mate` = liseré/halo dorés + scintillement ; `.stale` =
+  atténuée pendant le calcul ; le nombre est interpolé sur 0,3 s au lieu de sauter ; tout est coupé sous
+  `prefers-reduced-motion`. Demi-jauges distinctes dans les deux thèmes (`--eval-dark-1/2` graphite bien plus
+  clair que le fond, `--eval-white-1/2` ivoire, liseré `--eval-border`). Variables par thème : `--eval-*`,
+  `--plate-*`, `--best-arrow-color`.
+  Toute la logique de décision (échelle, paliers, camp, swing, repères, zone) est dans `analysis-format.js`, testée sous Node.
+- Le bloc d'analyse de `main.js` (juste après la table `el`) LIT seulement `game.board` /
+  `game.sideToMove` (appel `requestAnalysis()` en fin de `renderBoardState()`) : il n'appelle ni
+  `refreshUI`, ni `scheduleSave`, ni `activeEntryModified`. Ne jamais lui faire modifier la partie, la
+  Bibliothèque ou l'état de modification.
+- Un seul Worker module (`new Worker(new URL('./ai/worker.js', import.meta.url), { type: 'module' })`),
+  créé à l'activation, détruit à la désactivation ; debounce 150 ms ; limites 1,5 s / profondeur 24 ;
+  si une analyse est EN COURS au changement de position : `terminate()` puis recréation (un Worker
+  occupé ne lit pas ses messages) ; réponses d'identifiant périmé ignorées ; position identique
+  (empreinte `positionKey`) ignorée, donc sélectionner une pièce ne relance rien.
+- Raccourci A ignoré dans un champ de saisie (garde existant du handler clavier), avec Ctrl/Cmd/Alt, en
+  répétition de touche, et quand une modale est ouverte (`isModalOpen()` : `.confirm-overlay`,
+  `.dropzone-overlay`, popover photo, popover commentaire). Ajouté à l'aide « ? ».
+- Partie finie : le moteur répond `mate.in = 0` sans chercher ; affichage « Partie terminée — … ».
+- Validation : fonctions pures et contrôleur testés sous Node ; UN passage de fumée navigateur
+  (activation, analyse jusqu'à la profondeur 11, coupure par la touche A, pas d'erreur console). Le
+  visuel (couleurs en thème clair, alignement de la barre sur petits écrans) reste à valider par Mickaël.
+  Mobile : la barre n'a pas été étudiée sous 900 px (chantier Mobile à venir).
+
+**État final du chantier IA (fin de session du 18/10/2026).**
+- **Livrés** : étage 1 (moteur de règles rapide, `js/ai/fastboard.js`, validé par perft jusqu'à la profondeur 11 et
+  par comparaison avec `rules.js`), étage 2a (évaluation `eval.js` + recherche `search.js` + messages
+  `analyse`/`stop` du Worker), étage 2b (bouton « Analyse » / touche A : jauge, plaque de score, meilleur coup,
+  ligne principale). Tests Node dans `tests/` (voir §2). Le site n'est pas redéployé par l'assistant.
+- **Reste à faire, dans l'ordre du backlog (§3)** : étage 3 (apprentissage des poids de l'évaluation, via
+  `createEvaluator(poids)`) ; passe de vérification/peaufinage (PDF compris) puis Mobile (dont le masquage de
+  la jauge sous 900 px, où le layout passe en colonne et la jauge sort de l'écran) ; réactivation du Service
+  Worker en dernier. Aussi : valider le moteur sur les vraies parties de la Bibliothèque (`tests/pdn-local/`),
+  répétition de position et règle des 25 coups de dames dans le moteur.
+- **Limites connues de l'évaluation V0 (en termes simples)** : elle compte les pièces et note leur place
+  (avancée, centre, dernière rangée, tempo), rien de plus. Elle ne voit pas les formations (pions solidaires,
+  triangles, chaînes), les pions isolés, en retard ou bloqués, ni la liberté de manœuvre d'un camp étouffé ; une
+  dame vaut toujours 3 pions ; elle ne reconnaît pas les finales nulles par la théorie (sans répétition ni
+  règle des 25 coups, elle peut croire gagner une finale nulle) ; les poids sont estimés à la main, jamais
+  calibrés sur des parties réelles ; les menaces calmes ne sont vues que dans la profondeur de recherche
+  (9 à 13 demi-coups en 1 s) ; pas de livre d'ouvertures. D'où la mention « indicatif » dans l'interface.
+- **Échelle de la jauge** : UNE seule constante, `BAR_SCALE_CP` dans `js/ai/analysis-format.js` (aujourd'hui 100 :
+  ±0,5 pion ≈ 62 %, ±1 ≈ 73 %, ±2 ≈ 88 %, ±3 ≈ 95 %), réajustable sans toucher au reste ; repères, zone
+  d'équilibre et seuils d'impulsion en découlent, mais `BIG_SWING` (0,20) est à revoir si l'échelle change.
+  Paliers d'avantage : constante `ADVANTAGE_TIERS` dans le même fichier.
+- Les réglages d'interface « thème du damier » et « style de pion » sont DÉJÀ persistés (clés
+  `damika:board-theme` et `damika:piece-style`, commit `283aa72`) : ils ne sont plus à faire.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
