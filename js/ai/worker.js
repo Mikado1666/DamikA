@@ -1,5 +1,5 @@
-// DAMIKA — Web Worker du moteur rapide : expose js/ai/fastboard.js par messages, pour ne jamais
-// figer l'interface.
+// DAMIKA — Web Worker du moteur : expose js/ai/fastboard.js et js/ai/search.js par messages, pour ne
+// jamais figer l'interface.
 //
 // Utilisation (module worker, ES modules natifs, pas de build) :
 //   const w = new Worker('js/ai/worker.js', { type: 'module' });
@@ -16,14 +16,28 @@
 //                                             format que rules.js generateLegalMoves()
 //   { type: 'perft', depth, position? }     → { nodes, ms }
 //   { type: 'divide', depth, position? }    → [{ move: '32-28', nodes }, …]
+//   { type: 'analyse', position, options? } → progression puis résultat (voir ci-dessous)
+//   { type: 'stop' }                        → interrompt l'analyse en cours
+//
+// Analyse : options = { maxDepth, maxTimeMs, useTT } (voir js/ai/search.js). Le worker répond :
+//   - après CHAQUE profondeur terminée : { id, type: 'progress', ok: true, result }
+//     (result = { score, mate, bestMove, bestMoveNotation, pv, pvNotation, depth, nodes, nps, timeMs, stopped })
+//   - une fois la recherche finie : { id, ok: true, result } (même forme, `stopped: true` si interrompue).
+// score : centipions, point de vue des Blancs. mate : null ou { winner: 'w'|'b', in: N }.
+//
+// LIMITE : une recherche en cours est synchrone et ne lit pas sa file de messages. Le worker cède la
+// main entre deux profondeurs ; un 'stop' est donc pris en compte à la fin de la profondeur en cours
+// (ou à la limite de temps maxTimeMs, qui interrompt la recherche en plein milieu). Pour une
+// interruption immédiate, le fil principal peut appeler worker.terminate().
 
 import { FastBoard } from './fastboard.js';
+import { analyse } from './search.js';
 
 function boardFrom(position) {
   return position ? FastBoard.fromUiBoard(position.board, position.side) : FastBoard.initial();
 }
 
-// Cœur du worker, séparé de l'écouteur de messages pour pouvoir être appelé directement (tests Node).
+// Requêtes immédiates (synchrones). 'analyse' et 'stop' passent par runMessage().
 export function handleMessage(msg) {
   try {
     switch (msg.type) {
@@ -47,7 +61,44 @@ export function handleMessage(msg) {
   }
 }
 
+// Analyse en cours (une seule à la fois) : { id, stop }.
+let currentJob = null;
+
+async function runAnalyse(msg, post) {
+  // Une nouvelle analyse remplace la précédente, qui s'arrête à son prochain point de cession.
+  if (currentJob) currentJob.stop = true;
+  const job = { id: msg.id, stop: false };
+  currentJob = job;
+  try {
+    if (!msg.position || !msg.position.board) throw new Error('position manquante ou invalide');
+    const result = await analyse(msg.position, {
+      ...(msg.options || {}),
+      onProgress: (p) => post({ id: msg.id, type: 'progress', ok: true, result: p }),
+      shouldStop: () => job.stop,
+    });
+    post({ id: msg.id, ok: true, result });
+  } catch (err) {
+    post({ id: msg.id, ok: false, error: String(err && err.message ? err.message : err) });
+  } finally {
+    if (currentJob === job) currentJob = null;
+  }
+}
+
+// Point d'entrée complet : toutes les requêtes. `post(réponse)` envoie un message à l'appelant.
+// Retourne une promesse, résolue quand la requête est entièrement traitée.
+export async function runMessage(msg, post) {
+  if (msg.type === 'analyse') return runAnalyse(msg, post);
+  if (msg.type === 'stop') {
+    const running = currentJob !== null;
+    if (running) currentJob.stop = true;
+    post({ id: msg.id, ok: true, result: running ? 'stopping' : 'idle' });
+    return undefined;
+  }
+  post(handleMessage(msg));
+  return undefined;
+}
+
 // L'écouteur n'est installé que dans un vrai contexte de worker (pas lors d'un import par Node).
 if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
-  self.onmessage = (e) => self.postMessage(handleMessage(e.data));
+  self.onmessage = (e) => { runMessage(e.data, (d) => self.postMessage(d)); };
 }
