@@ -12,3 +12,6 @@ scripts/players.txt
 
 # Bibliothèque de test fictive (jamais commitée)
 test-library-50.pdn
+
+# Parties PDN de test (noms de joueurs) : ne jamais suivre
+tests/pdn-local/
