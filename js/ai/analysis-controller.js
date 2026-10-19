@@ -9,7 +9,7 @@
 //     analyse est EN COURS à ce moment-là, le Worker est détruit (terminate) puis recréé au besoin :
 //     un Worker occupé ne lit pas ses messages avant la fin de sa profondeur en cours.
 //   - Chaque requête porte un identifiant ; toute réponse d'une requête périmée est ignorée.
-//   - Une position identique à la précédente (plateau + trait) ne relance rien.
+//   - Une position identique à la précédente (plateau + trait + historique transmis) ne relance rien.
 //   - Le contrôleur ne lit que la position qu'on lui donne : il ne touche ni à la partie ni à la sauvegarde.
 //
 // Rappel onChange({ phase, result }) :
@@ -87,7 +87,7 @@ export function createAnalysisController({
   function send() {
     timer = null;
     if (!enabled || !pending) return;
-    const position = pending;
+    const { history, ...position } = pending;
     pending = null;
     let w;
     try {
@@ -103,6 +103,7 @@ export function createAnalysisController({
       id: currentId,
       type: 'analyse',
       position,
+      ...(history ? { history } : {}),
       options: { maxTimeMs, maxDepth },
     });
   }
@@ -128,9 +129,13 @@ export function createAnalysisController({
     },
 
     // position = { board, side } au format de l'interface (game.board, game.sideToMove).
-    request(position) {
+    // history (facultatif) = { positions: [{ board, side }], quiet } : cf. analysisHistory() dans
+    // analysis-format.js. Absent ou quiet = 0 : rien n'est transmis (comportement d'avant).
+    request(position, history = null) {
       if (!enabled) return;
-      const key = positionKey(position.board, position.side);
+      const hist = history && history.quiet > 0 && history.positions && history.positions.length > 0 ? history : null;
+      const key = positionKey(position.board, position.side)
+        + (hist ? `|${hist.quiet}|${hist.positions.map((p) => positionKey(p.board, p.side)).join(',')}` : '');
       if (key === currentKey) return; // même position : rien à refaire
       currentKey = key;
       if (timer !== null) { clearTimer(timer); timer = null; }
@@ -140,6 +145,13 @@ export function createAnalysisController({
       pending = {
         board: position.board.map((p) => (p ? { color: p.color, king: !!p.king } : null)),
         side: position.side,
+        history: hist ? {
+          quiet: hist.quiet,
+          positions: hist.positions.map((p) => ({
+            board: p.board.map((q) => (q ? { color: q.color, king: !!q.king } : null)),
+            side: p.side,
+          })),
+        } : null,
       };
       emit('waiting');
       timer = setTimer(send, debounceMs);

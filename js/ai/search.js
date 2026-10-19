@@ -6,10 +6,25 @@
 // expose du point de vue des BLANCS. Une défaite (camp au trait sans coup légal) vaut
 // -(MAT - ply) : plus le mat est proche, plus il pèse, donc le mat le plus court est préféré.
 //
-// Ce qui n'existe PAS en V0 : détection de répétition, règle des 25 coups de dames, nulle par
-// accord. Une finale de dames peut donc tourner en rond ; la profondeur borne la recherche.
+// Nulles par règle (FMJD, Annexe 1, art. 6.1 et 6.2 ; sources dans docs/SESSION_DERNIERE.md) :
+//   - 25 coups : 50 demi-coups consécutifs sans coup de pion ni prise (FastBoard.quiet) -> score 0.
+//   - répétition : (a) une position qui revient sur le chemin courant de la recherche (cycle : il peut
+//     être répété jusqu'à la 3e occurrence) -> 0 ; (b) une position qui serait la 3e occurrence en
+//     comptant l'historique de la partie transmis par l'appli (même position, même camp au trait) -> 0.
+// Ce qui n'existe PAS : les limites de finale (art. 6.3 : 16 coups, 6.4 : 5 coups), la nulle par accord.
+//
+// Table de transposition et historique : un score qui dépend de l'historique ne doit pas être mis en
+// cache pour d'autres chemins. Règle retenue (« teinte ») : `drawHits` compte les nulles par règle
+// rencontrées ; si le sous-arbre d'un nœud en a produit au moins une, son score dépend du chemin et de
+// l'historique, et il N'EST PAS écrit dans la table. Les scores écrits sont donc ceux de sous-arbres sans
+// aucune nulle par règle. Limite connue, théorique (problème « GHI » classique) : une entrée saine
+// écrite par un chemin peut être relue par un autre chemin où une répétition aurait touché ce sous-arbre.
+// Mesuré : 0 écart entre la recherche avec table et sans table sur 230 positions de finale à dames avec
+// historique (profondeurs 8 et 10), cf. docs/SESSION_DERNIERE.md. (Variante plus stricte essayée : ne pas
+// lire/écrire la table aux nœuds dont le compteur de 25 coups est > 0 ; exacte mais +56 % de nœuds
+// en finale de dames, abandonnée.)
 
-import { FastBoard, WHITE, moveToUi, moveToString } from './fastboard.js';
+import { FastBoard, WHITE, moveToUi, moveToString, DRAW_QUIET_PLIES } from './fastboard.js';
 import { evalSideToMove } from './eval.js';
 
 export const MATE = 30000;
@@ -47,6 +62,31 @@ export function zobristHash(fb) {
   }
   if (fb.side === 1) { lo ^= Z_SIDE_LO; hi ^= Z_SIDE_HI; }
   return { lo, hi };
+}
+
+// Hash d'une position au format de l'interface ({ board, side }) : sert à transmettre l'historique.
+export function positionHash(board, side) {
+  return zobristHash(FastBoard.fromUiBoard(board, side));
+}
+
+// Historique de la partie : { hashes | positions, quiet }, du plus ancien au plus récent, SANS la
+// position analysée. `hashes` : [{ lo, hi }] ou [[lo, hi]] ; `positions` : [{ board, side }] (hachées ici).
+// `quiet` : demi-coups consécutifs sans coup de pion ni prise AVANT la position analysée. Absent ou vide :
+// comportement sans historique. Retourne { lo: Int32Array, hi: Int32Array, quiet } ou null.
+export function normalizeHistory(history) {
+  if (!history) return null;
+  const quiet = Number.isFinite(history.quiet) ? Math.max(0, Math.floor(history.quiet)) : 0;
+  let pairs = [];
+  if (Array.isArray(history.hashes)) {
+    pairs = history.hashes.map((h) => (Array.isArray(h) ? { lo: h[0] | 0, hi: h[1] | 0 } : { lo: h.lo | 0, hi: h.hi | 0 }));
+  } else if (Array.isArray(history.positions)) {
+    pairs = history.positions.map((p) => positionHash(p.board, p.side));
+  }
+  // Seules les `quiet` dernières positions peuvent se répéter (au-delà, un coup irréversible a eu lieu).
+  if (pairs.length > quiet) pairs = pairs.slice(pairs.length - quiet);
+  const lo = new Int32Array(pairs.length), hi = new Int32Array(pairs.length);
+  pairs.forEach((p, k) => { lo[k] = p.lo; hi[k] = p.hi; });
+  return { lo, hi, quiet };
 }
 
 // Hash après le coup `m`, à partir du hash (lo, hi) AVANT le coup. À appeler avant makeMove :
@@ -91,8 +131,12 @@ function clearTT() {
 
 // --- Chercheur ------------------------------------------------------------------------------------
 class Searcher {
-  constructor(fb, { useTT, prune, shouldStop }) {
+  constructor(fb, { useTT, prune, shouldStop, history = null }) {
     this.fb = fb;
+    this.histLo = history ? history.lo : new Int32Array(0);
+    this.histHi = history ? history.hi : new Int32Array(0);
+    this.histLen = this.histLo.length;
+    this.drawHits = 0; // nulles par règle rencontrées (sert à ne pas mettre en cache un score dépendant de l'historique)
     this.useTT = useTT;
     this.prune = prune;
     this.shouldStop = shouldStop;
@@ -108,6 +152,28 @@ class Searcher {
     this.pv = Array.from({ length: MAX_PLY + 2 }, () => []);
     this.prevPv = [];
     this.rootBest = null;
+  }
+
+  // Nulle par répétition pour la position du nœud `ply` (son hash est dans hLo/hHi[ply]), `quiet` = compteur
+  // du plateau. Une position ne peut revenir qu'après au moins 4 demi-coups réversibles.
+  isRepetition(ply, quiet) {
+    const lo = this.hLo[ply], hi = this.hHi[ply];
+    // (a) cycle sur le chemin courant (racine comprise) : même position, même camp (écart pair).
+    const limit = Math.max(0, ply - quiet);
+    for (let j = ply - 4; j >= limit; j -= 2) {
+      if (this.hLo[j] === lo && this.hHi[j] === hi) return true;
+    }
+    // (b) historique de la partie : la position serait-elle la 3e occurrence ?
+    const h = this.histLen;
+    if (h === 0) return false;
+    // L'entrée i de l'historique est (h - i) demi-coups avant la racine : même camp si (h - i + ply) est pair.
+    let i = ((1 + ply) & 1) === 0 ? h - 1 : h - 2;
+    const lowest = Math.max(0, h + ply - quiet);
+    let seen = 0;
+    for (; i >= lowest; i -= 2) {
+      if (this.histLo[i] === lo && this.histHi[i] === hi && ++seen >= 2) return true;
+    }
+    return false;
   }
 
   // Score statique du point de vue du camp au trait.
@@ -147,6 +213,11 @@ class Searcher {
 
     const moves = fb.generateMoves();
     if (moves.length === 0) return -(MATE - ply); // camp au trait sans coup : il a perdu
+    // Nulles par règle (jamais à la racine : la recherche y choisit un coup quoi qu'il arrive).
+    const quiet = fb.quiet;
+    if (ply > 0 && quiet >= 4) {
+      if (quiet >= DRAW_QUIET_PLIES || this.isRepetition(ply, quiet)) { this.drawHits++; return 0; }
+    }
     if (depth <= 0) {
       // Quiescence : les prises sont obligatoires, donc tant que le camp au trait en a une, la
       // position n'est pas calme et on prolonge. Garde-fou : QUIESCENCE_MAX demi-coups.
@@ -156,6 +227,8 @@ class Searcher {
     const alphaOrig = alpha;
     const hLo = this.hLo[ply], hHi = this.hHi[ply];
     let ttF = -1, ttT = -1, slot = 0;
+    // Table : pas d'écriture d'un sous-arbre où une nulle par règle a eu lieu (voir l'en-tête).
+    const hits0 = this.drawHits;
     if (this.useTT && depth >= 1) {
       slot = hLo & TT_MASK;
       if (ttFlag[slot] !== 0 && ttLo[slot] === hLo && ttHi[slot] === hHi) {
@@ -202,7 +275,7 @@ class Searcher {
       }
     }
 
-    if (this.useTT && depth >= 1) {
+    if (this.useTT && depth >= 1 && this.drawHits === hits0) {
       // Remplacement : une entrée plus profonde du même hash n'est pas écrasée par une moins profonde.
       const same = ttFlag[slot] !== 0 && ttLo[slot] === hLo && ttHi[slot] === hHi;
       if (!same || ttDepth[slot] <= depth) {
@@ -223,9 +296,11 @@ class Searcher {
 // --- Recherche à profondeur fixe (utilisée par les tests) ---------------------------------------------
 // prune = false : négamax pur, sans aucun élagage (référence pour les tests de cohérence).
 // Retourne le score du point de vue du camp au trait.
-export function searchFixedDepth(fb, depth, { prune = true, useTT = false } = {}) {
+export function searchFixedDepth(fb, depth, { prune = true, useTT = false, history = null } = {}) {
   if (useTT) clearTT();
-  const s = new Searcher(fb, { useTT, prune, shouldStop: null });
+  const nh = normalizeHistory(history);
+  if (nh) fb.quiet = nh.quiet;
+  const s = new Searcher(fb, { useTT, prune, shouldStop: null, history: nh });
   const h = zobristHash(fb);
   s.hLo[0] = h.lo; s.hHi[0] = h.hi;
   const score = s.search(depth, -INF, INF, 0, false);
@@ -249,11 +324,12 @@ function* analyseSteps(position, opts) {
   const maxDepth = Math.min(opts.maxDepth ?? MAX_DEPTH, MAX_DEPTH);
   const maxTimeMs = opts.maxTimeMs ?? 1000;
   const useTT = opts.useTT ?? TT_DEFAULT;
-  const fb = FastBoard.fromUiBoard(position.board, position.side);
+  const history = normalizeHistory(opts.history ?? position.history);
+  const fb = FastBoard.fromUiBoard(position.board, position.side, history ? history.quiet : 0);
   const side = fb.side;
   const t0 = performance.now();
 
-  const s = new Searcher(fb, { useTT, prune: true, shouldStop: opts.shouldStop ?? null });
+  const s = new Searcher(fb, { useTT, prune: true, shouldStop: opts.shouldStop ?? null, history });
   s.deadline = t0 + maxTimeMs;
   if (useTT) clearTT();
   const h = zobristHash(fb);
@@ -262,6 +338,7 @@ function* analyseSteps(position, opts) {
   const result = {
     score: 0, mate: null, bestMove: null, bestMoveNotation: null, pv: [], pvNotation: [],
     depth: 0, nodes: 0, nps: 0, timeMs: 0, stopped: false,
+    drawRule: null, // 'quiet' | 'repetition' : la position analysée est déjà nulle par règle (partie finie)
   };
   const finish = () => {
     result.nodes = s.nodes;
@@ -269,6 +346,16 @@ function* analyseSteps(position, opts) {
     result.nps = result.timeMs > 0 ? Math.round(s.nodes / (result.timeMs / 1000)) : 0;
     return result;
   };
+
+  if (fb.quiet >= DRAW_QUIET_PLIES) result.drawRule = 'quiet';
+  else if (history && history.lo.length) {
+    let seen = 0;
+    const len = history.lo.length;
+    for (let i = len - 1; i >= 0 && len - i <= fb.quiet; i--) {
+      if (((len - i) & 1) === 0 && history.lo[i] === h.lo && history.hi[i] === h.hi) seen++;
+    }
+    if (seen >= 2) result.drawRule = 'repetition';
+  }
 
   const rootMoves = fb.generateMoves();
   if (rootMoves.length === 0) { // le camp au trait a déjà perdu

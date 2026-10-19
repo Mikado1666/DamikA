@@ -16,12 +16,17 @@
 //                                             format que rules.js generateLegalMoves()
 //   { type: 'perft', depth, position? }     → { nodes, ms }
 //   { type: 'divide', depth, position? }    → [{ move: '32-28', nodes }, …]
-//   { type: 'analyse', position, options? } → progression puis résultat (voir ci-dessous)
+//   { type: 'analyse', position, history?, options? } → progression puis résultat (voir ci-dessous)
 //   { type: 'stop' }                        → interrompt l'analyse en cours
 //
-// Analyse : options = { maxDepth, maxTimeMs, useTT } (voir js/ai/search.js). Le worker répond :
+// Analyse : options = { maxDepth, maxTimeMs, useTT } (voir js/ai/search.js). `history` (facultatif, absent =
+// comportement sans historique) = { positions | hashes, quiet } : positions de la partie AVANT la position
+// analysée, du plus ancien au plus récent ({ board, side } ou hashes [[lo, hi]]), limitées aux `quiet`
+// dernières (demi-coups consécutifs sans coup de pion ni prise), pour la répétition de position (3e
+// occurrence) et la règle des 25 coups (voir search.js, normalizeHistory). Le worker répond :
 //   - après CHAQUE profondeur terminée : { id, type: 'progress', ok: true, result }
-//     (result = { score, mate, bestMove, bestMoveNotation, pv, pvNotation, depth, nodes, nps, timeMs, stopped })
+//     (result = { score, mate, bestMove, bestMoveNotation, pv, pvNotation, depth, nodes, nps, timeMs, stopped,
+//                 drawRule })  drawRule : null, 'quiet' ou 'repetition' (la position analysée est déjà nulle par règle)
 //   - une fois la recherche finie : { id, ok: true, result } (même forme, `stopped: true` si interrompue).
 // score : centipions, point de vue des Blancs. mate : null ou { winner: 'w'|'b', in: N }.
 //
@@ -73,6 +78,7 @@ async function runAnalyse(msg, post) {
     if (!msg.position || !msg.position.board) throw new Error('position manquante ou invalide');
     const result = await analyse(msg.position, {
       ...(msg.options || {}),
+      history: msg.history ?? undefined,
       onProgress: (p) => post({ id: msg.id, type: 'progress', ok: true, result: p }),
       shouldStop: () => job.stop,
     });

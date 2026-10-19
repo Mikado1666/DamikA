@@ -5,7 +5,7 @@ import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render
 import { createAnalysisController } from './ai/analysis-controller.js';
 import {
   barFraction, formatHeadline, formatMeta, formatLine, formatScore, moveSquares, shouldShowMove,
-  advantageTier, isBigSwing, tickFractions, equalZoneFractions,
+  advantageTier, analysisHistory, isBigSwing, tickFractions, equalZoneFractions,
 } from './ai/analysis-format.js';
 import { parsePdn } from './pdn/parser.js';
 import { loadGameFromPdn } from './pdn/loader.js';
@@ -600,7 +600,7 @@ const analysisController = createAnalysisController({
 
 function requestAnalysis() {
   if (analysisController.enabled) {
-    analysisController.request({ board: game.board, side: game.sideToMove });
+    analysisController.request({ board: game.board, side: game.sideToMove }, analysisHistory(game.history));
   }
 }
 

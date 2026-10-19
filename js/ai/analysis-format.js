@@ -158,3 +158,22 @@ export function positionKey(board, side) {
   }
   return key;
 }
+
+// Historique à transmettre au moteur pour la répétition de position et la règle des 25 coups, depuis
+// l'historique de la partie affichée (DraughtsGame.history : { board avant, sideToMove avant, move }).
+// Un coup est « réversible » s'il est un coup simple de dame (ni coup de pion, promotion comprise, ni
+// prise) : tant que de tels coups s'enchaînent, une position peut revenir. `quiet` = nombre de coups
+// réversibles consécutifs juste avant la position affichée (plafonné à 50 : la partie est déjà nulle
+// au-delà) ; `positions` = les positions correspondantes, SANS la position affichée, du plus ancien
+// au plus récent. Aucun historique (quiet = 0) : { positions: [], quiet: 0 }.
+export const QUIET_CAP = 50;
+export function analysisHistory(entries) {
+  let quiet = 0;
+  for (let k = entries.length - 1; k >= 0 && quiet < QUIET_CAP; k--) {
+    const mv = entries[k].move;
+    if (mv && mv.type === 'simple' && mv.piece && mv.piece.king && !mv.promoted) quiet++;
+    else break;
+  }
+  const positions = entries.slice(entries.length - quiet).map((e) => ({ board: e.board, side: e.sideToMove }));
+  return { positions, quiet };
+}

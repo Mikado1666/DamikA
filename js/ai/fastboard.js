@@ -78,10 +78,20 @@ const MAX_CAPS_STACK = MAX_PLY * 20;
 //   lo/hi : masque binaire des pièces prises (cases 0-24 dans lo, 25-49 dans hi), sert à
 //           reconnaître deux rafles qui aboutissent à la même position.
 
+// Règle des 25 coups (FMJD, Annexe 1, art. 6.2) : « If during 25 successive moves for each player, only
+// the kings have moved, without any man moving or without any capture, the game is considered drawn. »
+// = 25 coups de chaque camp = 50 demi-coups consécutifs sans coup de pion ni prise.
+export const DRAW_QUIET_PLIES = 50;
+
 export class FastBoard {
   constructor() {
     this.board = new Int8Array(50);
     this.side = WHITE;
+    // Demi-coups consécutifs sans coup de pion ni prise (seules les dames ont bougé, sans capturer).
+    // Mis à jour par makeMove/unmakeMove ; à poser à la main (ou via fromUiBoard) pour une position
+    // reprise en cours de partie.
+    this.quiet = 0;
+    this._stkQuiet = new Int16Array(MAX_PLY);
 
     // Pièces prises dans la rafle en cours d'exploration : elles restent sur le plateau (donc
     // bloquantes) jusqu'à la fin du coup et ne peuvent pas être sautées deux fois.
@@ -253,6 +263,8 @@ export class FastBoard {
     this._stkPiece[sp] = piece;
     const caps = m.caps;
     this._stkNcap[sp] = caps.length;
+    this._stkQuiet[sp] = this.quiet;
+    this.quiet = (piece <= 2 || caps.length > 0) ? 0 : this.quiet + 1; // coup de pion (promotion comprise) ou prise
     let cp = this._cp;
     for (let k = 0; k < caps.length; k++) {
       const c = caps[k];
@@ -272,6 +284,7 @@ export class FastBoard {
     const board = this.board;
     const sp = --this._sp;
     this.side ^= 1;
+    this.quiet = this._stkQuiet[sp];
     board[this._stkTo[sp]] = EMPTY;
     board[this._stkFrom[sp]] = this._stkPiece[sp];
     let cp = this._cp;
@@ -310,8 +323,9 @@ export class FastBoard {
 
   // --- Conversion depuis / vers la position de l'interface ---------------------------------------
   // Format interface : tableau de 51 éléments (index 1..50), null ou { color: 'w'|'b', king }.
-  static fromUiBoard(uiBoard, sideToMove) {
+  static fromUiBoard(uiBoard, sideToMove, quiet = 0) {
     const fb = new FastBoard();
+    fb.quiet = quiet;
     for (let sq = 1; sq <= 50; sq++) {
       const p = uiBoard[sq];
       if (!p) continue;
