@@ -87,7 +87,7 @@ sw.js                 service worker (désactivé côté client)
 - Variable `--board-px` sur `:root` ; `.layout` et `.topbar-inner` partagent la même
   formule `max-width: calc(var(--board-px, 950px) + 268px + var(--side-panel-w) + 52px + 48px)`.
   `.board-column` épouse `width: var(--board-px)`, pas de `flex-grow`. Plafond 950px,
-  plancher 280px. Police des coordonnées plafonnée à 12px.
+  plancher 280px. Police des coordonnées plafonnée à 12px. Repères de rangées à DROITE du damier (vrais numéros du bord droit à l'écran : 5…45, retourné 6…46 ; la gauche est occupée par la jauge), repères de colonnes (46-50) en bas.
 
 ### Moteur et modèle de données
 - `generateLegalMoves(board, color)` → `{ captures, simples, mustCapture }`, grande prise
@@ -351,7 +351,7 @@ DÉSACTIVÉ à chaque lancement, NON persisté (aucune clé localStorage), à ne
 jauge d'évaluation verticale (`#eval-bar`, 38 px, `position:absolute`, HORS du flux, à gauche du damier),
 bloc `#analysis-strip` EN HAUT DU PANNEAU DE DROITE (`.side-panel`, au-dessus des onglets, visible quel que soit l'onglet ; déplacé le 19/10/2026, validé par Mickaël) : grande plaque de score `#analysis-plate`
 (Inter 800, 56 px ; `data-adv` = white / black / even ; « +0,8 » ou « Mat en N — les X gagnent »)
-puis, en petit, « indicatif · prof. N » et « Meilleur : 34-30 · ligne de 5 coups max » ; flèche verte
+puis, en petit, « Évaluation indicative · profondeur N » et « Meilleur : 34-30 · ligne de 5 coups max » ; flèche verte
 `--best-arrow-color` du meilleur coup (`renderer.setBestMove(squares)`, indépendante de la flèche du
 dernier coup). Conventions :
 - **Largeur de la jauge sans toucher au layout** : `BoardRenderer.resize()` mesure `#app` moins la largeur
@@ -376,7 +376,7 @@ dernier coup). Conventions :
 - **Paliers d'avantage** (barème de Mickaël, constante `ADVANTAGE_TIERS` dans `analysis-format.js`, appliquée à
   la valeur AFFICHÉE arrondie au dixième) : égal ≤ 0,2 · mini > 0,2 · petit ≥ 0,5 · naissant ≥ 0,7 ·
   avantage ≥ 0,9 · bel ≥ 1,5 · gros > 2 ; 5 niveaux de lumière (`--lit` 1 à 5 : mini 1, petit et naissant 2,
-  avantage 3, bel 4, gros 5 ; 0 = égal). Jamais de texte « Petit avantage » affiché.
+  avantage 3, bel 4, gros 5 ; 0 = égal). Jamais de texte « Petit avantage » affiché (un palier en mots sous le score a été essayé puis ABANDONNÉ à la demande de Mickaël : le score seul suffit).
 - Habillage (retouches 2b-bis/2b-ter, affichage seulement) : `--fill` (part de blanc, 0-100) posée par
   `main.js` pilote la hauteur du blanc ET la ligne dorée (`.eval-bar-line`, halo), transition 0,6 s ; repères à
   0, ±0,5, ±1, ±2 pions (`.eval-bar-tick`, `--p` par `tickFractions()`, donc fidèles à l'échelle) ; zone
