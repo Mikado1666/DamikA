@@ -53,12 +53,12 @@ export function formatHeadline(result) {
   return result.mate ? formatMate(result.mate) : formatScore(result.score);
 }
 
-// Mention discrète sous/à côté du score : « indicatif · prof. 9 ». Pas de profondeur pour une
+// Mention discrète sous/à côté du score : « Évaluation indicative · profondeur 9 ». Pas de profondeur pour une
 // partie terminée (rien n'a été cherché).
 export function formatMeta(result) {
   if (!result) return '';
   if (result.mate && result.mate.in === 0) return '';
-  return `indicatif · prof. ${result.depth}`;
+  return `Évaluation indicative · profondeur ${result.depth}`;
 }
 
 // Cases à relier par la flèche pour un coup au format de rules.js (rafle : liste d'étapes

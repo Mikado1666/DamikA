@@ -69,7 +69,7 @@ eq('mat : partie terminée (in = 0)', formatMate({ winner: 'b', in: 0 }), 'Parti
 eq('titre : score normal', formatHeadline({ score: 80, mate: null }), '+0,8');
 eq('titre : mat', formatHeadline({ score: 29990, mate: { winner: 'w', in: 2 } }), 'Mat en 2 — les Blancs gagnent');
 eq('titre : absent', formatHeadline(null), '');
-eq('mention : indicatif + profondeur', formatMeta({ score: 0, mate: null, depth: 9 }), 'indicatif · prof. 9');
+eq('mention : indicatif + profondeur', formatMeta({ score: 0, mate: null, depth: 9 }), 'Évaluation indicative · profondeur 9');
 eq('mention : partie terminée = rien', formatMeta({ score: -30000, mate: { winner: 'w', in: 0 }, depth: 0 }), '');
 
 // --- Coups -----------------------------------------------------------------------------------------------------------------
@@ -214,7 +214,7 @@ eq('swing : valeur absente : non', [isBigSwing(null, 0.5), isBigSwing(0.5, NaN),
 {
   const fb = FastBoard.initial();
   const r = analyseSync({ board: fb.toUiBoard(), side: 'w' }, { maxDepth: 6, maxTimeMs: 1e9 });
-  ok('moteur : titre, mention, flèche et ligne utilisables', formatHeadline(r).length > 0 && formatMeta(r).includes('prof. 6')
+  ok('moteur : titre, mention, flèche et ligne utilisables', formatHeadline(r).length > 0 && formatMeta(r).includes('profondeur 6')
     && moveSquares(r.bestMove).length >= 2 && formatLine(r.pvNotation).best === r.bestMoveNotation && shouldShowMove(r), `${formatHeadline(r)} · ${r.bestMoveNotation}`);
   // Partie terminée : pion blanc bloqué en 1 (aucun coup légal pour les Blancs).
   const dead = analyseSync({ board: (() => { const b = new Array(51).fill(null); b[1] = { color: 'w', king: false }; return b; })(), side: 'w' }, { maxDepth: 3 });

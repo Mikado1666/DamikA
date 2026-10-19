@@ -407,15 +407,14 @@ export class BoardRenderer {
       for (let col = 0; col < 10; col++) {
         if ((row + col) % 2 !== 1) continue;
         const sq = rcToSquare(row, col);
-        if (col === (this.flipped ? 9 : 0)) {
+        if (col === (this.flipped ? 0 : 9)) {
           const [sr] = this._screenRC(row, col);
-          // Ancré à droite (vers le cadre) plutôt qu'à gauche (vers le bord du canvas) :
-          // avec un textAlign:'left' à x=6 fixe, un nombre à 2 chiffres s'étendait VERS le
-          // cadre (à x=18, LABEL_MARGIN-8) et pouvait le chevaucher selon la police. En
-          // ancrant à droite à x=14 (4px de marge avant le cadre), le texte s'étend à
-          // l'inverse vers le bord du canvas, jamais vers le cadre.
-          ctx.textAlign = 'right';
-          ctx.fillText(String(sq), 14, LABEL_MARGIN + sr * c + c / 2);
+          // Repères de rangées à DROITE du damier (la jauge d'analyse occupe la gauche) : vrais
+          // numéros des cases du bord droit à l'écran (5, 15… 45 ; retourné : 6, 16… 46). Ancrés à
+          // gauche, 4 px après le cadre décoratif (qui finit à LABEL_MARGIN + size + 8), donc le
+          // texte s'étend vers le bord du canvas, jamais vers le cadre.
+          ctx.textAlign = 'left';
+          ctx.fillText(String(sq), LABEL_MARGIN + this.size + 12, LABEL_MARGIN + sr * c + c / 2);
         }
         if (row === (this.flipped ? 0 : 9)) {
           const [, sc] = this._screenRC(row, col);
