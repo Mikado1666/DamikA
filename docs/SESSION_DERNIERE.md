@@ -1,7 +1,72 @@
-# Session — Chantier IA, Étage 1 : moteur rapide (V0)
+# Session du 18/10/2026 — Chantier IA (étages 1, 2a, 2b)
 
 Journal chronologique. Chaque point d'étape (plan, divergence, résultat de test) y est consigné au fil de l'eau.
-Date de début : 2026-10-18. Rien n'est commité sans validation de Mickaël.
+Les sections « Livré (rien n'est commité) » et « en attente du feu vert » plus bas sont le récit d'ÉPOQUE de chaque
+étage ; l'état réel actuel est dans le point de situation ci-dessous (mis à jour le 19/10/2026).
+
+## Point de situation (19/10/2026) — état réel après la session du 18/10
+
+### Dépôt
+- Branche `main`, HEAD `7949e4d`, **identique à `origin/main`** (rien à pousser). Arbre de travail propre : seul reste
+  non suivi `Claude outputs/` (captures de la jauge, volontairement NON commitées ; ajouter par chemin, jamais `git add -A`).
+- Aucun travail en cours ni non commité. Aucune modification de code depuis le dernier commit.
+- Le site n'a **pas** été redéployé (déploiement Wrangler à la charge de Mickaël) : la prod ne contient pas l'IA.
+
+### Ce qui est fait et commité, dans l'ordre chronologique (tous le 18/10/2026)
+1. `4d40896` (10:31) — **Correctif `rules.js`** : les pièces prises bloquent la dame pendant une rafle (2 lignes, commit isolé).
+2. `58cbd61` (10:31) — **Étage 1** : moteur rapide `js/ai/fastboard.js`, `js/ai/worker.js` (ping/moves/perft/divide), tests Node
+   (perft, différentiel, bench). Perft identique aux références jusqu'à la profondeur 11.
+3. `c797a94` (10:31) — docs étage 1 (`CLAUDE.md`, feuille de session).
+4. `08c26f8` (11:25) — **Étage 2a** : `js/ai/eval.js`, `js/ai/search.js` (alpha-bêta, itératif, quiescence, TT Zobrist),
+   messages `analyse`/`stop` du Worker.
+5. `891261e` (11:25) — tests 2a (symétrie, cohérence, tactique 20/20, mat, match, perf, worker).
+6. `b17963a` (11:25) — docs étage 2a.
+7. `bdc93dc` (12:53) — **Étage 2b** : analyse dans la liseuse (bouton/touche A, jauge verticale 38 px, plaque de score,
+   flèche et ligne du meilleur coup), avec les retouches 2b-bis et 2b-ter (échelle 100, paliers d'avantage, lumière, halo).
+8. `094554b` (12:53) — tests 2b (`analysis-format` 94 vérifications, `analysis-controller`).
+9. `7949e4d` (12:55) — docs étage 2b (`CLAUDE.md`, feuille de session) : **dernier commit, poussé**.
+Rendu 2b validé par Mickaël. Étages 1, 2a et 2b : CLOS.
+
+### En cours / non commité
+- Rien. Étage 3 (apprentissage des poids) : non commencé.
+
+### Décisions prises et divergences par rapport aux plans
+- **Bug `rules.js` trouvé et corrigé** (étage 1) : pièces prises traversables par la dame ; le moteur rapide avait raison.
+  Ligne 90 (pions, même défaut apparent) laissée telle quelle : impossible à déclencher (parité de rangée).
+- Convention de comptage perft de Gilbert/Boomstra (rafles de même départ/arrivée/pièces prises = un coup).
+- 2a : avancement ET tempo gardés comme deux termes distincts ; TT activée par défaut (scores identiques prouvés), réutilisée
+  seulement à profondeur exacte (la PV peut être raccourcie) ; `mate` exposé en `{winner, in}` ; `stop` pris en compte entre deux profondeurs.
+- 2b : `terminate()` + recréation du Worker si une analyse est en cours au changement de position ; touche A ignorée en saisie
+  et modale ouverte ; flèche/« Meilleur » seulement dès la profondeur 4 ; **jamais persisté** (aucune clé localStorage).
+- **Divergences par rapport aux plans 2b** : (a) échelle de la barre 250 → **100** et `isBigSwing` 0,12 → **0,20** (2b-ter) ;
+  (b) jauge 14 → 22 → **38 px**, rendue possible sans toucher au layout en réduisant les cartes joueurs de 268 à 250 px pendant l'analyse ;
+  (c) la plaque de score (56 px) coûte au damier ~87 px de hauteur en hauteur limitante, au lieu des ~16 px annoncés au plan
+  (la largeur n'est jamais touchée) — Mickaël a validé le rendu, la question « ramener la plaque à ~46 px ? » est restée sans suite ;
+  (d) « persistance thème damier / style de pion » figurait dans une liste de reste à faire mais était déjà livrée (`283aa72`).
+- Limite levée de fait : le Worker d'analyse avait été testé seulement sous Node aux étages 1 et 2a ; le passage de fumée navigateur
+  de 2b l'a exercé pour de vrai (analyse jusqu'à la profondeur 11-14, aucune erreur console).
+
+### Bugs et réserves ouverts
+- **Jauge sous 900 px** : le layout passe en colonne, la jauge sort de l'écran à gauche (à traiter avec Mobile : la masquer).
+- **Non vérifiés visuellement** (2b) : affichage d'un mat, retournement F avec repères/lumière, navigation très rapide, impulsion
+  sur gros changement (visible seulement en mouvement).
+- **Moteur** : pas de détection de répétition ni de règle des 25 coups de dames (finales de dames pouvant tourner en rond, fausses
+  évaluations de gain) ; pas de livre d'ouvertures ; poids d'évaluation estimés à la main, non calibrés.
+- **Bibliothèque réelle jamais rejouée dans le moteur** : aucun PDN de Mickaël dans `tests/pdn-local/` ; le code de rejeu n'est validé
+  que sur un PDN synthétique (`node tests/diff.mjs` après dépôt d'un `.pdn`).
+- Bugs hérités, non traités : lien de partage → écran noir sur téléphone ; ordre « Récentes » non appliqué à l'écran ;
+  `damika:arrow-duration` accepte n'importe quelle valeur ; « Retirer la photo » sans effet si la photo vient d'une correspondance floue.
+- Dette : plusieurs copies de l'état d'une partie (`game`, `library[i].moves`, localStorage, `originals`).
+
+### Prochaine étape
+- Aucune décision prise : **rien ne démarre sans demande de Mickaël** (règle « un chantier à la fois »). Ordre du backlog :
+  (1) passe complète de vérification/peaufinage (PDF compris), (2) Mobile (dont jauge sous 900 px, bug du lien de partage),
+  (3) réactivation du Service Worker. L'étage 3 IA (apprentissage des poids via `createEvaluator(poids)`) est rangé dans « plus tard ».
+- À décider par Mickaël : redéploiement du site avec l'IA ; dépôt d'un PDN de la vraie Bibliothèque pour valider le moteur.
+
+---
+
+## Étage 1 — journal d'époque
 
 ## 1. Plan (en attente du feu vert)
 
@@ -248,3 +313,8 @@ Même lot 2b, non commité. Verdict de Mickaël sur les captures (22 px) : corre
 ## Clôture de l'étage 2b (18/10/2026)
 - Rendu validé par Mickaël. `CLAUDE.md` : état final (étages 1, 2a, 2b livrés ; reste à faire ; limites de l'évaluation V0 ; échelle de la barre = une seule constante `BAR_SCALE_CP`). Constat : « persistance thème damier / style de pion » figurait dans la liste demandée mais est DÉJÀ faite (commit `283aa72`) : notée comme telle, pas comme reste à faire.
 - Trois commits (code, tests, docs), `git add` par chemin ; `Claude outputs/` non suivi ; tests Node relancés avant le push ; aucun déploiement.
+
+## Correctif du 19/10/2026 — son aux flèches du clavier
+- Bug : dans le gestionnaire clavier global de `js/main.js`, ← et → appelaient `game.undo()` / `game.redo()` directement : aucun son à la flèche, contrairement au bouton « coup suivant ».
+- Correction (seul changement de code) : `ArrowLeft` → `goToPrevMove()`, `ArrowRight` → `goToNextMove()`, `e.preventDefault()` conservé. Arrêt de la lecture auto, désélection et `refreshUI()` sont déjà gérés par ces fonctions.
+- Comportement attendu : → joue le son de coup/prise (et de fin de partie), ← reste silencieux comme le bouton.

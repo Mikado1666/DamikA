@@ -1317,8 +1317,8 @@ window.addEventListener('keydown', (e) => {
   // f2def34/64d7e8b) quand la zone de commentaire existait encore.
   if (e.target && (e.target.isContentEditable || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
   switch (e.key) {
-    case 'ArrowLeft': e.preventDefault(); stopAutoplay(); game.undo(); selectedSquare = null; refreshUI(); break;
-    case 'ArrowRight': e.preventDefault(); stopAutoplay(); game.redo(); selectedSquare = null; refreshUI(); break;
+    case 'ArrowLeft': e.preventDefault(); goToPrevMove(); break;
+    case 'ArrowRight': e.preventDefault(); goToNextMove(); break;
     case ' ': e.preventDefault(); isPlaying ? stopAutoplay() : startAutoplay(); break;
     case 'f': case 'F': toggleFlip(); break;
     // Analyse : ignorée avec Ctrl/Cmd/Alt (Ctrl+A = tout sélectionner), en répétition de touche et
