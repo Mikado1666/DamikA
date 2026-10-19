@@ -80,6 +80,20 @@ sw.js                 service worker (désactivé côté client)
 - Molette sur le damier = coup suivant/précédent (`goToPrevMove()`/`goToNextMove()`),
   listener non-passif uniquement sur le `<canvas>`, anti-rafale 150 ms.
 
+### Thème clair « Miel doré » (validé par Mickaël le 19/10/2026)
+- Tout passe par les variables du bloc `:root[data-theme="light"]` de `css/style.css` (une source par couleur) ;
+  le thème sombre ne doit pas bouger. Chaque variable sémantique du thème clair a, dans `:root` (sombre), une valeur
+  IDENTIQUE à l'ancienne valeur en dur : `--gold-text` (or utilisé comme TEXTE : jamais `color: var(--gold)`),
+  `--gold-accent` (or décoratif : jauge, survol export), `--bg-glow` (centre du dégradé du `body`),
+  `--side-tag-*`, `--elo-badge-fg`, `--avatar-ring/bg/letter-*`, `--chip-border`, `--on-danger`, `--best-move-text`,
+  `--meta-sep-opacity`, `--placeholder-color` (clair seulement).
+- Contrastes MESURÉS (script WCAG, 71 textes, 0 sous 4,5:1 / 3:1 pour le gros texte) : toute nouvelle couleur de texte du
+  thème clair doit être vérifiée contre les pires fonds (`--plaque-2` en bas des cartes joueurs, `--bg-2`, dégradés de plaque).
+  Tableau avant/après dans `docs/SESSION_DERNIERE.md`. Ne pas assombrir les fonds davantage (risque d'éblouissement
+  évoqué par Mickaël) : corriger les avant-plans.
+- Piège : `.meta-field` (défini après `.elo-badge`) écrasait la couleur du badge Elo ; d'où `.meta-field.elo-badge`.
+- Les numéros de cases sont dessinés dans le canvas (`--coord-text`) : hors des mesures par script.
+
 ### Dimensionnement du damier
 - `BoardRenderer.resize()` mesure la largeur depuis `#app` moins rail (268) et panneau
   (405), **jamais depuis `.board-wrap`** (boucle de dépendance avec `--board-px` : damier

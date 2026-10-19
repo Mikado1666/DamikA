@@ -342,3 +342,52 @@ Même lot 2b, non commité. Verdict de Mickaël sur les captures (22 px) : corre
 - Supprimés : `#analysis-tier` (HTML, CSS), `formatTierLabel()`, le champ `label` de `ADVANTAGE_TIERS`, l'alimentation dans `main.js`, et les 8 vérifications de tests associées. `index.html`, `css/style.css` et `js/main.js` sont revenus à l'état du dernier commit.
 - Conservés : `ADVANTAGE_TIERS` (seuils/lumière de la jauge), le libellé « Évaluation indicative · profondeur N », les repères de rangées à droite.
 - Vérifié (1988×1103, analyse active, normal puis retourné F) : plaque de nouveau à 140 px, jauge = cadre du damier (86–943), pas de `#analysis-tier`. Tests Node verts (`analysis-format`, `analysis-controller`). Thèmes : le retrait ne touche aucun style de thème, pas de contrôle visuel séparé.
+
+## Thème clair « Miel doré » assombri (19/10/2026) — NON commité, en attente de validation à l'œil par Mickaël
+- Seules les variables du bloc `:root[data-theme="light"]` de `css/style.css` changent (une source par couleur) : fonds ≈ −10 % de luminosité : `--bg-0/1/2` (#ddd2ba, #d8c59d, #cfb47e), `--panel` (#e6d9be, aussi modales), `--panel-border` (#caab70), `--header-grad-1/2`, `--plaque-1/2`, `--meta-plaque`, et les blancs de la jauge/plaque (`--eval-white-1/2`, `--plate-white-bg`, `--plate-even-bg`, ramenés de blanc pur à ivoire).
+- Non touchés : thème sombre, damier, pions, doré/bronze d'accent, couleurs de texte (texte foncé sur fond un peu plus sombre : contraste conservé), plaque « Noirs » et mat.
+- Vérifié avec le vrai bouton de thème (analyse active, onglet Bibliothèque, retournement F, aide `?`). Export et partage utilisent les mêmes variables `--panel` (même `.confirm-box`) : pas ouverts séparément. Valeurs à ajuster à l'œil si besoin (une seule zone du fichier).
+
+## Lisibilité du thème clair (19/10/2026) — NON commité, en attente de validation à l'œil par Mickaël
+Fonds laissés EXACTEMENT au niveau de l'assombrissement précédent (aucun fond plus sombre) ; on corrige les AVANT-PLANS. Seul `css/style.css` change ; thème sombre vérifié identique (voir plus bas).
+
+### Ce qui a changé (bloc `:root[data-theme="light"]`, une source par couleur)
+- Texte : `--text-0` #2c1a05, `--text-1` #402a0b, `--text-2` #4d3410 (même famille brune chaude, plus foncés). `--coord-text` (numéros de cases autour du damier) : opacité 0,65 → 0,95.
+- Or : `--gold` (graphismes : soulignement d'onglet, puces, bordures) #7c500e ; NOUVEAU `--gold-text` #4e3006 (or utilisé comme TEXTE : onglet actif, filtres, durées…) ; `--gold-dim` #6e4710 (bordure des cartes) ; `--panel-border` #7d5c30 (filets et contours : boutons, champs, pilules ≥ 3:1 sur leur fond) ; `--shadow-panel` plus marquée (cartes et panneaux se détachent mieux, sans éclaircir).
+- États : `--success` #1a6340, `--danger` #7e2312, `--on-danger` #fff6e6 (texte du bouton « Supprimer » au survol : était brun sur rouge).
+- Cartes joueurs : avatars-lettres via variables (`--avatar-ring-*`, `--avatar-bg-*`, `--avatar-letter-*`) : cadre foncé pour les DEUX camps ; Blancs = intérieur ivoire + « B » foncé ; Noirs = intérieur brun + « N » doré clair. Pastille BLANCS/NOIRS (`--side-tag-bg/fg`) : fond ivoire translucide + texte brun. Badge Elo : `.meta-field.elo-badge` (le `.meta-field` placé plus bas dans le fichier écrasait la couleur foncée du badge par `--text-2` : défaut de règle) → `--elo-badge-fg`. Séparateur « · » des métadonnées : `--meta-sep-opacity` 0,5 → 0,9.
+- Plaque d'analyse : `.analysis-best-move` utilise `--best-move-text` (#146026) au lieu de `--best-arrow-color` (la flèche du damier reste inchangée).
+- Fond de page : le dégradé du `body` avait un centre #241a10 EN DUR dans les deux thèmes (halo brun sombre « sale » en haut du thème clair, derrière « 2-0 » et « Trait aux… ») → `--bg-glow` (sombre : même #241a10 ; clair : #e6dcc6).
+- Boutons dorés pleins (lecture, Analyse, durée de flèche active, annotation active) : contour `--chip-border` (clair : #7a5410 ; sombre : = `--gold-chip`, donc inchangé). Placeholders des champs : `--placeholder-color` (clair seulement).
+- Variables « or décoratif » conservées pour que la jauge et le survol de l'export ne changent pas : `--gold-accent` (clair #c8902e : ligne et repère central de la jauge, survol « Exporter »). Les ~35 `color: var(--gold)` de texte passent par `--gold-text` ; en sombre `--gold-text` = `--gold`, `--gold-accent` = l'ancien or, etc. : valeurs identiques à avant.
+
+### Mesure (script WCAG dans le navigateur : toutes les chaînes de texte visibles ; pour les fonds en dégradé, pire cas de chaque pas du dégradé ; plaques d'opacité composées)
+Seuils : 4,5:1 pour le texte (3:1 si ≥ 24 px, ou ≥ 18,66 px en gras), 3:1 pour les éléments d'interface. Avant = état au début de la session (fonds déjà assombris). Après = état final, thème clair, vrai bouton de thème.
+| Élément | Avant | Après |
+|---|---|---|
+| Avatar « B » (Blancs) | 1,21 | 12,77 |
+| Avatar « N » (Noirs) | 1,66 | 10,55 |
+| Pastille NOIRS / BLANCS | 1,16 | 11,24 |
+| Badge « Elo … » | 2,71 | 7,74 |
+| Ligne tournoi « — · date · ronde » | 2,98 (« · » : 1,65) | 5,78 |
+| Libellé « Pions », puces ● | 3,53 / 1,66 | 6,83 / 7,08 |
+| Score « 2-0 » / « Trait aux … » / compteur | 2,13 / 2,86 / 2,86 (halo sombre du fond) | 9,01 / 7,72 / 7,72 |
+| « Vitesse » / « ×1 » | 4,28 / 2,01 | 8,29 / 8,59 |
+| Boutons de la barre du haut (Nouvelle partie, Importer, Exporter, ?…) | 4,00 | 6,75 |
+| Onglet « Coups joués » / « Bibliothèque » | 4,28 / 2,01 | 8,29 / 8,59 |
+| Légendes de la plaque : « Évaluation indicative… » / « Meilleur : » / 34-30 | 3,04 / 4,28 / 2,98 | 5,05 / 8,29 / 5,50 |
+| « 2 parties », filtre « Toutes », numéro de partie | 4,28 / 1,78 / 1,78 | 8,29 / 7,63 / 7,63 |
+| Métadonnées d'une partie (tournoi, ronde) | 3,80 | 7,36 |
+| Recherche (placeholder) | 2,98 | 5,19 |
+| Placeholder URL photo (gris navigateur) | 2,30 | ≥ 4,5 |
+| Toast « PDF exporté » (succès) | 3,06 | ≥ 5,0 |
+| Bouton « Supprimer » (danger) | non mesuré (≈ 3,7) | 4,9 |
+| Numéros de coups (liste de notation) | 4,28 | ≥ 6 (même `--text-2`, sur panneau) |
+Résultat : 71 chaînes de texte mesurées, 0 sous le seuil (marge minimale ×1,05), dans les états : liste de coups, analyse active, onglet Bibliothèque, plateau retourné (F), aide (?), modales d'export image et de partage, popover photo, modale de confirmation de suppression (annulée), carte avec photo (image de test injectée) et carte avec avatar-lettre.
+- Hors mesure par script (dessinés dans le `<canvas>`) : numéros de cases autour du damier. `--coord-text` à 0,95 d'opacité (#2c1a05) sur le fond de page : ≈ 8:1 (calcul), contre ≈ 4:1 avant.
+- Éléments d'interface (contours/fonds ≥ 3:1) : boutons de la barre du haut 2,35 → ≥ 3 ; boutons dorés pleins 1,58 → contour 5,0 ; restent sous 3:1 par la LUMINANCE seule, mais identifiés par leur libellé à fort contraste : pilules « 20 PIONS » (2,61), pastilles Elo / BLANCS / NOIRS / compteur de bibliothèque, boutons de filtre (segmentés dans un cadre), curseurs (piste par défaut du navigateur, curseur `accent-color` or sombre).
+
+### Vérifications
+- Vrai bouton de thème (sombre → clair), analyse active/coupée, Bibliothèque, retournement F (repères 46…6 à droite), modales (aide, export image, partage, confirmation), carte photo + carte lettre : captures contrôlées. Thème sombre : instantané des styles calculés de 695 éléments (couleur, fond, bordures, ombres, pseudo-éléments) avec la feuille de style d'avant (HEAD) vs la nouvelle : 0 différence.
+- Test fortuit : l'ouverture de l'export « PDF » pendant l'audit a réellement lancé un export (toast « PDF exporté ») : un fichier PDF a pu être enregistré dans les téléchargements, à supprimer si présent.
+- Tests Node verts (`analysis-format`, `analysis-controller`, `worker`, `diff`) ; aucun test ne touche au CSS.
