@@ -92,31 +92,50 @@
   --plaque-1: #2a2015;
   --plaque-2: #19130d;
   --meta-plaque: #1b140e;
+  /* Variables sémantiques ajoutées pour la lisibilité du thème clair : ici (thème sombre) elles
+     reprennent EXACTEMENT les valeurs qui étaient en dur, le thème sombre ne change pas. */
+  --gold-text: var(--gold);            /* couleur d'accent utilisée comme TEXTE */
+  --gold-accent: #d4af69;               /* or "décoratif" (jauge, survol) : jamais assombri */
+  --bg-glow: #241a10;                   /* centre du dégradé du fond de page */
+  --on-gold: #241a0d;                   /* texte sur fond --gold-accent */
+  --side-tag-bg: var(--gold-soft);      /* pastille BLANCS / NOIRS des cartes joueurs */
+  --side-tag-fg: var(--gold);
+  --elo-badge-fg: var(--text-2);
+  --meta-sep-opacity: 0.5;
+  --chip-border: var(--gold-chip);      /* contour des boutons "pleins" dorés (lecture, Analyse, durée active) */
+  --on-danger: var(--accent-white);
+  --best-move-text: var(--best-arrow-color);
+  --avatar-ring-white: linear-gradient(180deg, #fbf4e3, #ccb98c);
+  --avatar-ring-black: linear-gradient(180deg, #8a6b3c, #2a2015);
+  --avatar-bg-white: var(--bg-1);
+  --avatar-bg-black: var(--bg-1);
+  --avatar-letter-white: #e9d9ae;
+  --avatar-letter-black: var(--gold);
 }
 
 /* ---------- Thème clair "Miel doré" (caramel/miel) ---------------------------------------
    Toggle Sombre/Clair dans le bandeau (main.js), persisté dans localStorage. Le thème sombre
    ci-dessus reste le défaut. */
 :root[data-theme="light"] {
-  --bg-0: #f6e9cf;
-  --bg-1: #f0dbae;
-  --bg-2: #e6c88c;
-  --panel: #fbf1de;
-  --panel-border: #d9b878;
-  --text-0: #3a2408;
-  --text-1: #6b4a1e;
+  --bg-0: #ddd2ba;
+  --bg-1: #d8c59d;
+  --bg-2: #cfb47e;
+  --panel: #e6d9be;
+  --panel-border: #7d5c30;
+  --text-0: #2c1a05;
+  --text-1: #402a0b;
   /* Assombri par rapport à un simple "text-1 éclairci" : à ce niveau de luminosité (#97794c),
      le texte tertiaire (libellé "Pions", titre MI/GMI, ligne secondaire du bloc tournoi...)
      devenait illisible sur les fonds clairs/plaques du thème (retour Mickaël). */
-  --text-2: #78602f;
-  --gold: #c8902e;
+  --text-2: #4d3410;
+  --gold: #7c500e;
   --gold-soft: rgba(200, 144, 46, 0.18);
-  --gold-dim: #8f5e18;
+  --gold-dim: #6e4710;
   --accent-white: #3a2408;
   --accent-black: #fbf1de;
-  --success: #2f8a5e;
-  --danger: #b6432f;
-  --shadow-panel: 0 8px 24px rgba(110, 70, 20, 0.2);
+  --success: #1a6340;
+  --danger: #7e2312;
+  --shadow-panel: 0 6px 20px rgba(70, 42, 8, 0.32);
   color-scheme: light;
 
   /* Dégradé du logo (wordmark ET losange, cf. --brand-c1..5 plus haut) assombri
@@ -131,8 +150,8 @@
   --brand-c5: #150c03;
   --brand-gradient: linear-gradient(180deg, var(--brand-c1) 0%, var(--brand-c2) 35%, var(--brand-c3) 55%, var(--brand-c4) 62%, var(--brand-c5) 100%);
 
-  --header-grad-1: #f2e2b8;
-  --header-grad-2: #e8cd94;
+  --header-grad-1: #dacba6;
+  --header-grad-2: #d1b885;
 
   --board-frame-1: #7a4a1a;
   --board-frame-2: #4a2c0c;
@@ -140,15 +159,15 @@
   --board-light: #f3dfae;
   --board-dark: #c08a3c;
   --board-dark-hl: #dba658;
-  --coord-text: rgba(58, 36, 8, 0.65);
+  --coord-text: rgba(44, 26, 5, 0.95);
   --select-stroke: #e0a020;
   --select-glow: rgba(224, 160, 32, 0.55);
   --mandatory-color: 200, 70, 10;
   --target-color: rgba(30, 130, 110, 0.55);
   --arrow-color: #1f7a8c;
   --best-arrow-color: #1f8f3a;
-  --eval-white-1: #ffffff;
-  --eval-white-2: #f0e2bd;
+  --eval-white-1: #efe5cd;
+  --eval-white-2: #d8caa6;
   --eval-dark-1: #6a5846;
   --eval-dark-2: #2c2118;
   --eval-border: rgba(143, 94, 24, 0.95);
@@ -156,11 +175,11 @@
   --eval-light: rgba(255, 186, 60, 1);
   --eval-zone: rgba(224, 150, 20, 0.4);
   --eval-tick: rgba(120, 98, 66, 0.95);
-  --plate-white-bg: linear-gradient(180deg, #ffffff 0%, #f1e3c0 100%);
+  --plate-white-bg: linear-gradient(180deg, #efe5cd 0%, #dccca3 100%);
   --plate-white-fg: #3a2408;
   --plate-black-bg: linear-gradient(180deg, #5a4838 0%, #2a2018 100%);
   --plate-black-fg: #fbf1de;
-  --plate-even-bg: linear-gradient(180deg, #fbf1de 0%, #efdcae 100%);
+  --plate-even-bg: linear-gradient(180deg, #e6d8b8 0%, #d6c18f 100%);
   --plate-mate-bg: linear-gradient(180deg, #ffe08a 0%, #e0a52e 100%);
   --plate-mate-fg: #3a2408;
   --black-name-accent: #7a4a12;
@@ -170,12 +189,39 @@
      que --bg-2/--panel-border plutôt que le brun quasi noir du thème sombre, pour que le
      dégradé reste clair d'un bout à l'autre (texte tertiaire --text-2, sombre en thème
      clair, lisible partout sur la plaque). */
-  --plaque-1: #e6c88c;
-  --plaque-2: #d9b878;
-  --meta-plaque: #e6c88c;
+  --plaque-1: #cfb47e;
+  --plaque-2: #c3a66c;
+  --meta-plaque: #cfb47e;
+
+  /* Lisibilité (avant-plans foncés, mêmes teintes chaudes ; fonds inchangés). Contrastes WCAG
+     mesurés par script : cf. docs/SESSION_DERNIERE.md. */
+  --gold-text: #4e3006;
+  --gold-accent: #c8902e;
+  --bg-glow: #e6dcc6;
+  --on-gold: #241a0d;
+  --side-tag-bg: rgba(255, 248, 228, 0.78);
+  --side-tag-fg: #3d2809;
+  --elo-badge-fg: #241a0d;
+  --meta-sep-opacity: 0.9;
+  --chip-border: #7a5410;
+  --best-move-text: #146026;
+  /* Avatars-lettres : cadre foncé pour les deux camps (comme les Noirs), intérieur ivoire + lettre
+     foncée pour les Blancs, intérieur brun + lettre dorée claire pour les Noirs. */
+  --avatar-ring-white: linear-gradient(180deg, #7a4e14, #3a2408);
+  --avatar-ring-black: linear-gradient(180deg, #5a3a12, #1c1206);
+  --avatar-bg-white: #f7efdc;
+  --avatar-bg-black: #2c2014;
+  --avatar-letter-white: #3a2408;
+  --avatar-letter-black: #f0cf85;
+  --on-danger: #fff6e6;
+  --placeholder-color: #553b11;
 }
 
 * { box-sizing: border-box; }
+
+/* Placeholders : couleur du navigateur (grise) conservée en sombre ; assombrie en thème clair. */
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder { color: var(--placeholder-color); }
 
 html, body {
   height: 100%;
@@ -183,7 +229,7 @@ html, body {
 }
 
 body {
-  background: radial-gradient(circle at 50% -10%, #241a10 0%, var(--bg-0) 55%);
+  background: radial-gradient(circle at 50% -10%, var(--bg-glow) 0%, var(--bg-0) 55%);
   color: var(--text-0);
   font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -284,7 +330,7 @@ body {
 }
 .icon-btn:hover {
   background: var(--gold-soft);
-  color: var(--gold);
+  color: var(--gold-text);
   border-color: var(--gold);
 }
 
@@ -303,7 +349,7 @@ body {
 }
 .action-btn:hover {
   background: var(--gold-soft);
-  color: var(--gold);
+  color: var(--gold-text);
   border-color: var(--gold);
 }
 
@@ -402,8 +448,8 @@ body {
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.arrow-duration-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold); }
-.arrow-duration-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
+.arrow-duration-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold-text); }
+.arrow-duration-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--chip-border); }
 
 .dropdown { position: relative; }
 .dropdown-menu {
@@ -430,8 +476,8 @@ body {
   font-size: 15.5px;
   cursor: pointer;
 }
-.dropdown-item:hover { background: var(--gold-soft); color: var(--gold); }
-.dropdown-item.active { color: var(--gold); font-weight: 700; }
+.dropdown-item:hover { background: var(--gold-soft); color: var(--gold-text); }
+.dropdown-item.active { color: var(--gold-text); font-weight: 700; }
 .dropdown-item.active::after { content: ' ✓'; }
 /* Bandeau plein pour bien distinguer les groupes DAMIER/PIONS (retour Mickaël : les labels
    de section se confondaient avec les options elles-mêmes) — se lit comme un titre de
@@ -442,7 +488,7 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--gold);
+  color: var(--gold-text);
   background: var(--gold-soft);
   border-top: 1px solid var(--panel-border);
   border-bottom: 1px solid var(--panel-border);
@@ -507,8 +553,8 @@ body {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.meta-chip:hover, .meta-chip:focus { background: var(--gold-soft); color: var(--gold); }
-.meta-sep { opacity: 0.5; }
+.meta-chip:hover, .meta-chip:focus { background: var(--gold-soft); color: var(--gold-text); }
+.meta-sep { opacity: var(--meta-sep-opacity, 0.5); }
 
 /* ---------- Toast ---------- */
 .toast {
@@ -544,7 +590,7 @@ body {
 .dropzone-overlay[hidden] { display: none; }
 .dropzone-message {
   font-size: 27px;
-  color: var(--gold);
+  color: var(--gold-text);
   font-weight: 700;
 }
 
@@ -584,7 +630,7 @@ body {
   border-color: var(--danger);
   color: var(--danger);
 }
-.confirm-ok-btn:hover { background: var(--danger); color: var(--accent-white); }
+.confirm-ok-btn:hover { background: var(--danger); color: var(--on-danger); }
 
 /* ---------- Modale de choix du format d'image (export PNG/JPEG) — même overlay/boîte que
    la confirmation générique ci-dessus, mais action non destructrice : bouton dans les tons
@@ -598,8 +644,8 @@ body {
 }
 .export-image-format-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .export-image-format-row input[type="radio"] { accent-color: var(--gold); cursor: pointer; }
-#export-image-ok { border-color: var(--gold); color: var(--gold); }
-#export-image-ok:hover { background: var(--gold); color: #241a0d; }
+#export-image-ok { border-color: var(--gold); color: var(--gold-text); }
+#export-image-ok:hover { background: var(--gold-accent); color: var(--on-gold); }
 
 /* ---------- Modale de partage (lien + QR code) — même overlay que la modale de
    confirmation ci-dessus, juste un contenu plus large pour accueillir le champ lien et le
@@ -609,7 +655,7 @@ body {
    thème, la bordure dorée autour suffit à le rattacher visuellement au reste de la modale. */
 .share-box { max-width: 360px; }
 .share-title {
-  color: var(--gold);
+  color: var(--gold-text);
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 14px;
@@ -660,7 +706,7 @@ body {
   margin-bottom: 16px;
 }
 .help-title {
-  color: var(--gold);
+  color: var(--gold-text);
   font-size: 17px;
   font-weight: 700;
 }
@@ -674,7 +720,7 @@ body {
   padding: 4px;
   border-radius: var(--radius-sm);
 }
-.help-close-x:hover { background: var(--gold-soft); color: var(--gold); }
+.help-close-x:hover { background: var(--gold-soft); color: var(--gold-text); }
 /* Grille à 2 colonnes réelles : `.help-row` en `display: contents` efface son propre niveau
    (il n'existe plus pour la mise en page, seuls ses 2 enfants — `.help-keys` et `span` —
    comptent) pour que TOUTES les lignes retombent dans la MÊME grille à 2 colonnes portée par
@@ -715,7 +761,7 @@ body {
   background: linear-gradient(180deg, var(--bg-2), var(--panel));
   border: 1px solid var(--gold-dim, #8a6b3c);
   border-bottom-width: 2px;
-  color: var(--gold);
+  color: var(--gold-text);
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -740,7 +786,7 @@ body {
   cursor: pointer;
   border-bottom: 2px solid transparent;
 }
-.panel-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.panel-tab.active { color: var(--gold-text); border-bottom-color: var(--gold); }
 .panel-tab:hover:not(.active) { color: var(--text-0); }
 .tab-badge {
   display: inline-block;
@@ -811,7 +857,7 @@ body {
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-.library-item.active .library-item-num { color: var(--gold); font-weight: 700; }
+.library-item.active .library-item-num { color: var(--gold-text); font-weight: 700; }
 /* En-tête compact de la Bibliothèque, sur UNE ligne : nom + nombre de parties à gauche,
    trois boutons-icônes carrés à droite. */
 .library-head {
@@ -837,7 +883,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.library-name:hover, .library-name:focus { background: var(--gold-soft); color: var(--gold); outline: none; }
+.library-name:hover, .library-name:focus { background: var(--gold-soft); color: var(--gold-text); outline: none; }
 .library-name:empty::before { content: attr(data-placeholder); color: var(--text-2); font-weight: 400; }
 .library-head-count { flex: none; font-size: var(--lib-count-size); color: var(--text-2); white-space: nowrap; }
 /* Bouton-icône carré (en-tête + bascules de filtre). */
@@ -859,8 +905,8 @@ body {
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .library-icon-btn[hidden] { display: none; }
-.library-icon-btn:hover { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
-.library-icon-btn.active { background: var(--gold-soft); color: var(--gold); border-color: var(--gold); }
+.library-icon-btn:hover { background: var(--gold-soft); color: var(--gold-text); border-color: var(--gold); }
+.library-icon-btn.active { background: var(--gold-soft); color: var(--gold-text); border-color: var(--gold); }
 .library-item:hover { border-color: var(--lib-card-border-hover); }
 .library-item.active { background: var(--gold-soft); border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
 /* Poignée de glisser-déposer (réordonnancement manuel) : discrète comme le bouton supprimer,
@@ -927,7 +973,7 @@ body {
 }
 /* Aspect "champ éditable" (curseur texte, survol) seulement sur la carte active. */
 .library-item.active .library-item-field { user-select: text; cursor: text; }
-.library-item.active .library-item-field:hover, .library-item.active .library-item-field:focus { background: var(--gold-soft); color: var(--gold); }
+.library-item.active .library-item-field:hover, .library-item.active .library-item-field:focus { background: var(--gold-soft); color: var(--gold-text); }
 .library-item-score { flex: none; margin-left: auto; font-size: var(--lib-score-size); font-weight: 700; color: var(--text-1); }
 .library-item-meta {
   font-size: var(--lib-line2-size);
@@ -1028,8 +1074,8 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 .library-filter-btn:last-child { border-right: none; }
-.library-filter-btn:hover { background: var(--gold-soft); color: var(--gold); }
-.library-filter-btn.active { background: var(--gold-soft); color: var(--gold); font-weight: 700; }
+.library-filter-btn:hover { background: var(--gold-soft); color: var(--gold-text); }
+.library-filter-btn.active { background: var(--gold-soft); color: var(--gold-text); font-weight: 700; }
 
 /* Menu "⋯" de l'en-tête (Ajouter / Sauvegarder / Ouvrir). Positionné dans #panel-library
    (overflow: hidden) : il reste donc dans les 350 px du panneau. */
@@ -1060,7 +1106,7 @@ body {
   font-size: 14px;
   cursor: pointer;
 }
-.library-menu-item:hover { background: var(--gold-soft); color: var(--gold); }
+.library-menu-item:hover { background: var(--gold-soft); color: var(--gold-text); }
 
 .library-search-input::placeholder { color: var(--text-2); }
 .library-search-input:focus { outline: none; border-color: var(--gold); }
@@ -1089,8 +1135,8 @@ body {
 .library-item-star.is-favorite {
   opacity: 1;
 }
-.library-item-star:hover { color: var(--gold); }
-.library-item-star.is-favorite { color: var(--gold); }
+.library-item-star:hover { color: var(--gold-text); }
+.library-item-star.is-favorite { color: var(--gold-text); }
 
 /* ---------- Layout ---------- */
 .layout {
@@ -1191,8 +1237,8 @@ body {
   inset: 0;
   border-radius: var(--radius-sm);
 }
-.player-avatar-ring[data-side-ring="white"]::before { background: linear-gradient(180deg, #fbf4e3, #ccb98c); }
-.player-avatar-ring[data-side-ring="black"]::before { background: linear-gradient(180deg, var(--gold-dim, #8a6b3c), #2a2015); }
+.player-avatar-ring[data-side-ring="white"]::before { background: var(--avatar-ring-white); }
+.player-avatar-ring[data-side-ring="black"]::before { background: var(--avatar-ring-black); }
 .player-avatar-ring:hover::after {
   content: '✎';
   position: absolute;
@@ -1219,8 +1265,10 @@ body {
   overflow: hidden;
   background: var(--bg-1);
 }
-.player-avatar-inner[data-side-avatar="white"] .avatar-letter { color: #e9d9ae; }
-.player-avatar-inner[data-side-avatar="black"] .avatar-letter { color: var(--gold); }
+.player-avatar-inner[data-side-avatar="white"] { background: var(--avatar-bg-white); }
+.player-avatar-inner[data-side-avatar="black"] { background: var(--avatar-bg-black); }
+.player-avatar-inner[data-side-avatar="white"] .avatar-letter { color: var(--avatar-letter-white); }
+.player-avatar-inner[data-side-avatar="black"] .avatar-letter { color: var(--avatar-letter-black); }
 .avatar-photo {
   position: absolute;
   inset: 0;
@@ -1248,6 +1296,8 @@ body {
   white-space: nowrap;
 }
 .elo-badge:hover, .elo-badge:focus { background: var(--text-0); }
+/* .meta-field (plus bas) imposerait --text-2 sur le fond doré de la pastille. */
+.meta-field.elo-badge { color: var(--elo-badge-fg); }
 
 .player-name-row {
   display: flex;
@@ -1286,8 +1336,8 @@ body {
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--gold);
-  background: var(--gold-soft);
+  color: var(--side-tag-fg);
+  background: var(--side-tag-bg);
   padding: 2px 6px;
   border-radius: 5px;
 }
@@ -1307,7 +1357,7 @@ body {
   cursor: text;
   white-space: nowrap;
 }
-.meta-field:hover, .meta-field:focus { background: var(--gold-soft); color: var(--gold); }
+.meta-field:hover, .meta-field:focus { background: var(--gold-soft); color: var(--gold-text); }
 
 .player-card-stats {
   display: flex;
@@ -1325,7 +1375,7 @@ body {
   border-radius: 20px;
   padding: 4px 10px 4px 8px;
 }
-.stat-icon { font-style: normal; color: var(--gold); font-size: 12px; }
+.stat-icon { font-style: normal; color: var(--gold-text); font-size: 12px; }
 .stat-value {
   font-size: 14.5px;
   font-weight: 800;
@@ -1337,7 +1387,7 @@ body {
   padding: 1px 2px;
   margin: -1px -2px;
 }
-.stat-value:hover, .stat-value:focus { background: var(--gold-soft); color: var(--gold); }
+.stat-value:hover, .stat-value:focus { background: var(--gold-soft); color: var(--gold-text); }
 .count-value {
   font-size: 14.5px;
   font-weight: 800;
@@ -1384,7 +1434,7 @@ body {
   border-radius: 5px;
   padding: 1px 6px;
 }
-.score-center-value:hover, .score-center-value:focus { background: var(--gold-soft); color: var(--gold); }
+.score-center-value:hover, .score-center-value:focus { background: var(--gold-soft); color: var(--gold-text); }
 
 /* Compteur de temps (théorie des finales) — déplacé de la zone entre les cartes vers la
    ligne de statut, combiné avec "Trait aux Blancs/Noirs" (retour Mickaël : son ancien
@@ -1395,7 +1445,7 @@ body {
   letter-spacing: 0;
   color: var(--text-2);
 }
-.tempo-delta.positive { color: var(--gold); }
+.tempo-delta.positive { color: var(--gold-text); }
 .tempo-delta.negative { color: #6fb3e0; }
 .tempo-delta.disabled { color: var(--text-2); opacity: 0.6; }
 .status-sep { color: var(--text-2); margin: 0 6px; }
@@ -1487,14 +1537,14 @@ body {
   font-size: 16px;
   transition: background 0.15s, color 0.15s;
 }
-.ctrl-btn:hover { background: var(--gold-soft); color: var(--gold); }
+.ctrl-btn:hover { background: var(--gold-soft); color: var(--gold-text); }
 .ctrl-btn:disabled { opacity: 0.3; cursor: default; }
 .ctrl-btn:disabled:hover { background: var(--bg-2); color: var(--text-1); }
 .ctrl-btn-main {
   width: 52px;
   background: var(--gold-chip);
   color: #241a0d;
-  border-color: var(--gold-chip);
+  border-color: var(--chip-border);
   font-weight: 700;
 }
 .ctrl-btn-main:hover { filter: brightness(1.08); }
@@ -1518,13 +1568,13 @@ body {
   cursor: pointer;
 }
 #speed-value {
-  color: var(--gold);
+  color: var(--gold-text);
   font-weight: 700;
   font-size: 13px;
   min-width: 26px;
   text-align: center;
 }
-.ctrl-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
+.ctrl-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--chip-border); }
 .ctrl-btn.active:hover { background: var(--gold-chip); filter: brightness(1.08); }
 /* Bouton à libellé texte (« Analyse ») dans la barre de contrôles. */
 .ctrl-btn-text { width: auto; padding: 0 12px; font-size: 14px; font-weight: 600; }
@@ -1599,7 +1649,7 @@ body {
   left: 0; right: 0;
   bottom: calc(var(--fill) * 1% - 1.5px);
   height: 3px;
-  background: linear-gradient(90deg, #fff0c2, var(--gold), #fff0c2);
+  background: linear-gradient(90deg, #fff0c2, var(--gold-accent), #fff0c2);
   box-shadow: 0 0 9px 2px var(--eval-glow);
   transition: bottom 0.6s cubic-bezier(0.22, 0.8, 0.24, 1), top 0.6s cubic-bezier(0.22, 0.8, 0.24, 1);
 }
@@ -1618,7 +1668,7 @@ body {
 .eval-bar-tick-center {
   height: 2px;
   bottom: calc(50% - 1px);
-  background: linear-gradient(90deg, var(--gold) 0 13px, transparent 13px calc(100% - 13px), var(--gold) calc(100% - 13px));
+  background: linear-gradient(90deg, var(--gold-accent) 0 13px, transparent 13px calc(100% - 13px), var(--gold-accent) calc(100% - 13px));
 }
 .eval-bar.flipped .eval-bar-tick-center { bottom: auto; top: calc(50% - 1px); }
 .eval-bar.stale { opacity: 0.55; }
@@ -1715,7 +1765,7 @@ body {
 .analysis-side { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0; }
 .analysis-meta { font-size: 12px; opacity: 0.8; }
 .analysis-best[hidden] { display: none; }
-.analysis-best-move { color: var(--best-arrow-color); font-weight: 700; }
+.analysis-best-move { color: var(--best-move-text); font-weight: 700; }
 .analysis-pv { color: var(--text-2); }
 
 /* Mouvement réduit demandé par le système : plus d'animation ni de transition sur la jauge. */
@@ -1827,7 +1877,7 @@ body {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: var(--gold);
+  color: var(--gold-text);
   font-size: 15px;
   line-height: 1;
   padding: 2px 3px;
@@ -1852,7 +1902,7 @@ body {
   background: transparent;
   font-size: 12px;
   line-height: 1;
-  color: var(--gold);
+  color: var(--gold-text);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -1943,8 +1993,8 @@ body {
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.move-annotation-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold); }
-.move-annotation-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--gold-chip); }
+.move-annotation-btn:hover:not(.active) { border-color: var(--gold); color: var(--gold-text); }
+.move-annotation-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--chip-border); }
 .move-comment-diagram-toggle {
   display: flex;
   align-items: center;
@@ -1979,7 +2029,7 @@ body {
   font-size: 15px;
   transition: background 0.15s, color 0.15s;
 }
-.text-btn:hover { background: var(--gold-soft); color: var(--gold); }
+.text-btn:hover { background: var(--gold-soft); color: var(--gold-text); }
 /* Retour à la version d'origine (pied de "Coups joués") : icône seule, ne prend pas la place de Annuler/Rétablir. */
 #btn-revert-original-moves { flex: none; padding: 9px 14px; font-size: 18px; line-height: 1; }
 
