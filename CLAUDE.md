@@ -349,7 +349,7 @@ Reste à faire : étage 3 (apprentissage des poids) ; l'étage 2b (analyse dans 
 Bouton « Analyse » (`#btn-analysis`, fin de la barre de contrôles) + touche **A** : interrupteur
 DÉSACTIVÉ à chaque lancement, NON persisté (aucune clé localStorage), à ne pas persister. Actif :
 jauge d'évaluation verticale (`#eval-bar`, 38 px, `position:absolute`, HORS du flux, à gauche du damier),
-ligne `#analysis-strip` sous la ligne de statut : grande plaque de score `#analysis-plate`
+bloc `#analysis-strip` EN HAUT DU PANNEAU DE DROITE (`.side-panel`, au-dessus des onglets, visible quel que soit l'onglet ; déplacé le 19/10/2026, validé par Mickaël) : grande plaque de score `#analysis-plate`
 (Inter 800, 56 px ; `data-adv` = white / black / even ; « +0,8 » ou « Mat en N — les X gagnent »)
 puis, en petit, « indicatif · prof. N » et « Meilleur : 34-30 · ligne de 5 coups max » ; flèche verte
 `--best-arrow-color` du meilleur coup (`renderer.setBestMove(squares)`, indépendante de la flèche du
@@ -362,8 +362,12 @@ dernier coup). Conventions :
   : les cartes joueurs passent de 268 à 250 px pendant l'analyse. Vérifié aux tailles 1988×1103, 1440×900 et
   1100×800 (damier carré, centré, sans chevauchement ni défilement horizontal, largeur identique analyse
   active/coupée). Sous 900 px le layout passe en colonne et la jauge est hors écran (chantier Mobile : masquer
-  la jauge sous 900 px). Le damier perd de la HAUTEUR quand l'analyse est active (plaque + ligne ≈ 100 px) ;
-  il met plus de 500 ms à retrouver sa taille après la coupure (normal, ne pas le « corriger »).
+  la jauge sous 900 px). La plaque ne coûte plus de hauteur au damier (taille identique analyse active/coupée) : à l'activation,
+  seule la liste du panneau de droite se raccourcit (~140 px).
+- **Alignement vertical** (`alignLayout()`) : le haut du cadre du damier se cale sur le haut du PANNEAU
+  `.side-panel` (jamais sur les onglets, que la plaque repousse) ; la jauge est recalée sur le centre du damier par
+  `--bar-dy` (posée sur `#eval-bar`, lue par son `transform`). Vérifié en iframes 1280×720, 1536×864, 1800×1000,
+  1988×1103 (le redimensionnement de la fenêtre de test ne marche pas : utiliser des iframes de la taille voulue).
 - Flèche et ligne « Meilleur » seulement à partir de la profondeur 4 (`MIN_DEPTH_FOR_MOVE` dans
   `analysis-format.js`) ; barre et score dès la profondeur 1. Barre = sigmoïde
   `1/(1+e^(-cp/BAR_SCALE_CP))`, **`BAR_SCALE_CP = 100`** (une seule constante : ±0,5 pion ≈ 62 %, ±1 ≈ 73 %,
