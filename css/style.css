@@ -1548,7 +1548,7 @@ body {
   position: absolute;
   right: calc(100% + 4px);
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(calc(-50% + var(--bar-dy, 0px))); /* --bar-dy posée par alignLayout() */
   width: 38px;
   height: var(--frame-px, 60%);
   display: flex;
@@ -1643,19 +1643,19 @@ body {
 }
 @keyframes evalShimmer { from { background-position: 0 0; } to { background-position: 0 -220%; } }
 
-/* PLAQUE de score sous le damier : très grand nombre, fond selon le camp qui a l'avantage
+/* PLAQUE de score, en haut du panneau de droite (au-dessus des onglets) : très grand nombre, fond selon le camp qui a l'avantage
    (data-adv = white | black | even), « Mat en N » en or. Halo doré proportionnel au palier (--lit).
-   Même largeur que la ligne de statut et les contrôles (--frame-px). Chiffres tabulaires : la
+   Chiffres tabulaires : la
    largeur ne saute pas quand le score change. */
 .analysis-strip {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 6px 20px;
-  width: var(--frame-px, 100%);
-  max-width: 100%;
-  margin: 0 auto;
+  gap: 6px 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--panel-border);
   box-sizing: border-box;
   color: var(--text-2);
   font-size: 14px;

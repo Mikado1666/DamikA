@@ -3570,6 +3570,7 @@ window.addEventListener('click', (e) => {
 function resetLayoutTransforms() {
   el.boardWrap.style.transform = '';
   el.playersRail.style.transform = '';
+  el.evalBar.style.removeProperty('--bar-dy');
 }
 
 function alignLayout() {
@@ -3578,7 +3579,10 @@ function alignLayout() {
   resetLayoutTransforms();
 
   const canvasRect = canvas.getBoundingClientRect();
-  const panelTabsRect = el.panelTabs.getBoundingClientRect();
+  // Référence = haut du PANNEAU (+ son filet de 1 px, soit là où commençaient les onglets), pas les
+  // onglets eux-mêmes : la plaque d'analyse est au-dessus des onglets quand l'analyse est active.
+  const panelEl = document.querySelector('.side-panel');
+  const panelTabsRect = { top: panelEl.getBoundingClientRect().top + panelEl.clientTop };
   // Exigence 2 : le haut du CADRE DÉCORATIF (bloc 2a — retour Mickaël, même référence que
   // l'exigence 1 : le bord visuellement le plus évident du plateau, pas le canvas complet
   // ni le carré de cases seul) doit tomber exactement sur le haut du bloc 3. Le cadre est
@@ -3601,6 +3605,11 @@ function alignLayout() {
   const gapMidY = (blackRect.bottom + whiteRect.top) / 2;
   const deltaRail = boardCenterY - gapMidY;
   el.playersRail.style.transform = `translateY(${deltaRail}px)`;
+
+  // La jauge d'analyse est centrée sur `.board-stage`, que la translation du damier ci-dessus ne
+  // déplace pas : on la recale sur le centre du damier (même hauteur que le cadre, --frame-px).
+  const stageRect = el.evalBar.parentElement.getBoundingClientRect();
+  el.evalBar.style.setProperty('--bar-dy', `${boardCenterY - (stageRect.top + stageRect.height / 2)}px`);
 }
 
 // Recalculé à chaque changement de taille du damier (redimensionnement de fenêtre) — même

@@ -185,19 +185,6 @@
         <span id="status-text">Trait aux Blancs</span>
       </div>
 
-      <div class="analysis-strip" id="analysis-strip" hidden>
-        <div class="analysis-plate" id="analysis-plate" data-adv="even">
-          <span class="analysis-score" id="analysis-score">…</span>
-        </div>
-        <div class="analysis-side">
-          <span class="analysis-meta" id="analysis-meta"></span>
-          <span class="analysis-best" id="analysis-best" hidden>
-            Meilleur : <strong class="analysis-best-move" id="analysis-best-move"></strong>
-            <span class="analysis-pv" id="analysis-pv"></span>
-          </span>
-        </div>
-      </div>
-
       <div class="controls-bar">
         <button id="btn-first" class="ctrl-btn" title="Début (Origine)">⏮</button>
         <button id="btn-prev" class="ctrl-btn" title="Coup précédent (←)">◀</button>
@@ -229,6 +216,18 @@
     </section>
 
     <aside class="side-panel">
+      <div class="analysis-strip" id="analysis-strip" hidden>
+        <div class="analysis-plate" id="analysis-plate" data-adv="even">
+          <span class="analysis-score" id="analysis-score">…</span>
+        </div>
+        <div class="analysis-side">
+          <span class="analysis-meta" id="analysis-meta"></span>
+          <span class="analysis-best" id="analysis-best" hidden>
+            Meilleur : <strong class="analysis-best-move" id="analysis-best-move"></strong>
+            <span class="analysis-pv" id="analysis-pv"></span>
+          </span>
+        </div>
+      </div>
       <div class="panel-tabs">
         <button class="panel-tab active" id="tab-moves" data-tab="moves">Coups joués</button>
         <button class="panel-tab" id="tab-library" data-tab="library">Bibliothèque <span id="library-count" class="tab-badge" hidden>0</span></button>
