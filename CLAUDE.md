@@ -286,7 +286,8 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 2. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
-conformité FMJD approfondie, puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
+conformité FMJD approfondie (dont les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » du moteur
+d'analyse : NON implémentées, « plus tard, à décider » avec Mickaël, voir étape 2), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
 (moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
 « État final du chantier IA » en §3 bis ; reste l'étage 3 (apprentissage des poids).
 
@@ -355,8 +356,8 @@ modification de l'interface, de `rules.js` ni de `fastboard.js`. Conventions à 
   lit pas ses messages) ; arrêt immédiat = `worker.terminate()` côté fil principal. `maxTimeMs`
   interrompt en plein milieu de profondeur.
 - Performance (machine de dev, 1 s) : profondeur 9 à 13 selon la position, ~0,6 à 1 M nœuds/s.
-- Pas de détection de répétition ni de règle des 25 coups de dames (finales de dames pouvant tourner en
-  rond), pas de livre d'ouvertures, poids non calibrés (estimés à la main).
+- Pas de livre d'ouvertures, poids non calibrés (estimés à la main). Répétition et règle des 25 coups :
+  livrées à l'étape 2 (voir « Chantier IA, Étape 2 » plus bas).
 Reste à faire : étage 3 (apprentissage des poids) ; l'étage 2b (analyse dans la liseuse) suit ci-dessous.
 
 **Chantier IA, Étage 2b « analyse dans la liseuse » (18/10/2026) : CLOS (rendu validé par Mickaël, commité, poussé ; déploiement du site à la charge de Mickaël).**
@@ -429,8 +430,8 @@ dernier coup). Conventions :
 - **Reste à faire, dans l'ordre du backlog (§3)** : étage 3 (apprentissage des poids de l'évaluation, via
   `createEvaluator(poids)`) ; passe de vérification/peaufinage (PDF compris) puis Mobile (dont le masquage de
   la jauge sous 900 px, où le layout passe en colonne et la jauge sort de l'écran) ; réactivation du Service
-  Worker en dernier. Aussi : valider le moteur sur les vraies parties de la Bibliothèque (`tests/pdn-local/`),
-  répétition de position et règle des 25 coups de dames dans le moteur.
+  Worker en dernier. Aussi : valider le moteur sur de VRAIES parties longues de la Bibliothèque (le PDN
+  exporté le 19/10 ne contenait que 50 parties de test de 4 à 16 demi-coups : 0 divergence, mais sans dames).
 - **Limites connues de l'évaluation V0 (en termes simples)** : elle compte les pièces et note leur place
   (avancée, centre, dernière rangée, tempo), rien de plus. Elle ne voit pas les formations (pions solidaires,
   triangles, chaînes), les pions isolés, en retard ou bloqués, ni la liberté de manœuvre d'un camp étouffé ; une
@@ -444,6 +445,29 @@ dernier coup). Conventions :
   Paliers d'avantage : constante `ADVANTAGE_TIERS` dans le même fichier.
 - Les réglages d'interface « thème du damier » et « style de pion » sont DÉJÀ persistés (clés
   `damika:board-theme` et `damika:piece-style`, commit `283aa72`) : ils ne sont plus à faire.
+
+**Chantier IA, Étape 2 « répétition et règle des 25 coups » (19/10/2026) : CLOS (validé par Mickaël, commité, poussé).**
+Règles lues dans les textes officiels : [FMJD Annexe 1, art. 6](https://www.fmjd.org/downloads/news/948/Annex%201%20official%20FMJD%20rules%20of%20international%20draughts.pdf)
+et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/FMJD_Annexes_2024_8-sig.pdf) (l'anglais fait foi).
+- **6.1** : nulle à la 3e occurrence de la même position, même camp au trait. **6.2** : nulle après 25 coups de chaque
+  camp (= 50 demi-coups) où seules les dames ont bougé, sans prise ni coup de pion. Les deux sont IMPLÉMENTÉES.
+- **6.3 (16 coups : 3 dames, 2 dames + pion, dame + 2 pions contre une dame ; 5 coups si la dame seule tient la grande
+  diagonale, texte 2024) et 6.4 (5 coups : 2 dames, dame + pion, dame contre dame) : NON implémentées.** Décision de
+  Mickaël : plus tard, à décider (elles exigent un historique de l'arrivée de la finale, et les textes 2018 et 2024 diffèrent).
+- Moteur : `FastBoard.quiet` (demi-coups sans prise ni coup de pion, tenu par make/unmake, `DRAW_QUIET_PLIES = 50`) ;
+  dans `search.js`, un nœud sous la racine vaut 0 si `quiet ≥ 50` ou en répétition (jamais à la racine) ; répétition =
+  retour sur le chemin de la recherche (dès la 2e occurrence : cycle) OU 3e occurrence en comptant l'historique de la
+  partie. Le résultat porte `drawRule: null | 'quiet' | 'repetition'` (non exploité par l'interface).
+- Historique : message Worker `{ type: 'analyse', position, history?, options }`, `history = { quiet, positions | hashes }`
+  (positions AVANT la position analysée, du plus ancien au plus récent, limitées aux `quiet` dernières) ; absent ou
+  `quiet = 0` = comportement d'avant. `analysisHistory(game.history)` (`analysis-format.js`) le fabrique, `main.js` le
+  passe au contrôleur (`request(position, history)`), qui l'inclut dans sa clé de déduplication.
+- **Table de transposition** : un sous-arbre où une nulle par règle a eu lieu n'est pas écrit (« teinte », `drawHits`) ;
+  lecture inchangée. Limite théorique GHI ; 0 écart mesuré avec/sans table sur 230 finales à dames avec historique.
+  La variante stricte (pas de table si `quiet > 0`) coûtait +56 % de nœuds en finale de dames.
+- Tests : `node tests/repetition.mjs` (compteur, cycle 1D/1D, 25 coups, 3e occurrence, scores identiques à l'ancien moteur
+  via `tests/data/golden-scores.json`, TT, Worker, contrôleur) ; toute la suite Node verte ; vitesse inchangée (±3 %).
+  Toute modification de la recherche doit garder `repetition.mjs` ET `search-consistency.mjs` verts.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
