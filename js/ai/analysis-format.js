@@ -54,11 +54,12 @@ export function formatHeadline(result) {
 }
 
 // Mention discrète sous/à côté du score : « Évaluation indicative · profondeur 9 ». Pas de profondeur pour une
-// partie terminée (rien n'a été cherché).
-export function formatMeta(result) {
+// partie terminée (rien n'a été cherché). `engineName` (facultatif, étape 4.1) : nom du moteur quand ce n'est pas
+// le moteur par défaut → « … · profondeur 9 · moteur V1b » ; absent = texte d'avant (V0).
+export function formatMeta(result, engineName = null) {
   if (!result) return '';
   if (result.mate && result.mate.in === 0) return '';
-  return `Évaluation indicative · profondeur ${result.depth}`;
+  return `Évaluation indicative · profondeur ${result.depth}${engineName ? ` · moteur ${engineName}` : ''}`;
 }
 
 // Cases à relier par la flèche pour un coup au format de rules.js (rafle : liste d'étapes

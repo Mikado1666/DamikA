@@ -11,15 +11,19 @@
 //   - Chaque requête porte un identifiant ; toute réponse d'une requête périmée est ignorée.
 //   - Une position identique à la précédente (plateau + trait + historique transmis) ne relance rien.
 //   - Le contrôleur ne lit que la position qu'on lui donne : il ne touche ni à la partie ni à la sauvegarde.
+//   - Moteur d'analyse (étape 4.1, js/ai/engines.js) : 'v0' par défaut, 'v1b' (évaluation apprise). Le moteur
+//     est transmis au Worker dans options.engine, SEULEMENT s'il n'est pas V0 (message identique à celui d'avant
+//     l'étape 4.1 pour V0). setEngine() relance l'analyse de la dernière position demandée avec le nouveau moteur.
 //
-// Rappel onChange({ phase, result }) :
+// Rappel onChange({ phase, result, error? }) :
 //   phase 'off'      : désactivé (result = null)
 //   phase 'waiting'  : nouvelle position, analyse pas encore démarrée / en cours de démarrage
 //   phase 'thinking' : au moins une profondeur terminée, la recherche continue (result = dernière profondeur)
 //   phase 'done'     : recherche terminée (result = résultat final)
-//   phase 'error'    : le Worker a échoué (result = null)
+//   phase 'error'    : le Worker a échoué (result = null ; error = message du Worker s'il en a donné un)
 
 import { positionKey } from './analysis-format.js';
+import { DEFAULT_ENGINE, isEngineId } from './engines.js';
 
 export const DEFAULT_DEBOUNCE_MS = 150;
 export const DEFAULT_MAX_TIME_MS = 1500;
@@ -31,6 +35,7 @@ export function createAnalysisController({
   debounceMs = DEFAULT_DEBOUNCE_MS,
   maxTimeMs = DEFAULT_MAX_TIME_MS,
   maxDepth = DEFAULT_MAX_DEPTH,
+  engine: initialEngine = DEFAULT_ENGINE,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 }) {
@@ -42,8 +47,10 @@ export function createAnalysisController({
   let running = false;    // une requête a été envoyée et sa réponse finale n'est pas arrivée
   let currentKey = null;  // empreinte de la position demandée en dernier
   let pending = null;     // position en attente de l'expiration du debounce
+  let last = null;        // dernière position demandée (copie), pour la relancer quand le moteur change
+  let engine = isEngineId(initialEngine) ? initialEngine : DEFAULT_ENGINE;
 
-  const emit = (phase, result = null) => onChange({ phase, result });
+  const emit = (phase, result = null, error = null) => onChange({ phase, result, ...(error ? { error } : {}) });
 
   function killWorker() {
     if (worker) {
@@ -66,7 +73,7 @@ export function createAnalysisController({
       if (!msg || msg.id !== currentId) return; // réponse d'une requête périmée
       if (msg.ok === false) {
         running = false;
-        emit('error');
+        emit('error', null, msg.error ?? 'erreur du Worker');
         return;
       }
       if (msg.type === 'progress') {
@@ -76,10 +83,10 @@ export function createAnalysisController({
         emit('done', msg.result);
       }
     };
-    mine.onerror = () => {
+    mine.onerror = (e) => {
       if (mine !== worker) return;
       running = false;
-      emit('error');
+      emit('error', null, (e && e.message) || 'erreur du Worker');
     };
     return worker;
   }
@@ -92,9 +99,9 @@ export function createAnalysisController({
     let w;
     try {
       w = ensureWorker();
-    } catch {
+    } catch (err) {
       running = false;
-      emit('error');
+      emit('error', null, String(err && err.message ? err.message : err));
       return;
     }
     currentId = ++seq;
@@ -104,8 +111,38 @@ export function createAnalysisController({
       type: 'analyse',
       position,
       ...(history ? { history } : {}),
-      options: { maxTimeMs, maxDepth },
+      options: { maxTimeMs, maxDepth, ...(engine !== DEFAULT_ENGINE ? { engine } : {}) },
     });
+  }
+
+  // position = { board, side } au format de l'interface (game.board, game.sideToMove).
+  // history (facultatif) = { positions: [{ board, side }], quiet } : cf. analysisHistory() dans
+  // analysis-format.js. Absent ou quiet = 0 : rien n'est transmis (comportement d'avant).
+  function request(position, history = null) {
+    if (!enabled) return;
+    const hist = history && history.quiet > 0 && history.positions && history.positions.length > 0 ? history : null;
+    const key = positionKey(position.board, position.side)
+      + (hist ? `|${hist.quiet}|${hist.positions.map((p) => positionKey(p.board, p.side)).join(',')}` : '');
+    if (key === currentKey) return; // même position : rien à refaire
+    currentKey = key;
+    if (timer !== null) { clearTimer(timer); timer = null; }
+    if (running) killWorker(); // analyse en cours : arrêt immédiat (recréé au prochain envoi)
+    currentId = 0;
+    // Copie : la position reste figée jusqu'à l'envoi, même si l'appelant remplace son plateau.
+    pending = {
+      board: position.board.map((p) => (p ? { color: p.color, king: !!p.king } : null)),
+      side: position.side,
+      history: hist ? {
+        quiet: hist.quiet,
+        positions: hist.positions.map((p) => ({
+          board: p.board.map((q) => (q ? { color: q.color, king: !!q.king } : null)),
+          side: p.side,
+        })),
+      } : null,
+    };
+    last = pending;
+    emit('waiting');
+    timer = setTimer(send, debounceMs);
   }
 
   return {
@@ -123,38 +160,24 @@ export function createAnalysisController({
       enabled = false;
       if (timer !== null) { clearTimer(timer); timer = null; }
       pending = null;
+      last = null;
       currentKey = null;
       killWorker();
       emit('off');
     },
 
-    // position = { board, side } au format de l'interface (game.board, game.sideToMove).
-    // history (facultatif) = { positions: [{ board, side }], quiet } : cf. analysisHistory() dans
-    // analysis-format.js. Absent ou quiet = 0 : rien n'est transmis (comportement d'avant).
-    request(position, history = null) {
-      if (!enabled) return;
-      const hist = history && history.quiet > 0 && history.positions && history.positions.length > 0 ? history : null;
-      const key = positionKey(position.board, position.side)
-        + (hist ? `|${hist.quiet}|${hist.positions.map((p) => positionKey(p.board, p.side)).join(',')}` : '');
-      if (key === currentKey) return; // même position : rien à refaire
-      currentKey = key;
-      if (timer !== null) { clearTimer(timer); timer = null; }
-      if (running) killWorker(); // analyse en cours : arrêt immédiat (recréé au prochain envoi)
-      currentId = 0;
-      // Copie : la position reste figée jusqu'à l'envoi, même si l'appelant remplace son plateau.
-      pending = {
-        board: position.board.map((p) => (p ? { color: p.color, king: !!p.king } : null)),
-        side: position.side,
-        history: hist ? {
-          quiet: hist.quiet,
-          positions: hist.positions.map((p) => ({
-            board: p.board.map((q) => (q ? { color: q.color, king: !!q.king } : null)),
-            side: p.side,
-          })),
-        } : null,
-      };
-      emit('waiting');
-      timer = setTimer(send, debounceMs);
+    request,
+
+    get engine() { return engine; },
+
+    // Change de moteur : si l'analyse est active, la dernière position demandée est relancée avec le nouveau
+    // moteur (analyse en cours = Worker détruit, comme pour un changement de position).
+    setEngine(id) {
+      if (!isEngineId(id)) throw new Error(`moteur d'analyse inconnu : ${String(id)}`);
+      if (id === engine) return;
+      engine = id;
+      currentKey = null; // même position, autre moteur : à refaire
+      if (enabled && last) request({ board: last.board, side: last.side }, last.history);
     },
   };
 }

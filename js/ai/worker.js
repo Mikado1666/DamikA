@@ -19,7 +19,9 @@
 //   { type: 'analyse', position, history?, options? } → progression puis résultat (voir ci-dessous)
 //   { type: 'stop' }                        → interrompt l'analyse en cours
 //
-// Analyse : options = { maxDepth, maxTimeMs, useTT } (voir js/ai/search.js). `history` (facultatif, absent =
+// Analyse : options = { maxDepth, maxTimeMs, useTT, engine } (voir js/ai/search.js). `engine` = 'v0' (défaut, absent =
+// 'v0') ou 'v1b' : moteur d'évaluation (js/ai/engines.js ; V1b charge son modèle au premier besoin, une seule fois par
+// Worker ; moteur inconnu ou modèle illisible = réponse { ok: false, error }). `history` (facultatif, absent =
 // comportement sans historique) = { positions | hashes, quiet } : positions de la partie AVANT la position
 // analysée, du plus ancien au plus récent ({ board, side } ou hashes [[lo, hi]]), limitées aux `quiet`
 // dernières (demi-coups consécutifs sans coup de pion ni prise), pour la répétition de position (3e
@@ -37,6 +39,7 @@
 
 import { FastBoard } from './fastboard.js';
 import { analyse } from './search.js';
+import { loadEvaluator } from './engines.js';
 
 function boardFrom(position) {
   return position ? FastBoard.fromUiBoard(position.board, position.side) : FastBoard.initial();
@@ -69,15 +72,19 @@ export function handleMessage(msg) {
 // Analyse en cours (une seule à la fois) : { id, stop }.
 let currentJob = null;
 
-async function runAnalyse(msg, post) {
+async function runAnalyse(msg, post, load) {
   // Une nouvelle analyse remplace la précédente, qui s'arrête à son prochain point de cession.
   if (currentJob) currentJob.stop = true;
   const job = { id: msg.id, stop: false };
   currentJob = job;
   try {
     if (!msg.position || !msg.position.board) throw new Error('position manquante ou invalide');
+    // Moteur choisi : V0 (défaut) = aucun évaluateur injecté, donc exactement la recherche d'avant l'étape 4.1.
+    const { engine, ...options } = msg.options || {};
+    const evaluator = await load(engine);
     const result = await analyse(msg.position, {
-      ...(msg.options || {}),
+      ...options,
+      ...(evaluator ? { evaluator } : {}),
       history: msg.history ?? undefined,
       onProgress: (p) => post({ id: msg.id, type: 'progress', ok: true, result: p }),
       shouldStop: () => job.stop,
@@ -91,9 +98,10 @@ async function runAnalyse(msg, post) {
 }
 
 // Point d'entrée complet : toutes les requêtes. `post(réponse)` envoie un message à l'appelant.
-// Retourne une promesse, résolue quand la requête est entièrement traitée.
-export async function runMessage(msg, post) {
-  if (msg.type === 'analyse') return runAnalyse(msg, post);
+// Retourne une promesse, résolue quand la requête est entièrement traitée. `deps.loadEvaluator` : chargeur de moteur
+// remplaçable (tests) ; dans le vrai Worker c'est celui de engines.js.
+export async function runMessage(msg, post, { loadEvaluator: load = loadEvaluator } = {}) {
+  if (msg.type === 'analyse') return runAnalyse(msg, post, load);
   if (msg.type === 'stop') {
     const running = currentJob !== null;
     if (running) currentJob.stop = true;

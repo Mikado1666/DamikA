@@ -3,6 +3,7 @@ import {
 } from './engine/rules.js';
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { createAnalysisController } from './ai/analysis-controller.js';
+import { ENGINES, DEFAULT_ENGINE, isEngineId } from './ai/engines.js';
 import {
   barFraction, formatHeadline, formatMeta, formatLine, formatScore, moveSquares, shouldShowMove,
   advantageTier, analysisHistory, isBigSwing, tickFractions, equalZoneFractions,
@@ -431,6 +432,7 @@ const el = {
   boardThemeOptions: document.getElementById('board-theme-options'),
   pieceStyleOptions: document.getElementById('piece-style-options'),
   pieceSizeOptions: document.getElementById('piece-size-options'),
+  analysisEngineOptions: document.getElementById('analysis-engine-options'),
   boardWrap: document.querySelector('.board-wrap'),
   playersRail: document.querySelector('.players-rail'),
   panelTabs: document.querySelector('.panel-tabs'),
@@ -517,7 +519,7 @@ function setAnalysisScoreText(result) {
   analysisTweenFrame = requestAnimationFrame(step);
 }
 
-function renderAnalysis({ phase, result }) {
+function renderAnalysis({ phase, result, error }) {
   const on = phase !== 'off';
   el.btnAnalysis.classList.toggle('active', on);
   el.btnAnalysis.setAttribute('aria-pressed', String(on));
@@ -551,6 +553,9 @@ function renderAnalysis({ phase, result }) {
       el.analysisPlate.classList.remove('is-mate');
       analysisHasText = false;
       analysisShownCp = null;
+      // Un moteur autre que V0 n'a pas pu tourner (modèle V1b introuvable…) : retour à V0 (dernière instruction, car
+      // setEngine() relance l'analyse et rappelle ce rendu).
+      if (analysisController.engine !== DEFAULT_ENGINE) fallbackToDefaultEngine(error);
     } else if (!analysisHasText) {
       el.analysisScore.textContent = '…';
       el.analysisMeta.textContent = '';
@@ -577,7 +582,7 @@ function renderAnalysis({ phase, result }) {
   el.evalBar.style.setProperty('--lit', String(tier.light));
   el.analysisPlate.style.setProperty('--lit', String(tier.light));
   setAnalysisScoreText(result);
-  el.analysisMeta.textContent = formatMeta(result);
+  el.analysisMeta.textContent = formatMeta(result, analysisController.engine === DEFAULT_ENGINE ? null : ENGINES[analysisController.engine].short);
   // Flèche et ligne « Meilleur » seulement à partir de MIN_DEPTH_FOR_MOVE : avant, le coup change
   // à chaque itération et la flèche clignoterait. La barre et le score, eux, vivent dès la profondeur 1.
   if (shouldShowMove(result)) {
@@ -593,10 +598,33 @@ function renderAnalysis({ phase, result }) {
 }
 el.evalBar.addEventListener('animationend', () => el.evalBar.classList.remove('pulse'));
 
+// Moteur d'analyse (étape 4.1) : V0 par défaut, V1b = évaluation apprise (js/ai/engines.js). Réglage mémorisé comme le
+// thème du damier : lu AVANT la création du contrôleur ; absent, invalide (moteur qui n'existe plus) ou localStorage
+// indisponible = V0. Choisi dans le menu 🎨 (refreshThemeMenuOptions) ; sans effet tant que l'analyse est coupée.
+const ANALYSIS_ENGINE_KEY = 'damika:analysis-engine';
+function loadSavedAnalysisEngine() {
+  try {
+    const saved = localStorage.getItem(ANALYSIS_ENGINE_KEY);
+    if (saved && isEngineId(saved)) return saved;
+  } catch { /* localStorage indisponible : V0 */ }
+  return DEFAULT_ENGINE;
+}
+
 const analysisController = createAnalysisController({
   createWorker: () => new Worker(new URL('./ai/worker.js', import.meta.url), { type: 'module' }),
   onChange: renderAnalysis,
+  engine: loadSavedAnalysisEngine(),
 });
+
+// Le moteur choisi n'a pas pu tourner : retour à V0 pour cette session. Le réglage MÉMORISÉ n'est pas modifié : un échec
+// passager (réseau, fichier du modèle absent) ne doit pas faire perdre son choix à l'utilisateur.
+function fallbackToDefaultEngine(reason) {
+  const failed = ENGINES[analysisController.engine].short;
+  console.warn(`Moteur d'analyse ${failed} indisponible :`, reason);
+  analysisController.setEngine(DEFAULT_ENGINE);
+  refreshThemeMenuOptions();
+  showToast(`Le moteur ${failed} n'a pas pu démarrer : retour au moteur ${ENGINES[DEFAULT_ENGINE].short}.`, 'error');
+}
 
 function requestAnalysis() {
   if (analysisController.enabled) {
@@ -3528,6 +3556,7 @@ function renderThemeOptions(container, entries, activeId, onPick) {
     const btn = document.createElement('button');
     btn.className = `dropdown-item${id === activeId ? ' active' : ''}`;
     btn.textContent = def.label;
+    if (def.hint) btn.title = def.hint;
     btn.addEventListener('click', () => {
       onPick(id);
       el.themeMenu.hidden = true;
@@ -3548,6 +3577,12 @@ function refreshThemeMenuOptions() {
   renderThemeOptions(el.pieceSizeOptions, PIECE_SIZES, pieceSizeKeyFromScale(renderer.pieceScale), (v) => {
     renderer.setPieceSize(v);
     localStorage.setItem(PIECE_SIZE_KEY, v);
+  });
+  // Moteur d'analyse : la case cochée est le moteur RÉELLEMENT utilisé (après un repli sur V0, ce n'est plus le
+  // moteur mémorisé). Un changement relance l'analyse de la position affichée si elle est active.
+  renderThemeOptions(el.analysisEngineOptions, ENGINES, analysisController.engine, (v) => {
+    analysisController.setEngine(v);
+    try { localStorage.setItem(ANALYSIS_ENGINE_KEY, v); } catch { /* pas de mémorisation */ }
   });
 }
 refreshThemeMenuOptions();
