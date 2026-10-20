@@ -25,7 +25,7 @@
 // en finale de dames, abandonnée.)
 
 import { FastBoard, WHITE, moveToUi, moveToString, DRAW_QUIET_PLIES } from './fastboard.js';
-import { evalSideToMove } from './eval.js';
+import { evalWhite as defaultEvalWhite } from './eval.js';
 
 export const MATE = 30000;
 const MAX_DEPTH = 64;             // profondeur maximale demandable
@@ -131,8 +131,14 @@ function clearTT() {
 
 // --- Chercheur ------------------------------------------------------------------------------------
 class Searcher {
-  constructor(fb, { useTT, prune, shouldStop, history = null }) {
+  constructor(fb, { useTT, prune, shouldStop, history = null, evaluator = null, maxNodes = Infinity }) {
     this.fb = fb;
+    // Évaluateur injectable (étage 3 : poids appris) : fonction evalWhite(board) de createEvaluator().
+    // Par défaut, l'évaluation V0 : aucun score ne change.
+    this.evalWhite = evaluator || defaultEvalWhite;
+    // Budget de nœuds (déterministe, contrairement au temps) : la recherche s'arrête à ce nombre de
+    // nœuds, à 2048 près, et rend la dernière profondeur terminée. Infini par défaut.
+    this.nodeLimit = maxNodes;
     this.histLo = history ? history.lo : new Int32Array(0);
     this.histHi = history ? history.hi : new Int32Array(0);
     this.histLen = this.histLo.length;
@@ -178,7 +184,8 @@ class Searcher {
 
   // Score statique du point de vue du camp au trait.
   staticEval() {
-    return evalSideToMove(this.fb.board, this.fb.side);
+    const s = this.evalWhite(this.fb.board);
+    return this.fb.side === WHITE ? s : -s;
   }
 
   // Tri des coups : coup de la variante principale précédente, coup de la table de
@@ -203,7 +210,7 @@ class Searcher {
   search(depth, alpha, beta, ply, onPv) {
     this.nodes++;
     if (this.timeCheck && (this.nodes & 2047) === 0) {
-      if (performance.now() >= this.deadline || (this.shouldStop && this.shouldStop())) this.stopped = true;
+      if (performance.now() >= this.deadline || this.nodes >= this.nodeLimit || (this.shouldStop && this.shouldStop())) this.stopped = true;
     }
     if (this.stopped) return 0;
 
@@ -296,11 +303,11 @@ class Searcher {
 // --- Recherche à profondeur fixe (utilisée par les tests) ---------------------------------------------
 // prune = false : négamax pur, sans aucun élagage (référence pour les tests de cohérence).
 // Retourne le score du point de vue du camp au trait.
-export function searchFixedDepth(fb, depth, { prune = true, useTT = false, history = null } = {}) {
+export function searchFixedDepth(fb, depth, { prune = true, useTT = false, history = null, evaluator = null } = {}) {
   if (useTT) clearTT();
   const nh = normalizeHistory(history);
   if (nh) fb.quiet = nh.quiet;
-  const s = new Searcher(fb, { useTT, prune, shouldStop: null, history: nh });
+  const s = new Searcher(fb, { useTT, prune, shouldStop: null, history: nh, evaluator });
   const h = zobristHash(fb);
   s.hLo[0] = h.lo; s.hHi[0] = h.hi;
   const score = s.search(depth, -INF, INF, 0, false);
@@ -329,7 +336,10 @@ function* analyseSteps(position, opts) {
   const side = fb.side;
   const t0 = performance.now();
 
-  const s = new Searcher(fb, { useTT, prune: true, shouldStop: opts.shouldStop ?? null, history });
+  const s = new Searcher(fb, {
+    useTT, prune: true, shouldStop: opts.shouldStop ?? null, history,
+    evaluator: opts.evaluator ?? null, maxNodes: opts.maxNodes ?? Infinity,
+  });
   s.deadline = t0 + maxTimeMs;
   if (useTT) clearTT();
   const h = zobristHash(fb);
@@ -382,7 +392,7 @@ function* analyseSteps(position, opts) {
 
     // Mat trouvé et entièrement vu : une profondeur de plus ne peut rien changer.
     if (Math.abs(score) > MATE_BOUND && depth >= MATE - Math.abs(score)) break;
-    if (performance.now() >= s.deadline) { result.stopped = true; break; }
+    if (performance.now() >= s.deadline || s.nodes >= s.nodeLimit) { result.stopped = true; break; }
     if (depth < maxDepth && (yield { ...result }) === true) { result.stopped = true; break; }
   }
   return finish();

@@ -15,3 +15,7 @@ test-library-50.pdn
 
 # Parties PDN de test (noms de joueurs) : ne jamais suivre
 tests/pdn-local/
+
+# Étage 3 (apprentissage) : parties, positions et journaux, volumineux, jamais suivis
+training/data/
+training/logs/
