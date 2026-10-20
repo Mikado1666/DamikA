@@ -18,6 +18,10 @@ js/ai/search.js       recherche alpha-bêta + quiescence + TT : analyse(position
 js/ai/worker.js       Web Worker (moves, perft, analyse, stop), branché à l'UI par l'analyse (2b)
 js/ai/analysis-format.js  fonctions PURES d'affichage de l'analyse (barre, score, mat, coups)
 js/ai/analysis-controller.js  cycle de vie du Worker d'analyse (debounce, terminate, ids)
+js/ai/engines.js      choix du moteur d'analyse V0 / V1b : liste, constante du chemin du modèle V1b, chargement de l'évaluateur (4.1)
+data/models/          v1b-l0.json = COPIE de training/models/v1b-l0.json, chargée par le Worker pour V1b
+js/library-view.js    ordre d'affichage de la Bibliothèque (fonction pure : Toutes / Récentes / Favoris + recherche)
+js/photo-match.js     correspondance nom → photo (fonctions pures), aussi utilisée par « Retirer la photo »
 tests/                tests Node sans framework (moteur, évaluation, recherche, worker)
 js/render/board.js    BoardRenderer (canvas)
 js/pdn/               parser.js, loader.js, serializer.js, storage.js
@@ -44,6 +48,9 @@ sw.js                 service worker (désactivé côté client)
   `node tests/bench.mjs`. Étage 2a (IA) : `node tests/eval-symmetry.mjs`,
   `node tests/search-consistency.mjs` (~1 min), `node tests/tactics.mjs`, `node tests/mate.mjs`,
   `node tests/match.mjs` (~70 s), `node tests/search-perf.mjs`, `node tests/worker-analyse.mjs`, `node tests/analysis-format.mjs`, `node tests/analysis-controller.mjs`.
+  Étape 4.1 : `node tests/engine-select.mjs` (V0 / V1b, ≈ 8 s) ; OUTILS de mesure (pas des tests) : `node tests/gauge-calibration.mjs`
+  (jauge V0 contre V1b, ≈ 2,5 min), `node tests/bench-engines.mjs` (temps V0 / V1b dans le Worker, ≈ 3 min).
+  Fonctions pures de l'interface : `node tests/library-order.mjs` (ordre Toutes / Récentes / Favoris), `node tests/photo-match.mjs` (nom → photo, « Retirer la photo »).
   `tests/solver.mjs` = solveur indépendant (rules.js seul) ; `tests/mine-positions.mjs` régénère
   `tests/data/` (positions sans aucun nom de joueur, suivies par git). Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
   joueurs). Pour l'interface, il n'y a pas de suite de tests. Pour tester une position : listener temporaire
@@ -93,6 +100,17 @@ sw.js                 service worker (désactivé côté client)
   évoqué par Mickaël) : corriger les avant-plans.
 - Piège : `.meta-field` (défini après `.elo-badge`) écrasait la couleur du badge Elo ; d'où `.meta-field.elo-badge`.
 - Les numéros de cases sont dessinés dans le canvas (`--coord-text`) : hors des mesures par script.
+
+### Mise en page en colonne (≤ 900 px, téléphone) — 20/10/2026
+- **Cause de l'« écran noir » du lien de partage sur téléphone** : pas liée au lien (même rendu sans `?p=`) mais à la largeur. Sous 900 px le gabarit à 3 colonnes
+  restait en place : `#app` (100dvh, overflow hidden) coupait ce qui dépassait, le rail des joueurs (4 cartes sur UNE rangée) faisait 700 px de haut, le panneau latéral
+  était écrasé à 2 px, `BoardRenderer.resize()` fixait le damier au plancher de 280 px et `alignLayout()` le décalait de 400 px vers le bas : il ne restait que la barre
+  du haut sur fond vide : noir dans le thème sombre (le thème par défaut), beige dans le clair.
+- **Règles** : dernier bloc `@media (max-width: 900px)` de `css/style.css` (la page défile : `#app { height: auto; overflow-x: clip }`, rail avec retour à la ligne, panneau de
+  60vh, commandes qui passent à la ligne, barre du haut qui passe à la ligne, jauge masquée). Côté JS, la colonne est détectée par `getComputedStyle(.layout).flexDirection
+  === 'column'` (aucun seuil de 900 px dupliqué) : `BoardRenderer.resize()` donne alors au damier toute la largeur de l'écran (sans limite de hauteur) et `alignLayout()` ne
+  décale plus rien. Au-dessus de 900 px rien ne change. Entre 901 et ≈ 1050 px le damier est au plancher de 280 px et la mise en page à 3 colonnes déborde : non traité.
+- Test sans téléphone : un `<iframe>` de la largeur voulue (même origine) charge `index.html?p=…` ; le redimensionnement de la fenêtre de test ne marche pas.
 
 ### Dimensionnement du damier
 - `BoardRenderer.resize()` mesure la largeur depuis `#app` moins rail (268) et panneau
@@ -157,7 +175,8 @@ sw.js                 service worker (désactivé côté client)
   (`bois`, `ardoise`, `vert`, `beige`), `damika:piece-style` (`classique`, `relief`, `bois gravé`),
   `damika:piece-size`, `damika:speed` (curseur 1-10, partagé animation + lecture auto),
   `damika:arrow-visible` (`1`/`0`, flèche du dernier coup), `damika:arrow-duration`,
-  `damika:sound-muted`, `damika:sound-volume`, `damika:side-tab` (`moves` ou `library`).
+  `damika:sound-muted`, `damika:sound-volume`, `damika:side-tab` (`moves` ou `library`),
+  `damika:analysis-engine` (`v0` ou `v1b`, moteur de l'analyse ; défaut `v0`).
   Mécanisme commun des réglages : valeur lue AVANT le premier rendu, absente/invalide = défaut,
   accès dans un `try/catch` (`Object.hasOwn` pour valider un nom de thème/style). `scheduleSave()`
   débattue 400 ms + flush sur `beforeunload`.
@@ -283,11 +302,14 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
 
 **Backlog** (dans cet ordre ; ne rien commencer sans demande) :
 1. Passe complète de vérification et de peaufinage (PDF compris, V0 validée), avant Mobile.
-2. Mobile, dont le bug du lien de partage qui affiche un écran noir sur téléphone.
+2. Mobile. Le « lien de partage → écran noir sur téléphone » est corrigé depuis le 20/10/2026 (cause : mise en page en colonne inutilisable sous 900 px,
+   voir « Mise en page en colonne » plus bas) mais reste à valider sur un VRAI téléphone ; reste le peaufinage (barre du haut sur 3 rangées, cartes joueurs
+   hautes, `touch-action: none` du damier qui gêne le défilement, jauge d'évaluation masquée).
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
 conformité FMJD approfondie (dont les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » du moteur
-d'analyse : NON implémentées, « plus tard, à décider » avec Mickaël, voir étape 2), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
+d'analyse : NON implémentées dans `main` ; implémentées et commitées sur la branche `regles-6-3-6-4` (worktree `..\DamikA-regles`,
+commit `afe5157`), NON fusionnées ; voir étape 2), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
 (moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
 « État final du chantier IA » en §3 bis ; l'étage 3 (apprentissage) est en cours : étapes 3.1, 3.2 et 3.3 livrées (V1b reste le meilleur modèle validé), voir plus bas.
 
@@ -316,8 +338,11 @@ affichées" : "Sauvegarder la bibliothèque" = export de toute la bibliothèque.
 - **Dette technique : `damika:arrow-duration` accepte n'importe quelle valeur** (`Number(...) || 0`,
   par exemple `99` ou un négatif) au lieu des seules durées proposées par les boutons ; à durcir
   plus tard (valider contre les `data-duration` des boutons).
-- Bug connu laissé tel quel : l'ordre "Récentes" n'est pas appliqué à l'écran
-  (`renderLibrary()` parcourt `library` dans son ordre d'origine).
+- L'ordre "Récentes" (le plus récemment OUVERT en premier, par un clic sur une carte) est appliqué à l'écran depuis le 20/10/2026 :
+  `libraryVisibleOrder()` (`js/library-view.js`, testé) calcule les indices dans l'ordre d'affichage et `renderLibrary()` PARCOURT ce tableau
+  (avant, il parcourait `library` : l'ordre calculé était ignoré). **Limite connue, non corrigée** : Récentes et Favoris sont identifiés par une
+  empreinte du CONTENU (`gameFingerprint()`) ; modifier une partie (même un en-tête) change son empreinte : elle disparaît de « Récentes » et
+  perd son étoile. Correctif possible : migrer l'ancienne empreinte vers la nouvelle dans `activeEntryModified()`.
 - Tester avec une bibliothèque fictive sur `http://127.0.0.1:8934` (origine distincte de
   `localhost`) pour ne pas écraser la vraie bibliothèque du navigateur.
 
@@ -376,8 +401,8 @@ dernier coup). Conventions :
   est active (`.layout.analysis-on .players-rail { padding-right: 18px }`, classe posée par `renderAnalysis()`)
   : les cartes joueurs passent de 268 à 250 px pendant l'analyse. Vérifié aux tailles 1988×1103, 1440×900 et
   1100×800 (damier carré, centré, sans chevauchement ni défilement horizontal, largeur identique analyse
-  active/coupée). Sous 900 px le layout passe en colonne et la jauge est hors écran (chantier Mobile : masquer
-  la jauge sous 900 px). La plaque ne coûte plus de hauteur au damier (taille identique analyse active/coupée) : à l'activation,
+  active/coupée). Sous 900 px le layout passe en colonne (voir « Mise en page en colonne ») et la jauge est MASQUÉE
+  (`.eval-bar { display: none }` dans la requête ≤ 900 px ; score, meilleur coup et flèche verte restent affichés). La plaque ne coûte plus de hauteur au damier (taille identique analyse active/coupée) : à l'activation,
   seule la liste du panneau de droite se raccourcit (~140 px).
 - **Alignement vertical** (`alignLayout()`) : le haut du cadre du damier se cale sur le haut du PANNEAU
   `.side-panel` (jamais sur les onglets, que la plaque repousse) ; la jauge est recalée sur le centre du damier par
@@ -420,7 +445,7 @@ dernier coup). Conventions :
 - Validation : fonctions pures et contrôleur testés sous Node ; UN passage de fumée navigateur
   (activation, analyse jusqu'à la profondeur 11, coupure par la touche A, pas d'erreur console). Le
   visuel (couleurs en thème clair, alignement de la barre sur petits écrans) reste à valider par Mickaël.
-  Mobile : la barre n'a pas été étudiée sous 900 px (chantier Mobile à venir).
+  Mobile : sous 900 px la jauge est masquée (20/10/2026) ; une barre horizontale serait un travail du chantier Mobile.
 
 **État final du chantier IA (fin de session du 18/10/2026).**
 - **Livrés** : étage 1 (moteur de règles rapide, `js/ai/fastboard.js`, validé par perft jusqu'à la profondeur 11 et
@@ -428,8 +453,8 @@ dernier coup). Conventions :
   `analyse`/`stop` du Worker), étage 2b (bouton « Analyse » / touche A : jauge, plaque de score, meilleur coup,
   ligne principale). Tests Node dans `tests/` (voir §2). Le site n'est pas redéployé par l'assistant.
 - **Reste à faire, dans l'ordre du backlog (§3)** : étage 3 (apprentissage des poids de l'évaluation, via
-  `createEvaluator(poids)`) ; passe de vérification/peaufinage (PDF compris) puis Mobile (dont le masquage de
-  la jauge sous 900 px, où le layout passe en colonne et la jauge sort de l'écran) ; réactivation du Service
+  `createEvaluator(poids)`) ; passe de vérification/peaufinage (PDF compris) puis Mobile (la jauge est déjà masquée
+  sous 900 px) ; réactivation du Service
   Worker en dernier. Aussi : valider le moteur sur de VRAIES parties longues de la Bibliothèque (le PDN
   exporté le 19/10 ne contenait que 50 parties de test de 4 à 16 demi-coups : 0 divergence, mais sans dames).
 - **Limites connues de l'évaluation V0 (en termes simples)** : elle compte les pièces et note leur place
@@ -453,7 +478,9 @@ et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/F
   camp (= 50 demi-coups) où seules les dames ont bougé, sans prise ni coup de pion. Les deux sont IMPLÉMENTÉES.
 - **6.3 (16 coups : 3 dames, 2 dames + pion, dame + 2 pions contre une dame ; 5 coups si la dame seule tient la grande
   diagonale, texte 2024) et 6.4 (5 coups : 2 dames, dame + pion, dame contre dame) : NON implémentées.** Décision de
-  Mickaël : plus tard, à décider (elles exigent un historique de l'arrivée de la finale, et les textes 2018 et 2024 diffèrent).
+  Mickaël : plus tard, à décider (elles exigent un historique de l'arrivée de la finale, et les textes 2015 et 2024 diffèrent).
+  **Mise à jour 20/10/2026** : implémentées sur la branche `regles-6-3-6-4` (commit `afe5157`, rapport « Règles 6.3/6.4 » dans le
+  `docs/SESSION_DERNIERE.md` de cette branche), NON fusionnées dans `main`.
 - Moteur : `FastBoard.quiet` (demi-coups sans prise ni coup de pion, tenu par make/unmake, `DRAW_QUIET_PLIES = 50`) ;
   dans `search.js`, un nœud sous la racine vaut 0 si `quiet ≥ 50` ou en répétition (jamais à la racine) ; répétition =
   retour sur le chemin de la recherche (dès la 2e occurrence : cycle) OU 3e occurrence en comptant l'historique de la
@@ -470,7 +497,7 @@ et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/F
   Toute modification de la recherche doit garder `repetition.mjs` ET `search-consistency.mjs` verts.
 
 **Chantier IA, Étage 3, étapes 3.1 et 3.2 « arène, auto-jeu, évaluation apprise » (20/10/2026) : commité, validé par Mickaël.** Détail et chiffres :
-`docs/SESSION_DERNIERE.md` ; commandes : `training/README.md`. Aucun changement visible dans l'appli (elle n'utilise que V0).
+`docs/SESSION_DERNIERE.md` ; commandes : `training/README.md`. Aucun changement visible dans l'appli à ce stade (elle n'utilisait que V0 ; choix du moteur : étape 4.1 plus bas).
 - **3.1 (`training/`)** : `arena.mjs` (`match` A contre B, `selfplay`), en `worker_threads` (cœurs − 1), reprise en relançant la MÊME commande
   (JSONL, ligne tronquée retirée), Ctrl+C propre, veille Windows bloquée (`sleep.mjs`), journal toutes les 30 s ; `game.mjs` (parties avec
   répétition, 25 coups, plafond 300 demi-coups, vérification `rules.js`), ouvertures de K = 8 demi-coups aléatoires rejetées si déséquilibrées
@@ -486,7 +513,7 @@ et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/F
   `--game-weight 1` ou une forte régularisation : les longues nulles de finale noient les données. La perte de validation ne prédit pas la force :
   seule l'arène juge. Évaluer avec une graine DIFFÉRENTE de celle de l'auto-jeu d'entraînement (nuit 1 : graine 1 ; évaluation : 777).
 - Limites : étiquettes issues de V0 (circularité), mesures à profondeur fixe contre V0 seulement, tables sans notion de structure (étape 3.3 : testée, voir ci-dessous),
-  échelle différente de V0 (jauge de la liseuse à recaler si V1b y entre). Limites de finale FMJD 6.3/6.4 toujours non implémentées.
+  échelle différente de V0 (jauge de la liseuse à recaler si V1b y entre). Limites de finale FMJD 6.3/6.4 : non implémentées dans `main` (branche `regles-6-3-6-4`, non fusionnée).
 
 **Chantier IA, Étage 3, étape 3.3 « caractéristiques de STRUCTURE (V2) » (20/10/2026) : commité ; V1b reste le meilleur modèle validé.** Détail et
 chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 3.3 »). Aucun changement visible dans l'appli.
@@ -510,6 +537,26 @@ chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 3.3 »). Aucun changeme
   (`--depth 30 --time 100`, 200 paires) de F1 contre V1b ; confirmation profondeur 8 (150 paires, graine 888) contre V1b puis contre V0. Tant que ces mesures
   ne sont pas faites, ne pas intégrer F1 ; ne pas lancer de match lourd pendant qu'un auto-jeu tourne.
 
+**Chantier IA, Étage 4, étape 4.1 « choix du moteur d'analyse V0 / V1b » (20/10/2026) : commité (`2be67c2`), validé à l'œil par Mickaël ; le lot de corrections du même jour (mise en page en colonne, « Récentes », « Retirer la photo ») est commité aussi (`c5313b2`).**
+Détail et chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 4.1 », avec « Comment tester en 3 minutes »).
+- **Réglage** : menu 🎨, section « Moteur d'analyse » (V0 (actuel) par défaut, V1b (appris)), clé `damika:analysis-engine`, mécanisme commun des réglages (lue AVANT
+  la création du contrôleur ; absente ou invalide = V0). L'interrupteur d'analyse (bouton / touche A) reste non persisté. Avec V1b, la ligne de l'analyse
+  devient « Évaluation indicative · profondeur N · moteur V1b » (V0 : texte inchangé, `formatMeta(result, engineName)`).
+- **Code** : `js/ai/engines.js` (`ENGINES`, `DEFAULT_ENGINE`, **`V1B_MODEL_PATH = 'data/models/v1b-l0.json'` = l'UNIQUE constante du chemin du modèle**, `isEngineId`,
+  `loadEvaluator`, un chargement par Worker) ; option `engine` du message `analyse` du Worker (absente ou `'v0'` = AUCUN évaluateur injecté, résultats identiques à
+  `tests/data/golden-scores.json`) ; `createAnalysisController({ engine })` + `setEngine()` (relance la dernière position ; `engine` n'est envoyé que pour V1b) ;
+  événements `error` avec le texte de l'erreur. **`data/models/v1b-l0.json` est une COPIE de `training/models/v1b-l0.json`** (un test vérifie l'identité) : pour changer
+  de modèle, copier le fichier, changer la constante ET la ligne de comparaison de `tests/engine-select.mjs`, puis relancer `tests/gauge-calibration.mjs`.
+- **Repli** : si un moteur autre que V0 échoue (modèle introuvable ou illisible…), `main.js` repasse à V0 pour la session (toast + `console.warn`) SANS modifier le
+  choix mémorisé ; le menu coche le moteur réellement utilisé.
+- **Jauge** : calibration V0 / V1b mesurée sur 1 140 positions d'auto-jeu (profondeur 8 et 10) : rapport d'échelle V1b / V0 de 1,06 à 1,11 (ouvertures ≈ 0,85, finales 1,06
+  à 1,12), même palier affiché dans 86 à 89 % des cas, rapport de K (prédiction des résultats) 1,02 à 1,06. **Aucun facteur unique n'améliore l'accord : `BAR_SCALE_CP`,
+  `ADVANTAGE_TIERS` et `BIG_SWING` sont inchangés.** À refaire si V1b est réentraîné (`node tests/gauge-calibration.mjs`).
+- **Vitesse** (5 positions, machine chargée par la nuit 2) : à profondeur 10, V1b ≈ ×1,45 en temps total (×1,65 de nœuds, évaluation plus rapide par nœud), très irrégulier
+  selon la position (×0,87 à ×4,06) ; dans le budget réel de 1,5 s, profondeur moyenne identique (11,2 contre 11,2). Chargement du modèle ≈ 4 ms sous Node.
+- **Service Worker** (désactivé) : à sa réactivation, ajouter `js/ai/engines.js`, `data/models/v1b-l0.json` (et les autres `js/ai/*.js`) à `ASSETS`. `deploy.ps1` copie
+  déjà tout `data/`.
+
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
 
@@ -518,8 +565,10 @@ pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test
 - Aucun test automatisé : validation manuelle par Mickaël.
 - Service Worker désactivé : pas de mode hors-ligne.
 - Worker Toernooibase bloquable à tout moment ; logique dupliquée Worker/script Node.
-- Limite connue : "Retirer la photo" compare par égalité stricte sur le nom affiché, donc
-  peut ne rien faire si la photo vient d'une correspondance floue (nom de famille seul).
+- « Retirer la photo » supprime du registre manuel les entrées qui fournissent réellement la photo affichée (`manualPhotoKeys()`, `js/photo-match.js` :
+  autre graphie du nom ou nom de famille seul ; corrigé le 20/10/2026, avant il cherchait la clé à l'identique et ne faisait rien). **Limite connue** : une photo
+  du pré-remplissage automatique (`data/player-photos.json`, balises `WhiteUrl`/`BlackUrl` du PDN) ne peut pas être retirée (un message l'explique) ; il
+  faudrait un « marqueur de suppression » dans le registre. Nom de famille seul : s'il reste une autre entrée du même nom, un 2e clic la retire.
 - **Données nominatives : règle permanente.** `scripts/players.txt` et toute donnée
   nominative de joueurs ne doivent JAMAIS être suivis par git : jamais commités, jamais
   restaurés depuis un ancien `main` ou une autre branche. Le fichier reste en local, dans
