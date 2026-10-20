@@ -691,3 +691,117 @@ Toute la suite Node est verte après les changements : perft 9, `diff` (48 383 p
 
 ### 9. Fichiers produits (rien de commité)
 `js/ai/eval-learned.js`, `tests/eval-learned.mjs`, `tests/fit.mjs`, `training/fit.mjs`, `training/fit-lib.mjs`, `training/models/*.json` (modèles : `v1-l0`, `v1b-l0` (le meilleur), `v1-l05`, `v1b-l05`, `v1-l1`, `v1b-l1`, tour 2 `kt200-…`, `kt800-…`, `a1e3-…`, `gw1-…`, ablations `abl-…`, et les `fit-report.json`), modifs de `training/arena.mjs`, `training/game.mjs`, `training/jobs.mjs`, `training/README.md`, `tests/arena.mjs` ; données et journaux (ignorés par git) dans `training/data/` et `training/logs/`. Reproduire : `node training/fit.mjs --out training/models` (< 1 min ; mêmes fichiers au bit près).
+
+## IA — Étage 3, Étape 3.3 : caractéristiques de STRUCTURE (V2) (20/10/2026) — NON commité ; trois mesures « À FAIRE APRÈS LA NUIT 2 »
+**Résultat en bref.** Six familles de caractéristiques de structure ont été ajoutées à V1b (cible λ = 0, comme demandé) et mesurées dans l'arène contre V1b (profondeur 6, 400 paires, graine 777, 2 workers). **Une seule est retenue : F1 « connexité » : +43 Elo (IC 95 % +23 à +63)** ; sa réplication sur d'autres ouvertures (graine 999) donne **+20 (IC −1 à +41)**, soit **+31 (IC +17 à +46) sur les 800 paires**. Les trois autres testées (F4, F5, F6) sont non significatives (+7, +7, +9) ; F2 et F3 s'arrondissent à des poids nuls (non jouées). Un témoin (mêmes tables, signes de F1 inversés) perd **−58 Elo (IC −83 à −34, 271 paires sur 400, match interrompu)** : l'effet dépend du signe, ce n'est donc pas un simple hasard de départage. **Mais F1 coûte cher en vitesse** : évaluation ×4, −15 % de nœuds par seconde, **+35 % de nœuds à profondeur égale**, et **à 100 ms par recherche V1b atteint la profondeur 7,91 contre 7,61 pour F1** : le gain à profondeur fixe peut disparaître à temps égal (non mesuré : à faire après la nuit 2). **V1b reste donc le meilleur modèle VALIDÉ.** Rien n'est commité ni déployé ; `eval.js`, `search.js` et `golden-scores.json` sont inchangés.
+
+### 0. À FAIRE APRÈS LA NUIT 2 (consigne : aucun match lourd tant qu'elle tourne)
+La nuit 2 (V1b contre V1b, profondeur 8, graine 2, `training/data/selfplay-nuit-2`) n'est pas la mienne : à 13 h 02 elle en était à **1 398 / 8 000 parties, ≈ 730 parties/h** (ralentie par mes matchs et tests ; ≈ 9 h restantes soit vers 22 h à ce rythme, ≈ 19 h 30 si le PC lui est laissé). Dès que `training/data/selfplay-nuit-2/summary.json` existe :
+1. **Réentraînement sur nuit 1 + nuit 2 et remesure** (les tables V1b d'abord, puis la famille F1 par-dessus) :
+   `node training/fit.mjs --data training/data/selfplay-nuit-1,training/data/selfplay-nuit-2 --lambda 0 --phases 3 --tag n12 --grids none` puis
+   `node training/fit.mjs --data training/data/selfplay-nuit-1,training/data/selfplay-nuit-2 --base training/models/n12-v1b-l0.json --families F1 --tag n12s --grids none`,
+   puis matchs contre V1b (profondeur 6, 400 paires, graine 777) :
+   `node training/arena.mjs match --a learned:training/models/n12-v1b-l0.json --b learned:training/models/v1b-l0.json --depth 6 --pairs 400 --seed 777 --workers 6 --out training/data/m33-n12-d6` (idem pour `n12s-F1.json`).
+2. **Test à TEMPS ÉGAL** du meilleur contre V1b (200 paires ; `--time` = millisecondes par coup, la profondeur n'est qu'un plafond ; non reproductible, machine au repos, 6 workers) :
+   `node training/arena.mjs match --a learned:training/models/s33-F1.json --b learned:training/models/v1b-l0.json --depth 30 --time 100 --pairs 200 --seed 777 --workers 6 --out training/data/m33-F1-t100`.
+   Il vérifie si le surcoût d'évaluation mange le gain de F1 (voir §5 : tout laisse prévoir un résultat proche de 0).
+3. **Confirmation du meilleur à la profondeur 8, 150 paires, graine 888**, contre V1b puis contre V0 « pour mémoire » :
+   `node training/arena.mjs match --a learned:training/models/s33-F1.json --b learned:training/models/v1b-l0.json --depth 8 --pairs 150 --seed 888 --workers 6 --out training/data/m33-F1-d8-s888`
+   (et `--b v0 --out training/data/m33-F1-d8-s888-v0`).
+Optionnel, si le temps le permet : terminer le témoin `ctrl-F1-rev` (graine 777) et jouer le témoin `s33-F2` ; jouer les modèles d'exploration `x33-KFW` et `x33-KFWP` (§6). **Budget de candidats : 5 utilisés sur 8** (F5, F6, F1, F4, témoin) ; restent 3 (par exemple réentraînement n1 + n2, `x33-KFW`, `s33-F2`).
+
+### 1. Ce qui a été construit
+- **`js/ai/eval-learned.js` étendu** : chaque phase peut porter `features: { nom: poids entier }` ; éval = tables + Σ poids × (compteur Blancs − compteur Noirs), les Noirs étant traités comme les Blancs d'une position retournée : **symétrie miroir exacte**, **valeurs entières**, aucune génération de coups (compteurs sur le tableau fastboard). Garde-fou de mat étendu : la borne de |éval| devient (borne des tables) + Σ |poids| × maximum du compteur, et doit rester ≤ 29 000 (les modèles dépassant la borne sont refusés par l'évaluateur et signalés INVALIDES par l'apprentissage ; c'est le cas de la combinaison « toutes les caractéristiques » à poids appris sur les résultats, §6). Sans poids non nul, l'évaluateur est celui des tables seules (chemin inchangé). Refonte de l'évaluateur à **une seule passe** : V1b (3 phases) passe de ≈ 175 à ≈ 89 ns par position (×2 plus rapide, résultats identiques).
+- **Les 10 caractéristiques** (toutes en différence Blancs − Noirs ; `max` = majorant utilisé pour la borne de mat) :
+  | Nom | Définition | Famille | max |
+  |---|---|---|---|
+  | `sup` | pions SOUTENUS : une pièce alliée (pion ou dame) sur l'une des 2 cases juste derrière | F1 connexité | 20 |
+  | `pair` | paires de pions alliés voisins en diagonale (comptées une fois) | F1 connexité | 40 |
+  | `blocked` | pions BLOQUÉS : toutes leurs cases avant existantes sont occupées (par une pièce quelconque) | F2 blocage | 20 |
+  | `free` | cases avant LIBRES des pions (0, 1 ou 2 par pion) | F3 mobilité | 40 |
+  | `kmob` | mobilité des dames : cases vides le long des 4 diagonales jusqu'au premier obstacle | F3 mobilité | 360 |
+  | `wing` | déséquilibre des ailes : \| pions colonnes 0-4 − pions colonnes 5-9 \| | F4 ailes | 20 |
+  | `kvm` | dames Blancs × pions Noirs − dames Noirs × pions Blancs | F5 dames | 400 |
+  | `fort` | une dame SEULE sur la grande diagonale (cases 5-46) face à 2 ou 3 pièces | F5 dames | 1 |
+  | `promo` | pions à un pas de la promotion avec une case de promotion libre | F6 idée du jeu | 5 |
+  | `isol` | pions ISOLÉS : aucune pièce alliée sur les 4 cases diagonales voisines | F6 idée du jeu | 20 |
+  **Redondances (constat)** : seuls les compteurs NON linéaires en « pièce sur case » apportent quelque chose aux tables. Un nombre de pions par aile, de pions au centre, ou de dames sur la grande diagonale est une somme de valeurs par case : déjà dans les tables, donc non testé tel quel (j'ai testé `wing` = |écart|, non linéaire, et `fort` = interaction avec le matériel adverse). De même « pions ayant au moins une case avant libre » = nombre de pions − `blocked` : redondant avec F2 + tables ; F3 teste donc `free` (distingue 1 case de 2) et `kmob` (mobilité des dames : mesurée, coût élevé, §5). F6 = deux idées du jeu : `promo` (un pion à un pas de la promotion dont la case de promotion est libre est presque une dame, un pion bloqué non) et `isol` (un pion isolé ne peut être soutenu et est une cible).
+- **Apprentissage** : `training/fit-struct.mjs` + `fit-struct-run.mjs`, appelés par `training/fit.mjs --families F1,…,F6 | --features a,b | --combo a,b [--freeze-tables] [--data dossier1,dossier2]` ; `training/bench-eval.mjs` (coût en ns par position et nœuds/s sur des positions réelles, mesures entrelacées) ; `training/README.md` mis à jour. Les caractéristiques de l'apprentissage et de l'évaluateur sont calculées par **la même fonction** (`computeFeatures`) : aucun écart possible ; un contrôle vérifie, pour chaque modèle écrit, que l'évaluateur réel redonne exactement les évaluations de l'ajustement (20 353 positions, 0 écart).
+
+### 2. Méthode d'apprentissage (identique à l'étape 3.2, étendue)
+Données : `selfplay-nuit-1` (956 580 positions calmes retenues, validation = 15 % des PARTIES, graine 1) ; cible λ = 0 : σ(score de recherche / K_t), **K_t = 415,9**, **K_m = 410,4** (meilleur K de V0 sur la validation, figé) ; Newton/IRLS déterministe ; L2 vers V1b (poids de structure ramenés vers 0) ; **ajustement CONJOINT** des tables et des poids (une caractéristique est corrélée à des sommes de tables). **Choix « poids global ou par phase » par la mesure** : on part de poids globaux et, pour chaque caractéristique, on garde un poids par phase seulement si la perte de validation baisse d'au moins 5·10⁻⁵ nat/position : **aucune caractéristique n'a franchi ce seuil, toutes sont globales** (meilleur candidat : `kvm` par phase, 2,1·10⁻⁵). α ∈ {10⁻⁶, 10⁻⁵, 10⁻⁴, 10⁻³} choisi sur la validation ; poids arrondis à l'entier, pertes recalculées avec les valeurs arrondies. **Pondération des parties** : uniforme (poids 1) ; le diagnostic de 3.2 (1/longueur utile pour les cibles contenant des résultats, λ > 0) ne concerne pas la cible « score de recherche » ; elle est utilisée au §6 (λ > 0). Reproductibilité : `tests/fit-struct.mjs` (deux exécutions du CLI : tous les fichiers identiques au bit près) ; V1b (base) retrouvé à 0,665917 de perte de validation, et le « témoin » (tables de V1b réajustées sans caractéristique) à 0,665917 (écart −4,5·10⁻⁷) : le réajustement seul ne change rien.
+
+### 3. Résultats d'apprentissage : perte de validation (cible λ = 0, nat/position ; V1b = 0,665917)
+| Famille | Poids appris (entiers, identiques dans les 3 phases) | Gain contre V1b | Borne de mat | Remarque |
+|---|---|---|---|---|
+| F1 `sup` + `pair` | sup +3, pair −3 | 4,6·10⁻⁶ | 6 634 | α 10⁻⁴ |
+| F2 `blocked` | aucun (−0,24 avant arrondi) | 7·10⁻⁷ | 6 504 | tables ≤ 10 cp de V1b |
+| F3 `free` + `kmob` | aucun (free +1,25, kmob −0,59 avant arrondi ; α 10⁻³ choisi) | 0 | 6 454 | modèle identique à V1b |
+| F4 `wing` | wing −1 (−1,23 avant arrondi) | 3,3·10⁻⁶ | 6 474 | |
+| F5 `kvm` + `fort` | kvm +16, fort +31 | **1,7·10⁻⁴** | 12 597 | tables jusqu'à 106 cp de V1b (cases rares) |
+| F6 `promo` + `isol` | promo +112 (isol +0,26 → 0) | 6·10⁻⁵ | 7 068 | tables jusqu'à 108 cp de V1b |
+**Lecture** : avec cette cible, les caractéristiques n'apportent presque rien (≤ 1,7·10⁻⁴, contre 1,0·10⁻³ pour le passage de V0 à V1b) : le score de recherche de V0 / V1b ne contient pas de structure que leur évaluation ne voit pas (§6). Seuls `kvm`/`fort` et `promo` sont mesurables.
+
+### 4. Mesures dans l'arène (seul juge) : candidat A contre V1b (B), profondeur 6, 400 paires, graine 777, `--workers 2`, un match à la fois
+| Candidat | V / N / D de A | Score | Elo (A − V1b) | IC 95 % | Décision |
+|---|---|---|---|---|---|
+| **F1** (sup +3, pair −3) | 328 / 242 / 230 | 56,1 % | **+43** | +23 à +63 | **retenu** |
+| F1, **réplication graine 999** | 303 / 240 / 257 | 52,9 % | +20 | −1 à +41 | (même modèle, autres ouvertures) |
+| F1, **poolé** graines 777 + 999 (800 paires) | 631 / 482 / 487 | 54,5 % | **+31** | +17 à +46 | effet positif, plus modeste que le premier chiffre |
+| F4 (wing −1) | 285 / 247 / 268 | 51,1 % | +7 | −12 à +26 | rejeté (non significatif) |
+| F5 (kvm +16, fort +31) | 289 / 238 / 273 | 51,0 % | +7 | −12 à +26 | rejeté (non significatif) |
+| F6 (promo +112) | 289 / 243 / 268 | 51,3 % | +9 | −10 à +29 | rejeté (non significatif) |
+| F2 (blocked) | non joué | | | | poids tous nuls : modèle ≈ V1b (tables ≤ 10 cp d'écart) |
+| F3 (free, kmob) | non joué | | | | poids tous nuls : modèle IDENTIQUE à V1b |
+| **Témoin `ctrl-F1-rev`** (tables de F1, signes inversés : sup −3, pair +3) | 148 / 156 / 238 | 41,7 % | **−58** | −83 à −34 | **271 paires sur 400 seulement (arrêt forcé par mon quota)** |
+**Interprétation** (à confirmer) : les poids de F1 sont minuscules (±3 cp), et pourtant inverser leurs signes fait passer de +43 à −58 contre V1b (≈ 100 Elo d'écart) : ce n'est pas un artefact de « perturbation quelconque » mais un effet de structure. En regroupant par pion : F1 vaut 3·sup − 3·(pions alliés derrière) = **0 pour un pion soutenu par un seul pion, −3 pour un pion soutenu par DEUX pions (formation compacte en triangle), +3 pour un pion soutenu seulement par une dame** : F1 pénalise légèrement les formations trop compactes, le témoin les récompense. Une évaluation V1b « plate » (beaucoup d'égalités) laisse la recherche choisir arbitrairement entre positions équivalentes ; un petit terme de structure sert de DÉPARTAGE cohérent, d'où un effet sans rapport avec la petite taille des poids. **Limites du témoin** : interrompu à 271 paires (les paires les plus longues, donc plus souvent nulles, se terminent en dernier : l'échantillon partiel est peut-être biaisé vers les parties décisives) ; aucun témoin « perturbation aléatoire de même taille » ni `s33-F2` (tables réajustées sans caractéristique) n'a été joué.
+
+### 5. Ce que F1 coûte en vitesse (mesures sur POSITIONS RÉELLES de l'auto-jeu, mesures entrelacées ; la machine était chargée par la nuit 2 : seuls les RAPPORTS comptent)
+| Modèle | Évaluation (ns / position) | Rapport à V1b | Recherche (k nœuds/s, profondeur 7) | Rapport | Nœuds à la profondeur 7 |
+|---|---|---|---|---|---|
+| V1b (tables seules, 3 phases) | 123 | 1,00 | 682 | 1,00 | 121 k |
+| **V2-F1** (sup, pair) | **494** | **4,03** | **582** | **0,85** | **164 k (+35 %)** |
+| V2-F4 (wing) | 410 | 3,34 | 611 | 0,90 | 113 k |
+| V2-F5 (kvm, fort) | 358 | 2,92 | 622 | 0,91 | 127 k |
+| V2-F6 (promo) | 499 | 4,07 | 595 | 0,87 | 114 k |
+| x33-KFW (kvm, fort, wing) | 425 | 3,47 | 604 | 0,88 | 137 k |
+| x33-KFWP (7 caractéristiques) | 673 | 5,49 | 558 | 0,82 | 188 k |
+- **Coût de chaque caractéristique prise seule** (machine au repos, positions aléatoires de 14 pièces en moyenne, base V1b = 87 ns) : `kvm` +147 ns, `fort` +151, `wing` +169, `pair` +184, `sup` +202, `free` +215, `blocked` +217, `isol` +227, `promo` +233, `kmob` +299 ; **les 10 ensemble : 627 ns** (7× V1b). Le surcoût se paie surtout en passes et en lectures de voisins, pas en arithmétique ; un chemin spécialisé `sup + pair` pourrait gagner un facteur ≈ 1,5 au mieux (les bitboards n'aideraient pas : le tableau fastboard doit d'abord être converti, une passe de 50 cases), donc pas de miracle à attendre.
+- **Effet sur la recherche** : l'évaluation n'est qu'une part du temps d'un nœud, d'où seulement −15 % de nœuds/s pour F1 ; mais **à profondeur égale F1 visite 35 % de nœuds en plus** (moins d'évaluations égales, donc moins de coupures alpha-bêta) : **à 100 ms par recherche (40 positions réelles × 2 passages), profondeur moyenne atteinte : V1b 7,91 / 7,90, F1 7,61 / 7,63 (−0,3 coup), F5 7,79.** Un coup de profondeur valait ≈ +190 Elo à ces profondeurs (profondeur 8 contre 6 : +382 ; étape 3.1), donc −0,3 coup ≈ −55 Elo : **le gain de F1 à profondeur fixe (+31 à +43) risque d'être annulé à temps égal**, d'où le test du §0 (2).
+
+### 6. Diagnostic : pourquoi si peu, et où est l'information
+1. **La cible λ = 0 ne contient pas de structure.** Les étiquettes sont les scores de recherche de V0 / V1b : la recherche voit les tactiques, pas des préférences de formation que l'évaluation ignore. D'où des gains de perte ≤ 1,7·10⁻⁴ et des poids de 0 à ±3 cp, sauf `kvm`, `fort`, `promo`.
+2. **Les résultats des parties, eux, en contiennent** (mesure de perte seulement, **non jouée dans l'arène**). En apprenant UNIQUEMENT les poids de structure avec les tables de V1b FIGÉES (`--freeze-tables`, parties pondérées 1/longueur, K_m = meilleur K de V1b : 233 cp pour λ = 0,5, 261 cp pour λ = 1 ; V1b = 0,639566 / 0,647706) :
+   | Famille | Gain de perte λ = 0,5 | Poids (λ = 0,5) | Gain de perte λ = 1 |
+   |---|---|---|---|
+   | F5 `kvm`, `fort` | 3,0·10⁻³ | kvm +18, fort +137 | **8,2·10⁻³** (kvm +31, fort +255) |
+   | F3 `free`, `kmob` | 2,0·10⁻³ | free +7 ; kmob −21 / +19 / −5 selon la phase (instable) | 7,5·10⁻³ |
+   | F4 `wing` | 7,3·10⁻⁴ | wing −4 / −9 / −14 (pénalise le déséquilibre, de plus en plus en fin de partie) | 2,3·10⁻³ |
+   | F1 `sup`, `pair` | 2,8·10⁻⁴ | sup +4 / +10 / +6, pair −3 | 1,0·10⁻³ |
+   | F6 `promo`, `isol` | 3,1·10⁻⁴ | promo +52 / +155 / +57 | 8,8·10⁻⁴ |
+   | F2 `blocked` | ≈ 0 | blocked +1 | 7·10⁻⁵ |
+   | Toutes ensemble | **INVALIDE** (borne de mat 33 210 ; 62 051 à λ = 1) | | |
+   | `x33-KFW` (kvm, fort, wing), λ = 0,5 | 3,2·10⁻³ | kvm +16, fort +133, wing −8 | |
+   | `x33-KFWP` (kvm, fort, wing, sup, pair, promo, free), λ = 0,5 | 7,3·10⁻³ | borne 24 374 (valide) | |
+   `fort` +137 à +255 dit que « une dame seule sur la grande diagonale contre 2-3 pièces » est presque nulle dans les parties (règles de répétition et des 25 coups appliquées dans l'arène, cohérent avec FMJD 6.3 non implémentée) : V1b surestime l'avantage matériel de ces finales.
+3. **Les poids entiers masquent de petits effets** : F2 (−0,24), F3 (free +1,25, kmob −0,59 avant le choix de α) et F4 (−1,23) s'arrondissent à 0 ou ±1 ; or F1 montre que quelques centipions suffisent à départager. Une résolution plus fine (poids au quart de centipion avec troncature vers 0 de la somme, qui garde la symétrie exacte) n'a pas été essayée.
+4. **Combinaison des retenues** : seule F1 est retenue ; la « combinaison » est donc F1 seule. Les familles non retenues (F4, F5, F6) ne sont PAS ajoutées par-dessus. Les modèles `x33-*` (poids appris sur les résultats) sont prêts mais non joués : ils testeraient l'hypothèse du point 2 dans l'arène.
+
+### 7. Limites
+- **Profondeur fixe uniquement** : le test à temps égal, la confirmation à la profondeur 8 (graine 888) et le réentraînement sur nuit 1 + nuit 2 sont à faire (§0). Les coûts du §5 ont été mesurés sur une machine chargée (nuit 2) : seuls les rapports sont fiables ; les valeurs « au repos » (87 / 627 ns) viennent de tests sur positions aléatoires.
+- **F1 : effet modeste et dépendant des ouvertures** (+43 puis +20, poolé +31 [+17 ; +46]) ; interprétation par départage et par pénalité de formations compactes plausible mais non démontrée ; témoin partiel ; aucun test de dose (poids ±1 ou ±6).
+- **Données de V0 (nuit 1)** : les poids ont été appris sur des parties V0 contre V0 ; la nuit 2 (V1b contre V1b) correspond mieux au moteur actuel.
+- **Poids entiers** (pas de résolution sub-centipion), définitions simplifiées (`sup` compte aussi une dame derrière le pion ; `pair` ne compte que des pions ; `blocked` : toute pièce comme obstacle ; `fort` suppose la grande diagonale 5-46 et 2 ou 3 pièces adverses).
+- Sélection d'α et du mode global / phase faite sur la validation (légèrement optimiste pour la perte annoncée) ; la force, elle, est mesurée par des parties séparées. Budget de candidats : 5 sur 8.
+- Matchs réalisés avec `--workers 2` pendant que la nuit 2 tournait (elle en a été ralentie : ≈ 730 parties/h au lieu de ≈ 1 100).
+
+### 8. Recommandation pour la suite
+1. **Garder V1b comme référence** ; ne pas intégrer F1 (ni l'analyse de la liseuse, ni l'auto-jeu) avant le test à temps égal.
+2. **Après la nuit 2** : réentraîner V1b sur nuit 1 + nuit 2 (probablement le meilleur usage de ces données, sans surcoût de vitesse), puis refaire F1 par-dessus et mesurer à temps égal.
+3. Si F1 survit à temps égal : écrire un chemin spécialisé `sup + pair` (gain ≈ ×1,5 sur le coût), tester ses poids (dose : ±1, ±3, ±6) et sa variante « pénalité de la double protection » seule.
+4. Si l'on veut des caractéristiques plus riches : les apprendre avec des cibles contenant les résultats, tables figées, parties pondérées (§6.2), en surveillant la borne de mat ; commencer par `x33-KFW` (3 poids, coût modéré) à temps égal.
+5. À décider plus tard : résolution fractionnaire des poids ; limites de finale FMJD 6.3 / 6.4 (leur absence rend `fort` utile et les finales de dames de l'auto-jeu peu informatives).
+
+### 9. Tests et fichiers
+**Toute la suite Node est verte** (18 suites, relancées à 13 h 06, nuit 2 en cours : les écarts de VITESSE sont ignorés comme convenu) : `perft` 9, `diff` (aucune divergence), `perft-positions`, `worker`, `eval-symmetry`, `search-consistency`, `tactics` 20/20 (dont `golden-scores` via `repetition`), `mate`, `match`, `worker-analyse`, `analysis-format`, `analysis-controller`, `repetition`, `eval-learned`, `eval-structure` (nouveau), `fit`, `fit-struct` (nouveau), `arena`. Reproductibilité de `fit.mjs` au bit près : modèles V1/V1b de l'étape 3.2 régénérés identiques après l'extension multi-sources ; `tests/fit-struct.mjs` compare deux exécutions complètes du CLI.
+Fichiers (non commités) : `js/ai/eval-learned.js` (modifié), `tests/eval-learned.mjs` (adapté), `tests/eval-structure.mjs` (nouveau : référence lente indépendante sur 6 000 positions dont 3 928 avec dames, symétrie miroir exacte sur 3 000 positions pour un jeu et pour 3 phases, formule explicite tables + Σ poids × caractéristiques, masques, borne de mat atteinte, format de fichier, vitesse), `tests/fit-struct.mjs` (nouveau : poids vrais retrouvés à 0,2 cp, choix global / par phase, cohérence évaluateur ↔ ajustement sur 21 000 positions, multi-sources, CLI reproductible au bit près), `training/fit-struct.mjs`, `training/fit-struct-run.mjs`, `training/fit-lib.mjs` (multi-sources), `training/fit.mjs`, `training/bench-eval.mjs`, `training/README.md`, `training/models/` : `s33-F1…F6.json`, `s33-fit-struct-report.json`, `x33-KFW.json`, `x33-KFWP.json`, `x33-fit-struct-report.json`, `ctrl-F1-rev.json`. Journaux et parties : `training/logs/` et `training/data/` (ignorés par git ; matchs `m33-*`). Reproduire les ajustements : `node training/fit.mjs --data training/data/selfplay-nuit-1 --base training/models/v1b-l0.json --families F1,F2,F3,F4,F5,F6 --tag s33 --grids none` (≈ 40 s ; mêmes fichiers au bit près).

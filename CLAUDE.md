@@ -289,7 +289,7 @@ Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en l
 conformité FMJD approfondie (dont les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » du moteur
 d'analyse : NON implémentées, « plus tard, à décider » avec Mickaël, voir étape 2), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
 (moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
-« État final du chantier IA » en §3 bis ; l'étage 3 (apprentissage) est en cours : étapes 3.1 et 3.2 livrées, voir plus bas.
+« État final du chantier IA » en §3 bis ; l'étage 3 (apprentissage) est en cours : étapes 3.1, 3.2 et 3.3 livrées (V1b reste le meilleur modèle validé), voir plus bas.
 
 ## 3 bis. Dernier chantier clos (état au 07/10/2026)
 
@@ -485,8 +485,30 @@ et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/F
   +170 à +177 (profondeur 8, 150 paires), graine d'évaluation différente de celle des données.** λ = 1 (résultats bruts) échoue sauf avec
   `--game-weight 1` ou une forte régularisation : les longues nulles de finale noient les données. La perte de validation ne prédit pas la force :
   seule l'arène juge. Évaluer avec une graine DIFFÉRENTE de celle de l'auto-jeu d'entraînement (nuit 1 : graine 1 ; évaluation : 777).
-- Limites : étiquettes issues de V0 (circularité), mesures à profondeur fixe contre V0 seulement, tables sans notion de structure (étape 3.3),
+- Limites : étiquettes issues de V0 (circularité), mesures à profondeur fixe contre V0 seulement, tables sans notion de structure (étape 3.3 : testée, voir ci-dessous),
   échelle différente de V0 (jauge de la liseuse à recaler si V1b y entre). Limites de finale FMJD 6.3/6.4 toujours non implémentées.
+
+**Chantier IA, Étage 3, étape 3.3 « caractéristiques de STRUCTURE (V2) » (20/10/2026) : commité ; V1b reste le meilleur modèle validé.** Détail et
+chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 3.3 »). Aucun changement visible dans l'appli.
+- **Format** : chaque phase d'un fichier de tables peut porter `features: { nom: poids entier }` (registre `FEATURES` de `js/ai/eval-learned.js` : `sup`,
+  `pair`, `blocked`, `free`, `kmob`, `wing`, `kvm`, `fort`, `promo`, `isol`) ; éval = tables + Σ poids × (compteur Blancs − compteur Noirs), symétrie miroir
+  exacte, entiers, compteurs calculés sur le tableau fastboard (aucune génération de coups, une seule définition partagée par l'évaluateur et l'apprentissage).
+  Garde-fou : la borne de |éval| (tables + Σ |poids| × maximum du compteur) doit rester ≤ 29 000, sinon l'évaluateur REFUSE le fichier (l'apprentissage
+  signale le modèle INVALIDE). Seuls les compteurs NON linéaires en « pièce sur case » apportent quelque chose aux tables (pions par aile, au centre, dame
+  sur la grande diagonale : déjà dans les tables). L'évaluateur est à une seule passe (V1b : ≈ 89 ns par position, deux fois plus rapide qu'avant).
+- **Outils** : `node training/fit.mjs --base training/models/v1b-l0.json --families F1,…,F6 | --features a,b | --combo a,b [--freeze-tables] [--data dossier1,dossier2]`
+  (`fit-struct.mjs`, `fit-struct-run.mjs` : ajustement CONJOINT tables + poids, choix global / par phase par la perte de validation) ; `node training/bench-eval.mjs
+  <modèles>` (ns par position et nœuds/s sur positions réelles, mesures entrelacées : seuls les rapports comptent si la machine est chargée).
+- **Résultats** (nuit 1, λ = 0, L2 vers V1b ; candidat contre V1b, profondeur 6, 400 paires, graine 777) : **F1 connexité (sup +3, pair −3) +43 [+23 ; +63]**,
+  réplication graine 999 +20 [−1 ; +41], poolé +31 [+17 ; +46] ; F4 ailes, F5 dames, F6 promotion / pions isolés : +7, +7, +9 (non significatifs, rejetés) ; F2 et F3 :
+  poids arrondis à 0 (non jouées). Témoin (mêmes tables, signes de F1 inversés) : −58 [−83 ; −34] sur 271 paires (interrompu) : l'effet dépend du signe.
+- **Coût** : F1 = évaluation ×4, −15 % de nœuds par seconde, **+35 % de nœuds à profondeur égale** ; profondeur moyenne en 100 ms : 7,61 contre 7,91 pour V1b : le gain
+  à profondeur fixe peut disparaître à temps égal. **F1 n'est PAS intégrée.** Avec λ = 0 les caractéristiques n'apportent presque rien à la perte (les étiquettes sont des
+  scores de recherche) ; avec les résultats des parties (λ > 0, parties pondérées, tables figées) la perte baisse nettement (F5 jusqu'à 8·10⁻³) : modèles `x33-KFW` et
+  `x33-KFWP` prêts, NON joués dans l'arène.
+- **À FAIRE après la nuit 2** (`training/data/selfplay-nuit-2/summary.json`) : réentraîner V1b sur nuit 1 + nuit 2 et remesurer (graine 777) ; test à TEMPS ÉGAL
+  (`--depth 30 --time 100`, 200 paires) de F1 contre V1b ; confirmation profondeur 8 (150 paires, graine 888) contre V1b puis contre V0. Tant que ces mesures
+  ne sont pas faites, ne pas intégrer F1 ; ne pas lancer de match lourd pendant qu'un auto-jeu tourne.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
