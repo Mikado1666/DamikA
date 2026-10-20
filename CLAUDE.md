@@ -289,7 +289,7 @@ Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en l
 conformité FMJD approfondie (dont les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » du moteur
 d'analyse : NON implémentées, « plus tard, à décider » avec Mickaël, voir étape 2), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
 (moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
-« État final du chantier IA » en §3 bis ; reste l'étage 3 (apprentissage des poids).
+« État final du chantier IA » en §3 bis ; l'étage 3 (apprentissage) est en cours : étapes 3.1 et 3.2 livrées, voir plus bas.
 
 ## 3 bis. Dernier chantier clos (état au 07/10/2026)
 
@@ -468,6 +468,25 @@ et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/F
 - Tests : `node tests/repetition.mjs` (compteur, cycle 1D/1D, 25 coups, 3e occurrence, scores identiques à l'ancien moteur
   via `tests/data/golden-scores.json`, TT, Worker, contrôleur) ; toute la suite Node verte ; vitesse inchangée (±3 %).
   Toute modification de la recherche doit garder `repetition.mjs` ET `search-consistency.mjs` verts.
+
+**Chantier IA, Étage 3, étapes 3.1 et 3.2 « arène, auto-jeu, évaluation apprise » (20/10/2026) : commité, validé par Mickaël.** Détail et chiffres :
+`docs/SESSION_DERNIERE.md` ; commandes : `training/README.md`. Aucun changement visible dans l'appli (elle n'utilise que V0).
+- **3.1 (`training/`)** : `arena.mjs` (`match` A contre B, `selfplay`), en `worker_threads` (cœurs − 1), reprise en relançant la MÊME commande
+  (JSONL, ligne tronquée retirée), Ctrl+C propre, veille Windows bloquée (`sleep.mjs`), journal toutes les 30 s ; `game.mjs` (parties avec
+  répétition, 25 coups, plafond 300 demi-coups, vérification `rules.js`), ouvertures de K = 8 demi-coups aléatoires rejetées si déséquilibrées
+  puis jouées deux fois couleurs inversées ; `stats.mjs` (Elo et IC 95 % par PAIRES) ; `verify.mjs`. Données et journaux : `training/data/`,
+  `training/logs/` (ignorés par git). `search.js` accepte un évaluateur injectable (`evaluator`) et un budget de nœuds (`maxNodes`).
+  Mesuré (8 cœurs) : profondeur 6 ≈ 9 300 parties/h, profondeur 8 ≈ 870 (V0) à ≈ 1 140 (V1b), profondeur 10 ≈ 150 ; mémoire stable ~1,2 Go.
+- **3.2 (évaluation apprise)** : V0 est exactement une SOMME DE VALEURS PAR CASE (pion, dame ; pièce noire en i = blanche en 49 − i).
+  `js/ai/eval-learned.js` : `createTableEvaluator({man,king} | {phases:[{minPieces,man,king}]})`, entiers, symétrie exacte, garde-fou de mat
+  (borne exacte de |éval| ≤ 29 000). `--evaluator learned:<fichier>` dans l'arène (identité du run = empreinte du CONTENU). `training/fit.mjs` :
+  Newton/IRLS déterministe, cible λ·résultat + (1−λ)·σ(score/K_t), L2 vers V0, validation = 15 % des PARTIES, modèles dans `training/models/`.
+  **Meilleur : V1b λ = 0 (`training/models/v1b-l0.json`, 3 phases ≥ 30 / 15–29 / < 15 pièces) : +211 Elo contre V0 (profondeur 6, 400 paires),
+  +170 à +177 (profondeur 8, 150 paires), graine d'évaluation différente de celle des données.** λ = 1 (résultats bruts) échoue sauf avec
+  `--game-weight 1` ou une forte régularisation : les longues nulles de finale noient les données. La perte de validation ne prédit pas la force :
+  seule l'arène juge. Évaluer avec une graine DIFFÉRENTE de celle de l'auto-jeu d'entraînement (nuit 1 : graine 1 ; évaluation : 777).
+- Limites : étiquettes issues de V0 (circularité), mesures à profondeur fixe contre V0 seulement, tables sans notion de structure (étape 3.3),
+  échelle différente de V0 (jauge de la liseuse à recaler si V1b y entre). Limites de finale FMJD 6.3/6.4 toujours non implémentées.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.

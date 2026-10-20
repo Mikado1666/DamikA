@@ -446,3 +446,248 @@ Un score dépendant de l'historique ne doit pas polluer la table. Retenu : **« 
 - L'interface n'affiche rien de nouveau : `drawRule` est dans le résultat mais non exploité (« sans nouvelle fonction ») ; une position déjà nulle par règle continue d'être analysée normalement.
 - Un score `-0` peut apparaître côté Noirs pour une nulle (sans effet à l'affichage ; `formatScore` n'affiche aucun signe pour 0,0).
 - Non fait : mise à jour de `CLAUDE.md` (attend ta validation). Rien n'est commité ni déployé.
+
+
+## IA — Étage 3, étape 3.1 : arène, auto-jeu et enregistrement de données (19/10/2026) — NON commité, en attente de ton retour
+Aucun changement visible dans l'appli. Code dans `training/` (voir `training/README.md`, commandes prêtes à coller), un test `tests/arena.mjs`, et une retouche de `js/ai/search.js`. Données et journaux dans `training/data/` et `training/logs/` (ajoutés au `.gitignore` ; `git status` ne les voit pas). Aucun nom de joueur dans ces données (parties jouées par le moteur).
+
+### 0. Matériel détecté
+8 cœurs logiques (Intel Core i7-9700 @ 3,0 GHz), 15,9 Go de RAM (≈ 6 Go libres au moment de la mesure), carte graphique NVIDIA GeForce RTX 2060 (6 Go de mémoire vidéo, pilote 610.88), Node v24.19.0, Python 3.12.7 avec NumPy 2.4.6, **PyTorch absent** (rien installé). Conclusion pour plus tard : un mini-réseau est matériellement envisageable (RTX 2060 + CUDA), mais il faudrait installer PyTorch (ou équivalent) ; pour l'étape 3.2 (réglage d'une trentaine de poids), le CPU et Node suffisent largement.
+
+### 1. Ce qui a été construit
+- **`js/ai/search.js` (seul changement hors `training/`)** : l'évaluateur est maintenant injectable (`analyse*(position, { evaluator })`, fonction `evalWhite` de `createEvaluator(poids)` ; défaut = V0) et un **budget de nœuds** déterministe existe (`maxNodes`, défaut infini ; arrêt à 2048 nœuds près, dernière profondeur terminée conservée). `eval.js` n'est PAS modifié. Aucun score ne change : `tests/data/golden-scores.json` (60 positions, scores, mats et meilleurs coups identiques à ceux d'avant l'étape 2) et toute la suite restent verts ; vitesse inchangée (voir g).
+- **`training/game.mjs`** : une partie complète (moteur rapide pour jouer, `rules.js` en vérification) : perte si plus de coup (contrôlée en premier), nulle à 50 demi-coups sans prise ni coup de pion, nulle à la 3e répétition (historique transmis au moteur par le mécanisme de l'étape 2), nulle à 300 demi-coups. Limites de finale FMJD 6.3/6.4 : non appliquées (décision de Mickaël). Hasard par graine : `seedOf(graine, étiquette, indice)` donne à chaque ouverture / chaque partie son propre flux (indépendant de l'ordre d'exécution). Ouvertures : K = 8 demi-coups au hasard, rejetées si |évaluation V0 à la profondeur 4| > 0,5 pion ou mat (jusqu'à 500 essais). Exploration (auto-jeu uniquement) : à chaque coup après l'ouverture, avec la probabilité `--explore-prob` (0,08), coup tiré au hasard parmi ceux dont le score (recherche à profondeur − 1) est à moins de `--explore-margin` (30 cp) du meilleur ; désactivée en match. `verifyGame()` rejoue une partie enregistrée avec `rules.js` seul : légalité de chaque coup, partie jamais terminée avant son dernier coup, état terminal et motif exacts.
+- **`training/arena.mjs`** (`match` et `selfplay`) : `worker_threads`, workers = cœurs − 1 par défaut, priorité système abaissée (`BELOW_NORMAL`), worker planté = relancé et tâche rejouée (3 essais), profondeur fixe obligatoire (`--depth`, ou `--depth-a/--depth-b`), budgets `--nodes` (reproductible) et `--time` (non reproductible) en option. Une tâche = une paire (match : même ouverture, couleurs inversées) ou une partie. JSONL ligne par ligne (une paire = deux lignes en UNE écriture) ; reprise = même commande (ligne finale tronquée retirée, paire à moitié écrite retirée, rien de rejoué), réglages différents dans un dossier existant = refus. Ctrl+C : arrêt immédiat et propre, `summary.json` écrit. Suivi toutes les 30 s (terminal + `training/logs/<out>.log`) : tâches faites, parties/h, V/N/D, temps restant, mémoire. `training/verify.mjs` : rejoue un dossier avec `rules.js`. `training/sleep.mjs` : voir §5.
+- **Statistiques de match** (`training/stats.mjs`) : l'unité statistique est la **paire** (les deux parties d'une paire partagent l'ouverture, elles ne sont pas indépendantes). Score de la paire pour A : m = (points partie 1 + points partie 2)/2 (victoire 1, nulle 0,5). Score moyen s = moyenne des m ; erreur-type = écart-type empirique des m (variance corrigée n − 1) / √n ; intervalle à 95 % = s ± 1,96·erreur-type (approximation normale), borné à [0 ; 1] ; **Elo(s) = 400·log10(s/(1 − s))**, appliqué à s et aux deux bornes (s = 0 ou 1 → ±∞). Avertissements : moins de 2 paires (pas d'intervalle) ; moins de 100 paires (« échantillon FAIBLE ») ; intervalle contenant 0 Elo (« différence NON significative »).
+- **Données d'auto-jeu** (format détaillé dans `training/README.md`) : une ligne par partie avec, pour chaque position HORS ouverture aléatoire (le nombre de demi-coups d'ouverture est donné à part, champ `opening`) : plateau en 50 caractères (`.` vide, `w`/`W` pion/dame blanc, `b`/`B` pion/dame noir), camp au trait, n° de demi-coup, compteur de demi-coups sans prise ni coup de pion, score de recherche (centipions, point de vue des Blancs ; ≥ 29 000 en valeur absolue = mat), profondeur, indicateur « prise disponible » ; le résultat final (point de vue des Blancs) est dans `result`. JSONL texte choisi (≈ 12 Ko par partie de ~150 demi-coups, soit ~80 octets par position) : simple à relire et à filtrer, ~0,9 Go pour 74 000 parties ; un binaire n'a pas été jugé nécessaire à cette échelle.
+
+### 2. Tests de validation (chiffres réels, machine décrite en §0)
+- **a. Miroir** — V0 contre V0, profondeur 4, **200 paires** (400 parties, 9 s) : A 164 victoires, 72 nulles, 164 défaites = **50,0 %** (Elo 0). L'intervalle est dégénéré (50,0 à 50,0 %) : deux moteurs identiques et déterministes rejouent exactement la même partie dans les deux sens, donc chaque paire vaut exactement 0,5 ; ce test valide donc la comptabilité (couleurs, points, appariement), pas la force. Test plus parlant : V0 contre V0 légèrement modifié (`centerCoreMan` 5 → 6, joueurs quasi égaux), même profondeur, 200 paires : **A 164 V, 82 N, 154 D = 51,2 %** (IC 95 % 47,1 à 55,4 %, Elo +9 [−20 ; +38]) → dans l'intervalle de 50 %, aucun biais de couleur ni d'ouverture visible.
+- **b. Sensibilité** — V0 profondeur 6 contre V0 profondeur 3, 100 paires : **194 V, 2 N, 4 D = 97,5 %** (IC 95,5 à 99,5 %, Elo +636). V0 profondeur 8 contre profondeur 6, 60 paires : **99 V, 18 N, 3 D = 90,0 %** (IC 85,6 à 94,4 %, Elo +382 [+310 ; +490] ; échantillon faible signalé par l'outil). La recherche plus profonde gagne très nettement.
+- **c. Reproductibilité** : même graine = parties identiques coup pour coup, au niveau tâche (`tests/arena.mjs`) ET au niveau programme (un run interrompu puis repris donne, hors durées, exactement les mêmes 48 lignes qu'un run sans interruption) ; autre graine ou autre indice = autre ouverture ; exploration reproductible avec la même graine.
+- **d. Reprise** (tests automatiques, `tests/arena.mjs`) : (1) relance avec plus de paires : les lignes existantes sont inchangées, aucun doublon ; (2) ligne finale tronquée + paire orpheline : fichier réparé, 16 lignes, aucune perte ni doublon, identique à un run ininterrompu ; (3) run **tué** (SIGKILL) à 4 lignes sur 48 puis relancé : 48 lignes, 0 doublon, 0 perte, identique à un run sans interruption ; (4) Ctrl+C (le gestionnaire est exercé par un crochet qui émet le signal ; le signal système Windows lui-même n'est pas simulable par script) à 40/400 parties : code 130, `summary.json interrupted`, fichier valide, puis reprise à 400 parties sans doublon ; (5) worker qui plante : relancé, 6 paires complètes ; (6) autre graine dans un dossier existant : refus, rien écrasé.
+- **e. Légalité** : `training/verify.mjs` (rules.js seul) a rejoué **3 000 parties d'auto-jeu enregistrées** (463 250 demi-coups) + les 400 + 400 + 200 + 120 parties des matchs a, a', b : **toutes légales**, aucun coup refusé, résultats et motifs de fin (plus de coup / 25 coups / répétition / plafond) cohérents ; chaque partie des runs est de plus vérifiée à la volée (`--no-verify` pour désactiver). Le vérificateur est testé : coup illégal, résultat falsifié et partie tronquée sont détectés. Répartition des fins sur 3 866 parties (profondeur 6) : plus de coup 73 %, répétition 13,5 %, 25 coups 10 %, plafond de 300 demi-coups 3,3 %.
+- **f. Débit** (auto-jeu, 7 workers, V0, exploration 0,08 ; moyenne sur les parties terminées) :
+  | Profondeur | Durée mesurée | Parties | Parties/h | Positions/h | Nœuds/s/cœur | Demi-coups/partie |
+  |---|---|---|---|---|---|---|
+  | 6 | 25 min | 3 866 | **≈ 9 300** | **≈ 1,36 million** | ≈ 595 k | 154 |
+  | 8 | 6 min | 82 | **≈ 870** | ≈ 131 000 | ≈ 600 k | 159 |
+  | 10 | 9 min | 20 | ≈ 133 mesurées (≈ 230 si on ne compte que les parties terminées ; sous-estimation du temps : les longues parties en cours à l'arrêt sont perdues) | ≈ 20 000 à 32 000 | ≈ 570 k | 148 |
+  Une profondeur de plus coûte environ ×3 à ×3,5 de temps. **Mémoire (run de 25 min, 7 workers)** : 1,14 à 1,17 Go dès la première minute, plateau stable jusqu'à la fin (1 145 Mo à 1 min, 1 158 à 5 min, 1 163 à 15 min, 1 169 à 25 min ; pas de fuite) ; ~165 Mo par worker.
+  **Recommandations pour une nuit (≈ 8 h, tous les workers, le PC reste utilisable grâce à la priorité abaissée)** : (1) **profondeur 8, 7 workers, 6 000 parties** (≈ 7 h, ≈ 900 000 positions, ≈ 75 Mo) : meilleures étiquettes (les scores de recherche de profondeur 8 sont de meilleure qualité) et déjà beaucoup de données pour un réglage de ~30 poids ; ou (2) **profondeur 6, 7 workers, 70 000 parties** (≈ 7 h 30, ≈ 10 millions de positions, ≈ 0,85 Go) si l'on veut surtout du volume. La profondeur 10 (≈ 150 parties/h) est réservée à de petits jeux de contrôle. Pour comparer deux jeux de poids (étape 3.2) : match à la profondeur 6, 200 paires ≈ 2 min.
+- **g. Tests existants** : tous verts après les changements (perft 9, `diff` 48 383 positions sans divergence, `perft-positions`, `worker`, `eval-symmetry`, `search-consistency`, `tactics` 20/20, `mate`, `match`, `worker-analyse`, `analysis-format`, `analysis-controller`, `repetition` dont `golden-scores`) + nouveau `tests/arena.mjs` (60 vérifications, ≈ 10 s). **Perf du moteur inchangée** : `search-perf` (nœuds/s : 695 k position initiale, 747 k / 798 k / 807 k milieux de partie, 1,01 M finale de pions, 1,06 M finale à dames ; avant : 675 k, 725 k, 789 k, 793 k, 979 k, 1,04 M) ; `bench` 5,64 M / 12,0 M / 16,5 M nœuds/s (avant 5,50 / 11,8 / 16,2) ; les 150 positions de contrôle à profondeur 7 : 3,6 s avant et après.
+
+### 3. Veille Windows (point 8)
+Moyen retenu : `training/sleep.mjs` lance un PowerShell (commande encodée en base64, pour éviter les soucis de guillemets) qui appelle `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` et reste en vie ; l'écran peut s'éteindre, seule la veille du système est empêchée. Testé : (1) auto-vérification : le second appel renvoie l'état précédent `0x80000001`, preuve que le premier a pris (`veille Windows : bloquée pendant le calcul` dans le journal) ; (2) le processus enfant est arrêté à la fin ; (3) si le script Node est tué brutalement, le PowerShell disparaît de lui-même en moins de 5 s (compte des processus powershell : 2 avant, 3 pendant, 2 après un `SIGKILL` du parent) ; l'état de veille est lié au processus, donc rétabli. Piège corrigé : PowerShell lit `0x80000001` comme un entier NÉGATIF (erreur de conversion), la valeur est écrite en décimal (2147483649). Limite : `powercfg /requests` exige des droits administrateur, donc la preuve externe n'a pas pu être obtenue ; seule l'auto-vérification est disponible. Procédure manuelle de secours documentée dans `training/README.md`.
+
+### 4. Limites et points de vigilance
+- Deux moteurs identiques donnent EXACTEMENT 50 % (test a) : l'arène ne détecte un biais de couleur que sur des joueurs différents ; le test a' (poids légèrement différents) le fait.
+- À profondeur fixe les parties sont déterministes : sans exploration (match), toute la diversité vient des ouvertures (K = 8 demi-coups, rejet à 0,5 pion) ; des ouvertures identiques peuvent se répéter sur de très gros runs (la graine dérive de l indice, aucun dédoublonnage n est fait).
+- Les poids JSON sont arrondis à l'entier (les tables de `createEvaluator` sont des `Int32Array`) : l'apprentissage 3.2 devra en tenir compte (ou passer les tables en flottants, ce qui changerait légèrement les scores V0 : à ne faire qu'avec accord).
+- 27 % de nulles et 3 % de parties au plafond de 300 demi-coups en V0 : les limites de finale 6.3/6.4 (non implémentées) raccourciraient beaucoup de ces finales ; les positions de ces longues finales (dames) ont des étiquettes moins informatives.
+- Les scores de recherche ±29 000 (mats) ne sont pas utilisables tels quels comme cibles d'apprentissage : filtrer ou tronquer.
+- Journal de progression : estimation du temps restant basée sur le débit moyen de la session (instable en début de run ; 10 premières minutes). Le crochet de test `ARENA_TEST_SIGINT_AFTER_MS` (simule Ctrl+C après N ms) est utilisé pour arrêter les runs chronométrés.
+- Une interruption (Ctrl+C) fait perdre les parties en cours (≤ 7 parties ; à profondeur 10, jusqu'à ~2 min de calcul par worker).
+
+### 5. Recommandations pour l'étape 3.2 (apprentissage ; rien n'est implémenté ici)
+1. Générer un premier jeu d'auto-jeu (profondeur 8, ~6 000 parties, une nuit) ; filtrer : positions calmes (`prise_disponible = 0`), score non-mat, éventuellement hors ouverture et hors premiers demi-coups d'une finale dégénérée.
+2. Méthode simple et robuste d'abord : **régression logistique / moindres carrés sur les ~30 poids de `EVAL_WEIGHTS`**, cible = résultat final de la partie (1 / 0,5 / 0 du point de vue des Blancs), éventuellement mélangée au score de recherche (Texel tuning : mélange résultat/score), car l'évaluation est LINÉAIRE en ses poids (les `advance`, `tempo`, centre, dernière rangée sont des compteurs de pièces × poids) : on peut extraire des vecteurs de caractéristiques une fois pour toutes et optimiser en quelques secondes en Node, sans réseau de neurones.
+3. Valider chaque nouveau jeu de poids par un **match contre V0 à la profondeur 6, ≥ 200 paires** (≈ 2 min) ; ne garder que si l'intervalle de confiance est au-dessus de 0 Elo. Itérer : nouvelles parties avec les nouveaux poids, etc.
+4. Avant de passer à un réseau de neurones (PyTorch non installé, RTX 2060 disponible) : mesurer le gain du réglage linéaire ; un réseau demanderait aussi un évaluateur rapide en JS (le moteur évalue ~600 k nœuds/s/cœur : tout surcoût d'évaluation se paie en profondeur).
+5. Décision à prendre avec Mickaël : implémenter ou non les limites de finale 6.3/6.4 avant la génération massive (elles changent la durée et l'issue de nombreuses finales).
+
+
+## IA — Étage 3, Étape 3.2 : apprentissage de l'évaluation par l'auto-jeu (20/10/2026) — NON commité, en attente de ton retour
+**Résultat en une phrase** : deux petites tables apprises sur les 8 000 parties de la nuit 1 battent nettement l'évaluation V0 écrite à la main : **V1b (3 jeux de tables selon le nombre de pièces, cible = score de recherche) gagne +211 Elo à la profondeur 6 (400 paires, IC 95 % +188 à +236) et +170 Elo à la profondeur 8 (150 paires, IC +136 à +207)**, et son évaluation est aussi rapide que celle de V0 (V1, un seul jeu : trois fois plus rapide). Aucun changement visible dans l'appli ; `eval.js`, `golden-scores.json` et tous les scores de V0 sont inchangés ; tous les tests existants restent verts ; la vitesse du moteur est inchangée. Le code de l'étape 3.1 (arène) est toujours non commité lui aussi.
+
+### 1. Constat vérifié : V0 est une somme de valeurs par case
+`tests/eval-learned.mjs` : en évaluant une pièce seule sur chaque case, on extrait deux tables de 50 valeurs (pion, dame) ; leur somme (pièce noire en i = pièce blanche en 49 − i, signe inversé) redonne l'évaluation V0 **sans aucun écart sur 6 000 positions aléatoires (dont 3 923 avec dames)**, et, injectée dans la recherche, donne scores, coups et nombres de nœuds identiques à V0 sur 24 positions (profondeur 5). Les 100 caractéristiques de l'apprentissage redonnent aussi exactement V0 sur 20 353 positions réelles de l'auto-jeu. On peut donc apprendre les tables directement. **Vitesse** de l'évaluation (ns par position, meilleur de 7) : V0 ≈ 177-181, tables à un jeu ≈ 51-56 (**3,3 fois plus rapide**), tables à 3 phases ≈ 173-177 (≈ V0). Dans la recherche entière l'évaluation n'est qu'une petite part du temps : profondeur 7 sur 6 positions, V0 810 k nœuds/s, V1 860 k (+6 %), V1b 821 k (+1 %) ; en revanche, à profondeur égale, V1 et V1b visitent **moins de nœuds** (66 k et 76 k contre 84 k pour V0 : −21 % et −10 %), ce qui accélère l'auto-jeu (§7).
+
+### 2. Code livré (rien d'autre n'est modifié)
+- `js/ai/eval-learned.js` (nouveau) : `createTableEvaluator(tables)` → `evalWhite(board)` compatible avec l'option `evaluator` de `search.js` ; formats `{ man:[50], king:[50] }` (V1) ou `{ phases:[{ minPieces, man, king }, …] }` (V1b : premier jeu dont `minPieces` ≤ nombre total de pièces ; 30 / 15 / 0). Valeurs entières (Int32Array, somme exacte, recherche déterministe), symétrie miroir exacte conservée dans les deux modes (testée sur 3 000 positions avec des tables aléatoires). Fichiers validés (longueur 50, nombres finis, phases décroissantes, dernière phase = 0). **Garde-fou de mat** : la borne exacte de |éval| (somme des 20 meilleurs apports par camp) doit rester ≤ 29 000, car la recherche réserve ±29 900 aux mats et range les scores de sa table de transposition sur 16 bits ; mesuré : V0 6 120, modèles appris 6 000 à 19 500.
+- `training/arena.mjs` : `--evaluator learned:<fichier.json>` (et `--a` / `--b`) ; l'**identité du run (reprise) inclut l'empreinte SHA-1 du CONTENU** des tables (forme canonique : insensible à la mise en forme du fichier, sensible à une seule valeur modifiée) : modifier un fichier sous le même nom empêche de reprendre un run avec un autre évaluateur (testé). Les tables utilisées sont recopiées dans le dossier du run (`tables-a.json`).
+- `training/fit.mjs` + `training/fit-lib.mjs` : l'apprentissage (Node pur, aucune dépendance) ; `training/models/` : les modèles (petits JSON d'entiers, non ignorés par git) ; `tests/eval-learned.mjs` (26 vérifications), `tests/fit.mjs` (25 vérifications, données synthétiques), `tests/arena.mjs` étendu (69 vérifications, dont `learned:`). `training/README.md` mis à jour (commandes).
+
+### 3. Méthode d'apprentissage (`training/fit.mjs`, formules en tête de `fit-lib.mjs`)
+- **Données** : `training/data/selfplay-nuit-1` (8 000 parties V0 contre V0, profondeur 8, 1 225 027 positions ; 2 668 victoires blanches, 2 749 nulles, 2 583 noires). Filtres : hors ouverture (déjà séparée), **positions calmes** (« prise disponible » = 0 : 236 943 écartées), **pas de mat** (|score| ≥ 29 000 : 31 504 écartées) → **956 580 positions** (dont 54 % issues de parties nulles, 54 % en finale de moins de 15 pièces : phases ≥ 30 / 15–29 / < 15 = 137 539 / 301 195 / 517 846). **Validation = 15 % des PARTIES** (1 198 parties, 146 602 positions), tirées par une fonction de hachage de (graine, numéro de partie), jamais des positions isolées.
+- **Modèle** : eval = Σ x_k·θ_k (100 paramètres : table des pions, table des dames ; x_k ∈ {−1, 0, +1} contient la symétrie miroir) ; p = σ(eval / K_m) ; perte = entropie croisée ; régularisation L2 vers V0 : + α·Σ((θ_k − θ⁰_k)/100)². La perte est **convexe** : méthode de Newton (IRLS) avec recherche linéaire, 2 à 5 itérations, **déterministe** (aucun hasard hors la séparation des parties) ; les 6 modèles sont régénérés **identiques au bit près** par une seconde exécution. Les paramètres jamais observés (un pion blanc sur sa rangée de promotion…) restent exactement à V0.
+- **Cible** : t = λ·résultat + (1 − λ)·σ(score de recherche / K_t), λ ∈ {0 ; 0,5 ; 1}. **K_t = 415,9 cp** : la température qui rend le score de recherche le mieux calibré sur les résultats (perte résultat contre σ(score/K), apprentissage 0,6647, validation 0,6674 ; « aucune information » = ln 2 = 0,6931). **K_m** (température du modèle) = **le meilleur K de V0 sur la validation, pour chaque λ** (410 / 474 / 555 cp) ; elle est FIGÉE pour le modèle appris, sinon l'échelle des tables n'est pas identifiable (tables × c et K × c donnent la même perte) et leurs valeurs perdraient leur sens en centipions. α ∈ {1e-6, 1e-5, 1e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1}, choisi sur la validation (1e-6 presque partout, 1e-5 pour λ = 1). V1b = trois ajustements indépendants (un par phase). Tables arrondies à l'entier, perte recalculée après arrondi.
+- **Baseline obligatoire (perte de V0 sur la validation, avec son meilleur K_m)** et résultat des tables apprises (perte de validation ; l'information de V0 = perte « éval = 0 partout » − perte V0) :
+  | λ | K_m | « éval = 0 » | **V0** | V1 | V1b | gain V1b | information de V0 |
+  |---|---|---|---|---|---|---|---|
+  | 0 | 410 | 0,69315 | **0,66692** | 0,66612 | 0,66592 | 0,0010 (+3,8 % de ce que V0 apporte) | 0,0262 |
+  | 0,5 | 474 | 0,69315 | **0,67284** | 0,66755 | 0,66607 | 0,0068 (+33 %) | 0,0203 |
+  | 1 | 555 | 0,69315 | **0,67793** | 0,66198 | 0,65602 | 0,0219 (+144 %) | 0,0152 |
+  Lecture : plus la cible contient de résultats (λ grand), plus les tables apprises « expliquent » les résultats mieux que V0 (perte −0,016 à −0,022) ; pour λ = 0 la cible est le score de recherche de V0 lui-même, déjà bien approché par son évaluation statique (gain faible). **Les pertes de λ différents ne sont pas comparables entre elles et ne prédisent PAS la force de jeu** (voir §4) : c'est l'arène qui juge.
+
+### 4. Mesures dans l'arène (seul juge) : candidat A contre V0 (B), même graine, ouvertures jouées deux fois couleurs inversées
+Profondeur 6, **400 paires** (800 parties) par candidat, un match à la fois :
+| Candidat | V / N / D de A | Score | **Elo (A − V0)** | IC 95 % | Décision |
+|---|---|---|---|---|---|
+| **V1b λ = 0** | 538 / 158 / 104 | 77,1 % | **+211** | +188 à +236 | **gardé, meilleur** |
+| V1 λ = 0 | 461 / 170 / 169 | 68,3 % | +133 | +110 à +157 | gardé |
+| V1b λ = 0,5 | 452 / 179 / 169 | 67,7 % | +128 | +107 à +151 | gardé |
+| V1 λ = 0,5 | 368 / 206 / 226 | 58,9 % | +62 | +42 à +83 | gardé |
+| V1b λ = 1 | 307 / 184 / 309 | 49,9 % | −1 | −22 à +20 | rejeté (non significatif) |
+| V1 λ = 1 | 271 / 133 / 396 | 42,2 % | −55 | −78 à −32 | rejeté (PIRE que V0) |
+- **Confirmation du meilleur (V1b λ = 0) à la profondeur 8, 150 paires** : 184 victoires, 68 nulles, 48 défaites = 72,7 % (IC 68,6 à 76,7 %), **+170 Elo (IC +136 à +207)**.
+- **Mesure « propre »** : les matchs ci-dessus utilisaient la graine 1, celle de l'auto-jeu d'entraînement : les ouvertures des premières paires coïncident avec celles des premières parties d'entraînement (fuite minime : ≈ 400 positions de départ sur 956 580, mais évitable). Le meilleur candidat a donc été re-mesuré avec la graine 777 : profondeur 6, 400 paires : 538 victoires, 157 nulles, 105 défaites = 77,1 % (IC 74,6 à 79,5 %), **+211 Elo (IC +187 à +235)** ; profondeur 8, 150 paires : 187 / 67 / 46 = 73,5 % (IC 69,0 à 78,0 %), **+177 Elo (IC +139 à +220)** ; mêmes résultats qu'avec la graine 1 : aucune fuite mesurable.
+- **Tour 2 de diagnostic** (V1b, profondeur 6, 400 paires ; rien n'était à corriger pour le meilleur, mais les échecs de λ = 1 méritaient une explication, et K_t une étude de sensibilité) :
+  | Variante | Elo (A − V0) | IC 95 % | Ce que ça apprend |
+  |---|---|---|---|
+  | λ = 0, **K_t = 200** | +215 | +192 à +241 | K_t sans effet sur la force (même résultat que K_t = 416) |
+  | λ = 0, **K_t = 800** | +217 | +192 à +245 | idem |
+  | λ = 1, **α = 1e-3** (régularisation forte, imposée) | +56 | +35 à +78 | la régularisation choisie sur la validation (α = 1e-5) laissait les tables sur-ajustées au bruit des résultats : plus de V0 = mieux dans l'arène |
+  | λ = 1, **chaque partie pèse pareil** (1/longueur) | +86 | +66 à +108 | les longues parties nulles (54 % des positions, finales de dames) dominaient l'apprentissage ; les rééquilibrer fait passer λ = 1 de −1 à +86 |
+  | Ablation A1 (graine 777) : **V0 + seulement les pions de l'avant-dernière rangée** (cases 5 à 9) portés à 285 | +49 | +32 à +67 | une seule règle simple (« un pion à un pas de la promotion vaut presque une dame ») apporte environ un quart du gain |
+  | Ablation A2 (graine 777) : V1b λ = 0 avec **la table des pions de la phase 0 remise à V0** | +179 | +157 à +203 | les valeurs étranges de la phase 0 ne nuisent pas ; elles aident plutôt (+211 avec elles, intervalles proches, non tranché) : l'essentiel du gain vient des phases 1 et 2 |
+  Conclusions : (a) la cible « score de recherche » (λ = 0) est la meilleure et la plus stable ; (b) le résultat des parties (λ = 1) n'aide qu'avec une régularisation forte et/ou des parties pondérées à égalité, car les finales nulles longues le noient ; (c) les phases aident toujours (V1b > V1 à tous les λ : +78, +66, +54 Elo) ; (d) la perte de validation ne classe pas les candidats comme l'arène (λ = 1 a la meilleure perte et les pires résultats).
+
+### 5. Tables apprises, en grilles 10×10 (contrôle de bon sens)
+Valeurs en centipions, point de vue des Blancs, la rangée du haut est la rangée de promotion des Blancs (les Blancs montent vers le haut) ; les cases claires (jamais jouées) sont des points ; la 1re rangée des pions (cases 1 à 5, un pion blanc y serait déjà promu) n'est jamais observée : elle reste à la valeur V0. Symétrie : la table des Noirs est celle des Blancs retournée (pièce noire en i = pièce blanche en 49 − i), exacte par construction (testée).
+```
+V0 (référence) — PIONS
+    ·  109    ·  109    ·  109    ·  109    ·  109
+  134    ·  134    ·  134    ·  134    ·  134    ·
+    ·  125    ·  127    ·  127    ·  127    ·  125
+  119    ·  121    ·  124    ·  124    ·  119    ·
+    ·  114    ·  119    ·  119    ·  116    ·  114
+  110    ·  112    ·  115    ·  115    ·  110    ·
+    ·  107    ·  112    ·  112    ·  109    ·  107
+  104    ·  106    ·  106    ·  106    ·  104    ·
+    ·  101    ·  101    ·  101    ·  101    ·  101
+  106    ·  106    ·  106    ·  106    ·  106    ·
+V0 (référence) — DAMES
+    ·  300    ·  300    ·  300    ·  300    ·  300
+  300    ·  300    ·  300    ·  300    ·  300    ·
+    ·  300    ·  304    ·  304    ·  304    ·  300
+  300    ·  304    ·  310    ·  310    ·  300    ·
+    ·  300    ·  310    ·  310    ·  304    ·  300
+  300    ·  304    ·  310    ·  310    ·  300    ·
+    ·  300    ·  310    ·  310    ·  304    ·  300
+  300    ·  304    ·  304    ·  304    ·  300    ·
+    ·  300    ·  300    ·  300    ·  300    ·  300
+  300    ·  300    ·  300    ·  300    ·  300    ·
+bon sens : pion selon les rangées parcourues 0→9 : 106 101 105 109 112 116 121 126 134 109 ; dame : cœur 310, couronne 304, extérieur 300, bord 300
+
+V1 λ=0 (un jeu) — PIONS
+    ·  109    ·  109    ·  109    ·  109    ·  109
+  173    ·  287    ·  270    ·  274    ·  286    ·
+    ·  191    ·  163    ·  154    ·  152    ·  129
+  113    ·  110    ·  110    ·  110    ·  114    ·
+    ·  103    ·  100    ·  108    ·  111    ·  112
+  111    ·  114    ·  115    ·  113    ·  109    ·
+    ·  109    ·  114    ·  116    ·  113    ·  112
+  111    ·  113    ·  115    ·  113    ·  110    ·
+    ·  109    ·  112    ·  113    ·  112    ·  110
+  116    ·  117    ·  117    ·  116    ·  119    ·
+V1 λ=0 (un jeu) — DAMES
+    ·  320    ·  324    ·  323    ·  321    ·  321
+  313    ·  311    ·  307    ·  313    ·  327    ·
+    ·  308    ·  310    ·  314    ·  315    ·  318
+  323    ·  304    ·  302    ·  309    ·  308    ·
+    ·  311    ·  295    ·  312    ·  314    ·  323
+  319    ·  314    ·  307    ·  300    ·  308    ·
+    ·  304    ·  308    ·  294    ·  308    ·  318
+  314    ·  309    ·  309    ·  304    ·  306    ·
+    ·  330    ·  304    ·  303    ·  305    ·  318
+  323    ·  307    ·  324    ·  310    ·  316    ·
+bon sens : pion selon les rangées parcourues 0→9 : 117 111 112 113 112 107 111 158 258 109 ; dame : cœur 303, couronne 310, extérieur 315, bord 319
+
+V1b λ=0, phase 0 (≥ 30 pièces) — PIONS
+    ·  109    ·  109    ·  109    ·  109    ·  109
+  112    ·  101    ·  109    ·  113    ·  138    ·
+    ·   45    ·   39    ·   25    ·   22    ·   77
+   69    ·   18    ·   15    ·   21    ·   21    ·
+    ·   55    ·   49    ·   42    ·   55    ·   70
+   67    ·   69    ·   70    ·   66    ·   66    ·
+    ·   67    ·   69    ·   69    ·   68    ·   68
+   66    ·   67    ·   67    ·   67    ·   66    ·
+    ·   63    ·   65    ·   65    ·   64    ·   64
+   69    ·   67    ·   69    ·   69    ·   67    ·
+V1b λ=0, phase 0 (≥ 30 pièces) — DAMES
+    ·  310    ·  300    ·  279    ·  276    ·  300
+  300    ·  300    ·  300    ·  300    ·  300    ·
+    ·  300    ·  304    ·  304    ·  304    ·  300
+  300    ·  304    ·  310    ·  310    ·  300    ·
+    ·  300    ·  310    ·  310    ·  304    ·  300
+  300    ·  304    ·  310    ·  310    ·  300    ·
+    ·  300    ·  310    ·  310    ·  304    ·  300
+  300    ·  304    ·  304    ·  304    ·  300    ·
+    ·  300    ·  300    ·  300    ·  300    ·  300
+  300    ·  300    ·  300    ·  300    ·  300    ·
+bon sens : pion selon les rangées parcourues 0→9 : 68 64 67 68 68 54 29 42 115 109 ; dame : cœur 310, couronne 304, extérieur 299, bord 298
+
+V1b λ=0, phase 1 (15 à 29 pièces) — PIONS
+    ·  109    ·  109    ·  109    ·  109    ·  109
+  128    ·  206    ·  158    ·  183    ·  205    ·
+    ·  117    ·   75    ·   76    ·   82    ·  111
+   95    ·   75    ·   66    ·   65    ·   87    ·
+    ·   91    ·   90    ·   97    ·   99    ·  103
+  102    ·  104    ·  106    ·  105    ·  101    ·
+    ·   99    ·  105    ·  106    ·  103    ·  101
+   99    ·  101    ·  104    ·  103    ·  100    ·
+    ·   97    ·  100    ·  101    ·   99    ·   97
+  101    ·  101    ·  103    ·  101    ·  102    ·
+V1b λ=0, phase 1 (15 à 29 pièces) — DAMES
+    ·  314    ·  290    ·  269    ·  251    ·  268
+  314    ·  306    ·  283    ·  284    ·  313    ·
+    ·  316    ·  310    ·  297    ·  338    ·  288
+  315    ·  314    ·  312    ·  283    ·  301    ·
+    ·  269    ·  284    ·  330    ·  301    ·  305
+  313    ·  300    ·  319    ·  312    ·  307    ·
+    ·  316    ·  299    ·  304    ·  308    ·  318
+  317    ·  317    ·  302    ·  330    ·  335    ·
+    ·  315    ·  332    ·  318    ·  288    ·  303
+  300    ·  302    ·  327    ·  294    ·  316    ·
+bon sens : pion selon les rangées parcourues 0→9 : 102 99 101 103 104 96 78 92 176 109 ; dame : cœur 305, couronne 312, extérieur 303, bord 300
+
+V1b λ=0, phase 2 (< 15 pièces) — PIONS
+    ·  109    ·  109    ·  109    ·  109    ·  109
+  187    ·  294    ·  280    ·  283    ·  293    ·
+    ·  204    ·  187    ·  174    ·  172    ·  133
+  117    ·  132    ·  127    ·  125    ·  123    ·
+    ·  106    ·  106    ·  113    ·  117    ·  111
+  110    ·  115    ·  113    ·  111    ·  104    ·
+    ·  104    ·  113    ·  114    ·  114    ·  114
+  114    ·  117    ·  118    ·  115    ·  113    ·
+    ·  111    ·  115    ·  119    ·  121    ·  116
+  123    ·  132    ·  132    ·  129    ·  135    ·
+V1b λ=0, phase 2 (< 15 pièces) — DAMES
+    ·  320    ·  324    ·  327    ·  323    ·  323
+  314    ·  312    ·  309    ·  315    ·  330    ·
+    ·  310    ·  312    ·  315    ·  318    ·  320
+  326    ·  306    ·  302    ·  311    ·  312    ·
+    ·  316    ·  296    ·  313    ·  316    ·  326
+  322    ·  316    ·  309    ·  301    ·  311    ·
+    ·  306    ·  310    ·  295    ·  309    ·  319
+  315    ·  311    ·  312    ·  304    ·  307    ·
+    ·  332    ·  305    ·  307    ·  307    ·  319
+  325    ·  311    ·  331    ·  316    ·  321    ·
+bon sens : pion selon les rangées parcourues 0→9 : 130 116 115 112 111 111 125 174 267 109 ; dame : cœur 305, couronne 312, extérieur 318, bord 321
+```
+**Contrôle de bon sens (franc)** : (1) *pions avancés valorisés* : oui, mais surtout à l'extrême : un pion sur la rangée qui précède la promotion vaut ≈ 260-290 (V0 : 134), presque une dame ; en milieu de plateau les valeurs sont plates (≈ 100-130), sans la progression douce de V0 ; (2) *dames au centre* : NON : les tables de dames sont presque plates (≈ 295-335), sans préférence pour le centre (V1 : cœur 303, bord 319) ; V0 donnait +10 au centre ; (3) *symétrie* : exacte ; (4) la phase 0 (≥ 30 pièces) est peu informative (perte ≈ ln 2, gain de validation 4·10⁻⁴) : ses pions valent ≈ 65 au lieu de 105 et plusieurs cases avancées sont fortement dévaluées (≈ 15-45) : valeurs peu fiables, peut-être sans conséquence tant que cette phase est brève. Ce sont des tables « statistiques », pas des connaissances de joueur ; elles gagnent, mais ne sont pas élégantes.
+
+### 6. Limites
+- **Circularité** : les étiquettes viennent de la recherche de V0 (profondeur 8) : l'évaluation apprise ne peut que s'en rapprocher, ce qui donne à profondeur fixe un moteur plus fort (elle « voit » déjà une partie de la tactique) ; elle ne découvre pas de connaissance qui échappe à V0 à la profondeur 8.
+- **Profondeur fixe, pas temps fixe** : toutes les mesures sont à profondeur égale ; à temps égal, la force est probablement un peu plus élevée encore (moins de nœuds à profondeur égale, évaluation plus rapide pour V1), non mesuré. Contre un adversaire autre que V0 (humain, autre moteur) : non mesuré.
+- **Sélection sur la validation** : α est choisi sur la validation de perte (légèrement optimiste pour la perte annoncée) ; la force, elle, est mesurée par des parties séparées. Une partie des candidats (6 + 4) a été comparée aux mêmes ouvertures : le classement entre candidats proches (V1b λ = 0 / K_t 200 / K_t 800) n'est pas significatif.
+- **Phases** : le choix du jeu de tables change brutalement quand le nombre de pièces franchit 30 ou 15 (une prise peut créer un saut d'évaluation) ; fonctionne en pratique, pas de transition douce.
+- **Échelle** : les tables apprises ont un autre étalonnage que V0 (pion ≈ 65-130 selon la phase) ; la jauge de l'appli (BAR_SCALE_CP = 100, paliers d'avantage) est calibrée sur V0 : si V1b entrait un jour dans l'analyse de la liseuse, il faudrait recaler ces constantes ; l'appli n'utilise toujours que V0.
+- Le modèle est linéaire par case : aucune notion de structure (pions solidaires, mobilité, tempo de finale) ; c'est la prochaine marge de progrès, et elle demande des caractéristiques nouvelles, pas plus de parties.
+
+### 7. Débit et recommandation pour la nuit 2
+Mesures d'auto-jeu avec **V1b λ = 0** (7 workers, exploration 0,08) : **profondeur 8 : 1 140 parties/h mesurées (95 parties en 5 min), 1 290 estimées d'après le temps moyen (19,6 s/partie), ≈ 200 000 positions/h** (V0 à la profondeur 8 : 870 parties/h → +31 à +48 % de vitesse) ; **profondeur 10 : ≈ 150 parties/h** (165 s/partie, 6 parties en 7 min).
+**Recommandation** :
+1. **Évaluateur** : `learned:training/models/v1b-l0.json` (V1b, λ = 0) : auto-jeu avec le meilleur moteur disponible, c'est la boucle « apprendre contre soi-même » (les positions viennent d'un moteur plus fort que V0).
+2. **Profondeur 8** (la 10 ne donne que ≈ 150 parties/h : < 1 000 parties par nuit), **7 workers**, **8 000 parties ≈ 6 à 7 h (≈ 1,2 million de positions, ≈ 100 Mo)**, **`--seed 2`** (obligatoire : avec la graine 1, les ouvertures seraient celles de la nuit 1) :
+   `node training/arena.mjs selfplay --evaluator learned:training/models/v1b-l0.json --depth 8 --games 8000 --seed 2 --out training/data/selfplay-nuit-2`
+3. **Ensuite** (étape 3.3, rapide : < 1 min d'ajustement) : `node training/fit.mjs --data training/data/selfplay-nuit-2 --lambda 0,0.25 --phases 3 --game-weight 1 --tag n2` ; comparer le nouveau modèle à V1b λ = 0 (`--a learned:nouveau --b learned:training/models/v1b-l0.json`, profondeur 6, 400 paires, **graine différente de celle des données**, puis profondeur 8, 150 paires) ; ne garder que si l'IC est au-dessus de 0 Elo. Essayer aussi nuit 1 + nuit 2 réunies. Pour λ > 0, utiliser `--game-weight 1` (§4).
+4. Les matchs d'évaluation se font avec une **graine différente** de celle de l'auto-jeu qui a servi à apprendre (consigne ajoutée au README).
+5. À décider plus tard : brancher V1b dans l'analyse de la liseuse (gain de force et de vitesse, mais recalage de la jauge) ; ajouter des caractéristiques de structure (au-delà des tables) ; limites de finale FMJD 6.3/6.4 (restent non implémentées).
+
+### 8. Tests et vitesse du moteur
+Toute la suite Node est verte après les changements : perft 9, `diff` (48 383 positions), `perft-positions`, `worker`, `eval-symmetry`, `search-consistency`, `tactics` 20/20, `mate`, `match`, `worker-analyse`, `analysis-format`, `analysis-controller`, `repetition` (dont `golden-scores`, inchangé), nouveaux `eval-learned`, `fit`, et `arena` (69 vérifications). **Vitesse du moteur inchangée** (`search.js` n'est pas modifié à cette étape) : `search-perf` 723 k nœuds/s position initiale, 786 k / 857 k / 858 k milieux de partie, 1,06 M finale de pions, 1,10 M finale à dames, mêmes profondeurs atteintes qu'avant (11 / 12 / 9 / 10 / 13 / 11 avec table) ; `bench` 5,84 M / 12,45 M / 17,1 M nœuds/s (avant : 5,50 M / 11,8 M / 16,2 M). `tests/data/golden-scores.json` et `js/ai/eval.js` : non modifiés (`git status`).
+
+### 9. Fichiers produits (rien de commité)
+`js/ai/eval-learned.js`, `tests/eval-learned.mjs`, `tests/fit.mjs`, `training/fit.mjs`, `training/fit-lib.mjs`, `training/models/*.json` (modèles : `v1-l0`, `v1b-l0` (le meilleur), `v1-l05`, `v1b-l05`, `v1-l1`, `v1b-l1`, tour 2 `kt200-…`, `kt800-…`, `a1e3-…`, `gw1-…`, ablations `abl-…`, et les `fit-report.json`), modifs de `training/arena.mjs`, `training/game.mjs`, `training/jobs.mjs`, `training/README.md`, `tests/arena.mjs` ; données et journaux (ignorés par git) dans `training/data/` et `training/logs/`. Reproduire : `node training/fit.mjs --out training/models` (< 1 min ; mêmes fichiers au bit près).
