@@ -1,0 +1,153 @@
+{
+ "data": "selfplay-nuit-1 : 8000 parties, 956580 positions retenues, validation 15 % des parties (graine 1)",
+ "base": "training/models/v1b-l0.json",
+ "seed": 1,
+ "valFraction": 0.15,
+ "Kt": 215.03282827163537,
+ "threshold": 0.00005,
+ "alphas": [
+  0.000001,
+  0.00001,
+  0.0001,
+  0.001
+ ],
+ "runs": [
+  {
+   "name": "x33-KFWP",
+   "family": "KFWP",
+   "names": [
+    "kvm",
+    "fort",
+    "wing",
+    "sup",
+    "pair",
+    "promo",
+    "free"
+   ],
+   "lambda": 0.5,
+   "Km": 233.42527991696778,
+   "config": [
+    "kvm:phase",
+    "fort:global",
+    "wing:global",
+    "sup:phase",
+    "pair:global",
+    "promo:global",
+    "free:phase"
+   ],
+   "alpha": 0.00001,
+   "baseVal": 0.6395656456533321,
+   "baseTrain": 0.6389591075864383,
+   "witnessVal": 0.6395656456533321,
+   "val": 0.632278044940369,
+   "train": 0.6311843082661783,
+   "bound": 24374,
+   "trials": [
+    {
+     "config": "kvm:global fort:global wing:global sup:global pair:global promo:global free:global",
+     "valLoss": 0.6328062479396375,
+     "trainLoss": 0.6317060634544167,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:global wing:global sup:global pair:global promo:global free:global",
+     "valLoss": 0.6327437628095504,
+     "trainLoss": 0.6316243015914639,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:phase wing:global sup:global pair:global promo:global free:global",
+     "valLoss": 0.6327437628095504,
+     "trainLoss": 0.6316243015914639,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:global wing:phase sup:global pair:global promo:global free:global",
+     "valLoss": 0.6326966293780294,
+     "trainLoss": 0.6315820590898098,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:global wing:global sup:phase pair:global promo:global free:global",
+     "valLoss": 0.632692702580434,
+     "trainLoss": 0.6315865869435754,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:global wing:global sup:phase pair:phase promo:global free:global",
+     "valLoss": 0.6326804174407306,
+     "trainLoss": 0.6315654350280351,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:global wing:global sup:phase pair:global promo:phase free:global",
+     "valLoss": 0.6326503668276462,
+     "trainLoss": 0.6315567509159847,
+     "invalid": false
+    },
+    {
+     "config": "kvm:phase fort:global wing:global sup:phase pair:global promo:global free:phase",
+     "valLoss": 0.6322794790523732,
+     "trainLoss": 0.6311836819005545,
+     "invalid": false
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.6322794790523732
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.632278044940369
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6323247225326684
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6329719873959665
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {
+      "kvm": 2,
+      "fort": 145,
+      "wing": -8,
+      "sup": -5,
+      "pair": 9,
+      "promo": 83,
+      "free": 6
+     }
+    },
+    {
+     "minPieces": 15,
+     "features": {
+      "kvm": 20,
+      "fort": 145,
+      "wing": -8,
+      "sup": 18,
+      "pair": 9,
+      "promo": 83,
+      "free": 24
+     }
+    },
+    {
+     "minPieces": 0,
+     "features": {
+      "kvm": 38,
+      "fort": 145,
+      "wing": -8,
+      "sup": 16,
+      "pair": 9,
+      "promo": 83,
+      "free": 33
+     }
+    }
+   ]
+  }
+ ]
+}

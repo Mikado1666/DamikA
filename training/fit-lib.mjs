@@ -50,7 +50,9 @@ export function splitIsValidation(seed, gameId, valFraction) {
 // --- Jeu de données ------------------------------------------------------------------------------------------------------------
 // Lit des lignes JSONL d'auto-jeu (arena.mjs selfplay) et ne garde que les positions CALMES, HORS OUVERTURE
 // (déjà absentes de `p`), sans mat : r[6] = 0 (pas de prise disponible) et |score| < 29 000.
-// `lines` : itérable (éventuellement asynchrone) de lignes de texte.
+// `lines` : itérable (éventuellement asynchrone) de lignes de texte, OU d'objets { line, src } quand les parties viennent de
+// plusieurs auto-jeux (src = numéro de la source : 0, 1, …). Les numéros de parties de deux sources peuvent coïncider : la
+// clé de partie (séparation apprentissage / validation) devient « src:numéro » pour src > 0 (inchangée pour la source 0).
 export async function loadDataset(lines, { valFraction = 0.15, seed = 1, maxAbsScore = MAX_ABS_SCORE } = {}) {
   // Tableaux extensibles (doublement) : on ne sait pas à l'avance combien de positions seront gardées.
   let cap = 1 << 20, n = 0;
@@ -66,13 +68,16 @@ export async function loadDataset(lines, { valFraction = 0.15, seed = 1, maxAbsS
   };
   const gameIds = [], gameIsVal = [];
   let positionsSeen = 0, droppedCapture = 0, droppedMate = 0;
-  for await (const line of lines) {
+  for await (const item of lines) {
+    const line = typeof item === 'string' ? item : item.line;
+    const src = typeof item === 'string' ? 0 : item.src;
     if (!line.trim()) continue;
     const g = JSON.parse(line);
     if (!g.p) continue;
     const gi = gameIds.length;
-    gameIds.push(g.game);
-    gameIsVal.push(splitIsValidation(seed, g.game, valFraction));
+    const key = src === 0 ? g.game : `${src}:${g.game}`;
+    gameIds.push(key);
+    gameIsVal.push(splitIsValidation(seed, key, valFraction));
     const r = g.result === '1-0' ? 1 : g.result === '0-1' ? 0 : 0.5;
     for (const row of g.p) {
       positionsSeen++;

@@ -10,6 +10,10 @@
 //   --tag <nom> (préfixe des fichiers)  --grids all|v1|none
 // Sorties : <out>/<tag->v1-l<λ>.json, <tag->v1b-l<λ>.json (tables en entiers, utilisables par `--evaluator learned:…`)
 // et <out>/<tag->fit-report.json (tous les chiffres).
+//
+// ÉTAPE 3.3 — caractéristiques de STRUCTURE (V2) : --families F1,F2,… | --features a,b | --combo a,b  --base <V1b.json>
+//   (voir fit-struct-run.mjs : choix global / par phase par la perte de validation, ajustement conjoint avec les tables)
+// Plusieurs auto-jeux : --data dossier1,dossier2 (la séparation apprentissage / validation se fait par partie, par source).
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -25,8 +29,10 @@ for (let i = 2; i < process.argv.length; i++) {
   if (a.startsWith('--')) args[a.slice(2)] = process.argv[++i];
 }
 const list = (s, def) => (s === undefined ? def : String(s).split(',').map(Number));
-const dataArg = args.data || 'training/data/selfplay-nuit-1';
-const dataFile = fs.existsSync(dataArg) && fs.statSync(dataArg).isDirectory() ? path.join(dataArg, 'games.jsonl') : dataArg;
+const dataFiles = String(args.data || 'training/data/selfplay-nuit-1').split(',').map((d) => (
+  fs.existsSync(d) && fs.statSync(d).isDirectory() ? path.join(d, 'games.jsonl') : d));
+const dataFile = dataFiles[0];
+const dataDesc = dataFiles.map((f) => path.basename(path.dirname(f))).join(' + ');
 const outDir = args.out || 'training/models';
 const lambdas = list(args.lambda, [0, 0.5, 1]);
 const phaseConfigs = list(args.phases, [1, 3]);
@@ -36,7 +42,7 @@ const valFraction = Number(args.val ?? 0.15);
 const gamePower = Number(args['game-weight'] ?? 0);
 const tag = args.tag ? `${args.tag}-` : '';
 const gridsMode = args.grids || 'all';
-if (!fs.existsSync(dataFile)) { console.error(`Données introuvables : ${dataFile}`); process.exit(2); }
+for (const f of dataFiles) if (!fs.existsSync(f)) { console.error(`Données introuvables : ${f}`); process.exit(2); }
 fs.mkdirSync(outDir, { recursive: true });
 
 const say = (s = '') => console.log(s);
@@ -49,8 +55,14 @@ const PHASE_MIN = [30, 15, 0];
 const phaseOf = (n) => (n >= 30 ? 0 : n >= 15 ? 1 : 2);
 
 say('Étape 1/6 : lecture et filtrage des parties…');
-const rl = readline.createInterface({ input: fs.createReadStream(dataFile), crlfDelay: Infinity });
-const D = await loadDataset(rl, { valFraction, seed });
+// Une seule source : lignes brutes (comportement et résultats inchangés) ; plusieurs : lignes étiquetées par leur source.
+async function* allLines() {
+  for (let src = 0; src < dataFiles.length; src++) {
+    const rl = readline.createInterface({ input: fs.createReadStream(dataFiles[src]), crlfDelay: Infinity });
+    for await (const line of rl) yield dataFiles.length === 1 ? line : { line, src };
+  }
+}
+const D = await loadDataset(allLines(), { valFraction, seed });
 const nTrainGames = D.gameIsVal.filter((v) => !v).length, nValGames = D.games - nTrainGames;
 say(`  ${D.games} parties (${nTrainGames} apprentissage, ${nValGames} validation) ; ${D.positionsSeen} positions lues`);
 say(`  retirées : ${D.droppedCapture} avec prise disponible, ${D.droppedMate} avec |score| ≥ ${MAX_ABS_SCORE} (mat) ; gardées : ${D.n} (${D.trainIdx.length} apprentissage, ${D.valIdx.length} validation) [${since()}]`);
@@ -76,6 +88,12 @@ const Kt = args.kt !== undefined ? { K: Number(args.kt), loss: meanLoss(D, sc, r
 if (args.kt !== undefined) say(`  K_t IMPOSÉ par --kt : ${fmt(Kt.K, 1)} cp`);
 const KtVal = meanLoss(D, sc, resT, Kt.K, D.valIdx);
 say(`  validation : ${fmt(KtVal)}   (référence « aucune information » : ln 2 = 0,69315)`);
+
+if (args.families !== undefined || args.features !== undefined || args.combo !== undefined) {
+  const { runStructure } = await import('./fit-struct-run.mjs');
+  await runStructure({ D, args, Kt, e0, outDir, tag, say, dataDesc: `${dataDesc} : ${D.games} parties, ${D.n} positions retenues, validation ${valFraction * 100} % des parties (graine ${seed})`, seed, valFraction });
+  process.exit(0);
+}
 
 const report = { data: dataFile, games: D.games, trainGames: nTrainGames, valGames: nValGames, positions: D.n, train: D.trainIdx.length, val: D.valIdx.length,
   dropped: { capture: D.droppedCapture, mate: D.droppedMate }, phaseCount, phaseVal, seed, valFraction, gamePower, Kt: Kt.K, alphas, runs: [] };

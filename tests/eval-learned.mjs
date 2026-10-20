@@ -74,7 +74,7 @@ const throws = (fn) => { try { fn(); return null; } catch (e) { return e.message
     const E = (v) => normalizeTables({ man: Array(50).fill(-v), king: Array(50).fill(v) });
     const raw = (v) => ({ man: Array(50).fill(-v), king: Array(50).fill(v) });
     ok(`garde-fou de mat : tables à ±725 acceptées (borne ${evalBound(raw(725))}), à ±750 refusées (borne ${evalBound(raw(750))} > ${MAX_EVAL_BOUND})`,
-      evalBound(raw(725)) === 29000 && throws(() => E(725)) === null && /trop grandes/.test(throws(() => E(750)) || ''));
+      evalBound(raw(725)) === 29000 && throws(() => E(725)) === null && /trop grands/.test(throws(() => E(750)) || ''));
     // pire cas réel : 20 dames blanches (+725) et 20 pions noirs (contribution +725 pour les Blancs) = 29 000 exactement.
     const Ev = createTableEvaluator({ man: Array(50).fill(-725), king: Array(50).fill(725) });
     const b = new Int8Array(50); for (let i = 0; i < 20; i++) b[i] = 3; for (let i = 30; i < 50; i++) b[i] = 2;

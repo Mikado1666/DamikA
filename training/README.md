@@ -13,6 +13,8 @@ rien ici ne change l'interface ni l'analyse. Les parties et les journaux vont da
 | `verify.mjs` | rejoue les parties enregistrées avec `rules.js` (contrôle de légalité indépendant) |
 | `sleep.mjs` | empêche la mise en veille de Windows pendant le calcul |
 | `fit.mjs`, `fit-lib.mjs` | **étape 3.2** : apprend des tables d'évaluation (V1, V1b) à partir de parties d'auto-jeu |
+| `fit-struct.mjs`, `fit-struct-run.mjs` | **étape 3.3** : tables + caractéristiques de STRUCTURE (V2), choix global / par phase par la mesure |
+| `bench-eval.mjs` | coût en vitesse des évaluateurs (ns par position, nœuds/s de la recherche), sur positions réelles |
 | `models/` | tables apprises (petits JSON d'entiers, utilisables par `--evaluator learned:…`) |
 
 ## Lancer (dans un terminal séparé, depuis la racine du dépôt `C:\Users\micka\DamikA`)
@@ -119,3 +121,15 @@ une perte plus basse ne suffit pas, il faut un match gagné contre V0 (intervall
 dans l'arène, utiliser une graine DIFFÉRENTE de celle de l'auto-jeu qui a servi à l'apprendre (nuit 1 : graine 1 ; matchs
 d'évaluation : `--seed 777`), sinon les premières ouvertures du match sont celles des premières parties d'entraînement.
 Pour générer de nouvelles données avec un évaluateur appris : `--seed 2` (ou autre) et un nouveau dossier `--out`.
+
+## Caractéristiques de structure (étape 3.3)
+Les évaluateurs appris peuvent porter, par phase, un objet `features` : { nom: poids entier } (registre `FEATURES` de
+`js/ai/eval-learned.js` : `sup`, `pair`, `blocked`, `free`, `kmob`, `wing`, `kvm`, `fort`, `promo`, `isol`). L'évaluation vaut
+tables + Σ poids × (compteur Blancs − compteur Noirs) ; symétrie miroir exacte, valeurs entières, garde-fou de mat sur la borne.
+```
+node training/fit.mjs --data training/data/selfplay-nuit-1 --base training/models/v1b-l0.json --families F1,F2,F3,F4,F5,F6 --tag s33
+node training/fit.mjs … --combo kvm,fort,wing --combo-name KFW --lambda 0.5 --game-weight 1 --freeze-tables 1 --tag x33
+node training/bench-eval.mjs training/models/v1b-l0.json training/models/s33-F5.json
+```
+`--freeze-tables` n'apprend que les poids de structure (les tables restent celles de la base) ; `--data a,b` lit plusieurs auto-jeux.
+Un modèle dont la borne de mat dépasse 29 000 est refusé par l'évaluateur et signalé INVALIDE par l'apprentissage.

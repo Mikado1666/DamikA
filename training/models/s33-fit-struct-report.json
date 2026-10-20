@@ -1,0 +1,452 @@
+{
+ "data": "selfplay-nuit-1 : 8000 parties, 956580 positions retenues, validation 15 % des parties (graine 1)",
+ "base": "training/models/v1b-l0.json",
+ "seed": 1,
+ "valFraction": 0.15,
+ "Kt": 415.91220042538896,
+ "threshold": 0.00005,
+ "alphas": [
+  0.000001,
+  0.00001,
+  0.0001,
+  0.001
+ ],
+ "runs": [
+  {
+   "name": "s33-F1",
+   "family": "F1",
+   "names": [
+    "sup",
+    "pair"
+   ],
+   "lambda": 0,
+   "Km": 410.3540837797968,
+   "config": [
+    "sup:global",
+    "pair:global"
+   ],
+   "alpha": 0.0001,
+   "baseVal": 0.6659172093798215,
+   "baseTrain": 0.6674010430267472,
+   "witnessVal": 0.6659167640035409,
+   "val": 0.6659126221529263,
+   "train": 0.6673969451046922,
+   "bound": 6634,
+   "trials": [
+    {
+     "config": "sup:global pair:global",
+     "valLoss": 0.6659130259080738,
+     "trainLoss": 0.6673965449060806
+    },
+    {
+     "config": "sup:phase pair:global",
+     "valLoss": 0.6659125855894182,
+     "trainLoss": 0.6673962066382269
+    },
+    {
+     "config": "sup:global pair:phase",
+     "valLoss": 0.6659119436678946,
+     "trainLoss": 0.6673954010000711
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.6659130259080738
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.665913285140016
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6659126221529263
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6659138918209945
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {
+      "sup": 3,
+      "pair": -3
+     }
+    },
+    {
+     "minPieces": 15,
+     "features": {
+      "sup": 3,
+      "pair": -3
+     }
+    },
+    {
+     "minPieces": 0,
+     "features": {
+      "sup": 3,
+      "pair": -3
+     }
+    }
+   ]
+  },
+  {
+   "name": "s33-F2",
+   "family": "F2",
+   "names": [
+    "blocked"
+   ],
+   "lambda": 0,
+   "Km": 410.3540837797968,
+   "config": [
+    "blocked:global"
+   ],
+   "alpha": 0.000001,
+   "baseVal": 0.6659172093798215,
+   "baseTrain": 0.6674010430267472,
+   "witnessVal": 0.6659167640035409,
+   "val": 0.6659164764423045,
+   "train": 0.667400546661421,
+   "bound": 6504,
+   "trials": [
+    {
+     "config": "blocked:global",
+     "valLoss": 0.6659164764423045,
+     "trainLoss": 0.667400546661421
+    },
+    {
+     "config": "blocked:phase",
+     "valLoss": 0.6659166183986169,
+     "trainLoss": 0.6673995121280618
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.6659164764423045
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.66591692172251
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6659172808005742
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6659172093798215
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {}
+    },
+    {
+     "minPieces": 15,
+     "features": {}
+    },
+    {
+     "minPieces": 0,
+     "features": {}
+    }
+   ]
+  },
+  {
+   "name": "s33-F3",
+   "family": "F3",
+   "names": [
+    "free",
+    "kmob"
+   ],
+   "lambda": 0,
+   "Km": 410.3540837797968,
+   "config": [
+    "free:global",
+    "kmob:global"
+   ],
+   "alpha": 0.001,
+   "baseVal": 0.6659172093798215,
+   "baseTrain": 0.6674010430267472,
+   "witnessVal": 0.6659167640035409,
+   "val": 0.6659172093798215,
+   "train": 0.6674010430267472,
+   "bound": 6454,
+   "trials": [
+    {
+     "config": "free:global kmob:global",
+     "valLoss": 0.6659203159314546,
+     "trainLoss": 0.6674026472534398
+    },
+    {
+     "config": "free:phase kmob:global",
+     "valLoss": 0.6659198425489548,
+     "trainLoss": 0.667401902314421
+    },
+    {
+     "config": "free:global kmob:phase",
+     "valLoss": 0.6659192965784901,
+     "trainLoss": 0.6674013433582169
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.6659203159314546
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.6659175228808396
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6659192131282348
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6659172093798215
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {}
+    },
+    {
+     "minPieces": 15,
+     "features": {}
+    },
+    {
+     "minPieces": 0,
+     "features": {}
+    }
+   ]
+  },
+  {
+   "name": "s33-F4",
+   "family": "F4",
+   "names": [
+    "wing"
+   ],
+   "lambda": 0,
+   "Km": 410.3540837797968,
+   "config": [
+    "wing:global"
+   ],
+   "alpha": 0.0001,
+   "baseVal": 0.6659172093798215,
+   "baseTrain": 0.6674010430267472,
+   "witnessVal": 0.6659167640035409,
+   "val": 0.6659139512714228,
+   "train": 0.6673985486938245,
+   "bound": 6474,
+   "trials": [
+    {
+     "config": "wing:global",
+     "valLoss": 0.6659148580626725,
+     "trainLoss": 0.667398036501644
+    },
+    {
+     "config": "wing:phase",
+     "valLoss": 0.6659115669968778,
+     "trainLoss": 0.6673958300136273
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.6659148580626725
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.6659148739031227
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6659139512714228
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6659140962994703
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {
+      "wing": -1
+     }
+    },
+    {
+     "minPieces": 15,
+     "features": {
+      "wing": -1
+     }
+    },
+    {
+     "minPieces": 0,
+     "features": {
+      "wing": -1
+     }
+    }
+   ]
+  },
+  {
+   "name": "s33-F5",
+   "family": "F5",
+   "names": [
+    "kvm",
+    "fort"
+   ],
+   "lambda": 0,
+   "Km": 410.3540837797968,
+   "config": [
+    "kvm:global",
+    "fort:global"
+   ],
+   "alpha": 0.000001,
+   "baseVal": 0.6659172093798215,
+   "baseTrain": 0.6674010430267472,
+   "witnessVal": 0.6659167640035409,
+   "val": 0.6657463587700749,
+   "train": 0.6672315539279924,
+   "bound": 12597,
+   "trials": [
+    {
+     "config": "kvm:global fort:global",
+     "valLoss": 0.6657463587700749,
+     "trainLoss": 0.6672315539279924
+    },
+    {
+     "config": "kvm:phase fort:global",
+     "valLoss": 0.6657250861526366,
+     "trainLoss": 0.6672080956838543
+    },
+    {
+     "config": "kvm:global fort:phase",
+     "valLoss": 0.6657463587700749,
+     "trainLoss": 0.6672315539279924
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.6657463587700749
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.6657698002183063
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6658029723057071
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6658428955175925
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {
+      "kvm": 16,
+      "fort": 31
+     }
+    },
+    {
+     "minPieces": 15,
+     "features": {
+      "kvm": 16,
+      "fort": 31
+     }
+    },
+    {
+     "minPieces": 0,
+     "features": {
+      "kvm": 16,
+      "fort": 31
+     }
+    }
+   ]
+  },
+  {
+   "name": "s33-F6",
+   "family": "F6",
+   "names": [
+    "promo",
+    "isol"
+   ],
+   "lambda": 0,
+   "Km": 410.3540837797968,
+   "config": [
+    "promo:global",
+    "isol:global"
+   ],
+   "alpha": 0.000001,
+   "baseVal": 0.6659172093798215,
+   "baseTrain": 0.6674010430267472,
+   "witnessVal": 0.6659167640035409,
+   "val": 0.665857464594495,
+   "train": 0.6673371821902851,
+   "bound": 7068,
+   "trials": [
+    {
+     "config": "promo:global isol:global",
+     "valLoss": 0.665857464594495,
+     "trainLoss": 0.6673371821902851
+    },
+    {
+     "config": "promo:phase isol:global",
+     "valLoss": 0.665856136639991,
+     "trainLoss": 0.6673373592211921
+    },
+    {
+     "config": "promo:global isol:phase",
+     "valLoss": 0.6658579978374936,
+     "trainLoss": 0.6673365304694192
+    }
+   ],
+   "alphaRows": [
+    {
+     "alpha": 0.000001,
+     "val": 0.665857464594495
+    },
+    {
+     "alpha": 0.00001,
+     "val": 0.6658797530810605
+    },
+    {
+     "alpha": 0.0001,
+     "val": 0.6659048850837415
+    },
+    {
+     "alpha": 0.001,
+     "val": 0.6659141238919812
+    }
+   ],
+   "weights": [
+    {
+     "minPieces": 30,
+     "features": {
+      "promo": 112
+     }
+    },
+    {
+     "minPieces": 15,
+     "features": {
+      "promo": 112
+     }
+    },
+    {
+     "minPieces": 0,
+     "features": {
+      "promo": 112
+     }
+    }
+   ]
+  }
+ ]
+}
