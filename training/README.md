@@ -72,7 +72,10 @@ auto-jeu : `--explore-prob <p>` (0,08) et `--explore-margin <cp>` (30).
 - **Ouverture** : K demi-coups au hasard parmi les coups légaux, rejetée si déséquilibrée (évaluation V0). En match,
   chaque ouverture est jouée **deux fois, couleurs inversées** (une « paire ») ; en auto-jeu, une partie par ouverture.
 - **Fin de partie** : plus de coup = perte ; 25 coups de dames sans prise ni coup de pion = nulle ; 3e répétition =
-  nulle ; 300 demi-coups = nulle. Limites de finale FMJD 6.3/6.4 : non appliquées (décision de Mickaël, à revoir).
+  nulle ; limites de finale FMJD 6.3 (16 coups), 6.4 (5 coups) et clause de la grande diagonale = nulle (motifs `endgame16`,
+  `endgame5`, `diagonal5`, même code que l'analyse : `FastBoard`) ; 300 demi-coups = nulle. L'identité d'un run porte `endgameRules` :
+  un run commencé SANS ces règles (avant la branche `regles-6-3-6-4`) ne se reprend pas avec ce code, et `verify.mjs` lui applique
+  les anciennes règles (absence du champ).
 - **Exploration** (auto-jeu seulement) : après l'ouverture, avec la probabilité `--explore-prob`, le coup est tiré au
   hasard parmi ceux dont le score (recherche à profondeur − 1) est à moins de `--explore-margin` centipions du meilleur.
 - **Reproductibilité** : même graine et mêmes réglages = mêmes parties, coup pour coup (chaque tâche a sa propre

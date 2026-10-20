@@ -4,8 +4,12 @@
 //   - perte du camp au trait s'il n'a plus de coup (plus de pièce ou toutes bloquées), contrôlée en premier ;
 //   - nulle à 50 demi-coups consécutifs sans prise ni coup de pion (FMJD 6.2, FastBoard.quiet) ;
 //   - nulle à la 3e occurrence d'une position, même camp au trait (FMJD 6.1) ;
+//   - nulle par les limites de finale FMJD 6.3 (16 coups) et 6.4 (5 coups), clause de la grande diagonale comprise
+//     (compteurs eg / dg de FastBoard ; règle complète dans l'en-tête de js/engine/rules.js) : motifs 'endgame16',
+//     'endgame5', 'diagonal5'. IDENTIQUE à ce que fait le Worker d'analyse (même code : FastBoard) ;
 //   - nulle au plafond de `maxPlies` demi-coups (300 par défaut), ouverture comprise.
-// Les limites de finale FMJD 6.3 / 6.4 ne sont PAS appliquées (décision de Mickaël : plus tard).
+// Les parties enregistrées AVANT l'application des limites de finale (étapes 3.1 à 3.3) n'ont pas ces nulles : l'identité
+// d'un run (meta.json) porte `endgameRules` depuis ce changement ; son absence = anciennes règles (voir verify.mjs).
 //
 // Le moteur rapide (FastBoard) joue ; rules.js sert de RÉFÉRENCE : verifyGame() rejoue une partie
 // enregistrée avec rules.js seul (légalité de chaque coup, plateau final, état terminal et motif).
@@ -17,15 +21,17 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FastBoard, WHITE, BLACK, DRAW_QUIET_PLIES, moveToUi } from '../js/ai/fastboard.js';
+import { FastBoard, WHITE, BLACK, DRAW_QUIET_PLIES, ENDGAME_REASONS, moveToUi } from '../js/ai/fastboard.js';
 import { analyseSync, zobristHash } from '../js/ai/search.js';
 import { createEvaluator, EVAL_WEIGHTS } from '../js/ai/eval.js';
 import { createTableEvaluator, tablesToPlain } from '../js/ai/eval-learned.js';
 import {
-  initialBoard, generateLegalMoves, applyCaptureSequence, applySimpleMove,
+  initialBoard, generateLegalMoves, applyCaptureSequence, applySimpleMove, endgameStep, endgameDrawReason,
 } from '../js/engine/rules.js';
 
 export const DEFAULT_MAX_PLIES = 300;
+// Jeu de règles de nulle des parties : écrit dans l'identité de chaque run (arena.mjs), lu par verify.mjs.
+export const ENDGAME_RULES_ID = 'fmjd2024-6.3-6.4';
 
 // --- Hasard à graine ---------------------------------------------------------------------------------------------
 export function mulberry32(a) {
@@ -147,9 +153,10 @@ export function encodeBoard(board) {
 // --- État d'une partie (règles de nulle) -------------------------------------------------------------------------------
 const hkey = (h) => `${h.lo}:${h.hi}`;
 
-class GameState {
-  constructor() {
-    this.fb = FastBoard.initial();
+export class GameState {
+  // start (essais) : { board, side } au format de l'interface ; absent = position initiale.
+  constructor(start = null) {
+    this.fb = start ? FastBoard.fromUiBoard(start.board, start.side) : FastBoard.initial();
     this.window = [];        // hashes des positions depuis le dernier coup irréversible, SANS la position courante
     this.counts = new Map(); // occurrences de chaque position de la fenêtre (courante comprise)
     this.plies = 0;
@@ -177,12 +184,14 @@ class GameState {
     }
     if (fb.quiet >= DRAW_QUIET_PLIES) return { result: '1/2', reason: 'quiet' };
     if ((this.counts.get(hkey(this.cur)) || 0) >= 3) return { result: '1/2', reason: 'repetition' };
+    const eg = fb.egDrawReason(); // limites de finale 6.3 / 6.4 : APRÈS « sans coup = perdu » (la perte au dernier coup l'emporte)
+    if (eg !== 0) return { result: '1/2', reason: ENDGAME_REASONS[eg] };
     if (this.plies >= maxPlies) return { result: '1/2', reason: 'maxPlies' };
     return null;
   }
 
   history() {
-    return { hashes: this.window, quiet: this.fb.quiet };
+    return { hashes: this.window, quiet: this.fb.quiet, endgame: this.fb.egState() };
   }
 }
 
@@ -219,8 +228,8 @@ export function makeOpening(rng, { plies = 8, thresholdCp = 50, probeDepth = 4, 
 // --- Une partie -------------------------------------------------------------------------------------------------------
 // opening : coups en notation (joués sans recherche) ; white / black : joueurs (makePlayer) ;
 // explore : { prob, margin } ou null (match) avec `rng` ; record : enregistre les positions (selfplay).
-export function playGame({ opening = [], white, black, explore = null, rng = null, record = false, maxPlies = DEFAULT_MAX_PLIES }) {
-  const st = new GameState();
+export function playGame({ opening = [], white, black, explore = null, rng = null, record = false, maxPlies = DEFAULT_MAX_PLIES, start = null }) {
+  const st = new GameState(start);
   const moves = [];
   for (const str of opening) {
     const legal = st.fb.generateMoves();
@@ -269,6 +278,7 @@ export function playGame({ opening = [], white, black, explore = null, rng = nul
           const hist = { hashes: irreversible ? [] : [...st.window, st.cur], quiet: 0 };
           fb.makeMove(m);
           hist.quiet = fb.quiet;
+          hist.endgame = fb.egState();
           const cr = analyseSync({ board: fb.toUiBoard(), side: fb.sideToMove }, {
             maxDepth: Math.max(1, player.depth - 1), maxTimeMs: 1e9, evaluator: player.evaluate, history: hist,
           });
@@ -306,10 +316,14 @@ const boardKey = (board, side) => {
 };
 
 // Rejoue rec.moves avec rules.js seul. Retourne { ok: true } ou { ok: false, error }.
-export function verifyGame(rec, maxPlies = DEFAULT_MAX_PLIES) {
-  let board = initialBoard();
-  let side = 'w';
+// options : endgameRules (défaut true) : applique les limites de finale 6.3 / 6.4 (js/engine/rules.js, endgameStep) ;
+// false pour les parties enregistrées avant leur introduction (verify.mjs lit l'identité du run) ;
+// start (essais) : { board, side } de départ au format de l'interface (défaut : position initiale).
+export function verifyGame(rec, maxPlies = DEFAULT_MAX_PLIES, { endgameRules = true, start = null } = {}) {
+  let board = start ? start.board.map((p) => (p ? { ...p } : null)) : initialBoard();
+  let side = start ? start.side : 'w';
   let quiet = 0;
+  let eg = endgameRules ? endgameStep(null, board) : null;
   const counts = new Map([[boardKey(board, side), 1]]);
 
   // État terminal attendu avant chaque coup (même priorité que GameState.terminal).
@@ -318,6 +332,8 @@ export function verifyGame(rec, maxPlies = DEFAULT_MAX_PLIES) {
     if (captures.length === 0 && simples.length === 0) return { result: side === 'w' ? '0-1' : '1-0', reason: 'noMoves' };
     if (quiet >= DRAW_QUIET_PLIES) return { result: '1/2', reason: 'quiet' };
     if ((counts.get(boardKey(board, side)) || 0) >= 3) return { result: '1/2', reason: 'repetition' };
+    const egReason = endgameDrawReason(eg);
+    if (egReason) return { result: '1/2', reason: egReason };
     if (plies >= maxPlies) return { result: '1/2', reason: 'maxPlies' };
     return null;
   };
@@ -342,6 +358,7 @@ export function verifyGame(rec, maxPlies = DEFAULT_MAX_PLIES) {
     board = p.capture ? applyCaptureSequence(board, piece, played).board : applySimpleMove(board, piece, played).board;
     side = side === 'w' ? 'b' : 'w';
     if (irreversible) { quiet = 0; counts.clear(); } else quiet++;
+    if (endgameRules) eg = endgameStep(eg, board);
     const k = boardKey(board, side);
     counts.set(k, (counts.get(k) || 0) + 1);
   }

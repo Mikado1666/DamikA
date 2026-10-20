@@ -129,13 +129,17 @@ export function createAnalysisController({
     },
 
     // position = { board, side } au format de l'interface (game.board, game.sideToMove).
-    // history (facultatif) = { positions: [{ board, side }], quiet } : cf. analysisHistory() dans
-    // analysis-format.js. Absent ou quiet = 0 : rien n'est transmis (comportement d'avant).
+    // history (facultatif) = { positions: [{ board, side }], quiet, endgame? } : cf. analysisHistory() dans
+    // analysis-format.js. Absent, ou quiet = 0 sans `endgame` : rien n'est transmis (comportement d'avant). `endgame` =
+    // état de la finale (limites 6.3 / 6.4) : transmis même quand quiet = 0 (les coups de pion comptent dans une finale).
     request(position, history = null) {
       if (!enabled) return;
-      const hist = history && history.quiet > 0 && history.positions && history.positions.length > 0 ? history : null;
+      const hasWindow = history && history.quiet > 0 && history.positions && history.positions.length > 0;
+      const endgame = history && history.endgame ? history.endgame : null;
+      const hist = hasWindow || endgame ? history : null;
       const key = positionKey(position.board, position.side)
-        + (hist ? `|${hist.quiet}|${hist.positions.map((p) => positionKey(p.board, p.side)).join(',')}` : '');
+        + (hasWindow ? `|${hist.quiet}|${hist.positions.map((p) => positionKey(p.board, p.side)).join(',')}` : '')
+        + (endgame ? `|eg${endgame.plies}.${endgame.limit}.${endgame.diag}` : '');
       if (key === currentKey) return; // même position : rien à refaire
       currentKey = key;
       if (timer !== null) { clearTimer(timer); timer = null; }
@@ -146,11 +150,12 @@ export function createAnalysisController({
         board: position.board.map((p) => (p ? { color: p.color, king: !!p.king } : null)),
         side: position.side,
         history: hist ? {
-          quiet: hist.quiet,
-          positions: hist.positions.map((p) => ({
+          quiet: hasWindow ? hist.quiet : 0,
+          positions: hasWindow ? hist.positions.map((p) => ({
             board: p.board.map((q) => (q ? { color: q.color, king: !!q.king } : null)),
             side: p.side,
-          })),
+          })) : [],
+          ...(endgame ? { endgame: { plies: endgame.plies, limit: endgame.limit, diag: endgame.diag } } : {}),
         } : null,
       };
       emit('waiting');
