@@ -134,6 +134,10 @@ export class BoardRenderer {
     const boardColumn = this.canvas.closest('.board-column');
     const layoutEl = boardColumn ? boardColumn.parentElement : null;
     let availableWidth = parent.clientWidth;
+    // Mise en page en colonne (≤ 900 px, téléphone) : ni rail ni panneau à côté du damier, il prend toute la
+    // largeur de l'écran ; sa hauteur ne le limite pas (la page défile). Détecté par le CSS lui-même
+    // (flex-direction de .layout), sans dupliquer le seuil de 900 px ici.
+    let columnLayout = false;
     if (app && layoutEl) {
       const rail = layoutEl.querySelector('.players-rail');
       const panel = layoutEl.querySelector('.side-panel');
@@ -142,7 +146,10 @@ export class BoardRenderer {
       const paddingX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
       const railW = rail ? rail.getBoundingClientRect().width : 0;
       const panelW = panel ? panel.getBoundingClientRect().width : 0;
-      availableWidth = app.clientWidth - railW - panelW - gap * 2 - paddingX;
+      columnLayout = cs.flexDirection === 'column';
+      availableWidth = columnLayout
+        ? app.clientWidth - paddingX
+        : app.clientWidth - railW - panelW - gap * 2 - paddingX;
       // Cette largeur contourne .board-wrap donc aussi son `max-width` CSS (950px) —
       // on le relit directement pour ne pas dupliquer ce plafond en constante JS.
       const parentMaxWidth = parseFloat(getComputedStyle(parent).maxWidth);
@@ -152,7 +159,7 @@ export class BoardRenderer {
     // stretch vertical de .layout (align-items:stretch), un axe totalement indépendant
     // de --board-px (qui ne contraint que la largeur de .board-column), donc hors du
     // cycle décrit ci-dessus.
-    const available = Math.min(availableWidth, parent.clientHeight || availableWidth);
+    const available = columnLayout ? availableWidth : Math.min(availableWidth, parent.clientHeight || availableWidth);
     // px = taille CSS totale du canvas (damier + marge des numéros de case), c'est CE
     // total qui doit tenir dans l'espace disponible — auparavant `size` (damier seul)
     // était calé sur `available` puis la marge s'ajoutait PAR-DESSUS, ce qui faisait

@@ -4,6 +4,8 @@ import {
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { createAnalysisController } from './ai/analysis-controller.js';
 import { ENGINES, DEFAULT_ENGINE, isEngineId } from './ai/engines.js';
+import { libraryVisibleOrder } from './library-view.js';
+import { lookupInTable, manualPhotoKeys, nameTokens } from './photo-match.js';
 import {
   barFraction, formatHeadline, formatMeta, formatLine, formatScore, moveSquares, shouldShowMove,
   advantageTier, analysisHistory, isBigSwing, tickFractions, equalZoneFractions,
@@ -1491,47 +1493,7 @@ function registerPhotoUrlFromHeaders(rawName, rawUrl) {
 // sinon revient à l'avatar lettré par défaut. `onerror` sur l'`<img>` couvre le cas d'une
 // URL externe devenue injoignable (Toernooibase indisponible, image déplacée) : retombe
 // silencieusement sur la lettre plutôt que d'afficher une image cassée.
-// Découpe un nom en mots normalisés (minuscules, virgule traitée comme un espace) — sert de
-// base à la correspondance tolérante ci-dessous : "Callegari, Mickael", "Mickael Callegari"
-// et "CALLEGARI   Mickael" doivent tous se reconnaître comme le même joueur.
-function nameTokens(name) {
-  return name.replace(/,/g, ' ').trim().toLowerCase().split(/\s+/).filter(Boolean);
-}
-
-// Nom de famille supposé d'une clé de registre : la partie avant la virgule si elle existe
-// (convention PDN "Nom, Prénom" déjà utilisée partout dans l'app), sinon le dernier mot
-// (repli "Prénom Nom" — imparfait pour un nom de famille à plusieurs mots, mais suffisant
-// pour le cas visé : retrouver un joueur à partir de son seul nom de famille).
-function surnameOf(key) {
-  if (key.includes(',')) return key.split(',')[0].trim().toLowerCase();
-  const words = key.trim().split(/\s+/);
-  return words[words.length - 1].toLowerCase();
-}
-
-// Cherche une correspondance dans UNE table (registre manuel OU pré-remplissage, jamais les
-// deux mélangées — voir lookupPhotoUrl) :
-//  1. correspondance exacte tolérante (casse/espaces/virgule/ordre des mots ignorés) ;
-//  2. à défaut, si le nom tapé est un seul mot (ex. juste le nom de famille), on le compare
-//     au nom de famille de chaque entrée. Si toutes les entrées qui correspondent pointent
-//     vers la MÊME photo, on la prend ; si elles pointent vers des photos différentes
-//     (plusieurs joueurs distincts portant ce nom de famille), on ne choisit pas — mieux
-//     vaut l'avatar par défaut qu'un risque de photo de la mauvaise personne.
-function lookupInTable(table, typedTokens, typedNorm) {
-  for (const key of Object.keys(table)) {
-    const keyNorm = [...nameTokens(key)].sort().join(' ');
-    if (keyNorm === typedNorm) return { url: table[key], ambiguous: false };
-  }
-  if (typedTokens.length === 1) {
-    const surname = typedTokens[0];
-    const candidates = new Set();
-    for (const key of Object.keys(table)) {
-      if (surnameOf(key) === surname) candidates.add(table[key]);
-    }
-    if (candidates.size === 1) return { url: [...candidates][0], ambiguous: false };
-    if (candidates.size > 1) return { url: null, ambiguous: true };
-  }
-  return { url: null, ambiguous: false };
-}
+// nameTokens(), surnameOf(), lookupInTable() et manualPhotoKeys() : js/photo-match.js (fonctions pures, testées sous Node).
 
 // Le registre manuel est vérifié EN ENTIER (exact puis nom de famille) avant même de
 // regarder le pré-remplissage : une ambiguïté côté manuel ne doit jamais se rabattre
@@ -1611,13 +1573,30 @@ document.querySelectorAll('.player-avatar-ring').forEach((ring) => {
 
 el.photoCloseBtn.addEventListener('click', closePhotoPopover);
 
+// « Retirer la photo » : supprime du registre manuel les entrées qui fournissent réellement la photo affichée
+// (correspondance tolérante : autre graphie du nom, ou nom de famille seul — cf. manualPhotoKeys()), et non la seule
+// clé égale au caractère près au nom affiché (la photo restait alors affichée, sans aucun message). Une photo qui
+// vient du pré-remplissage automatique (data/player-photos.json ou balises WhiteUrl/BlackUrl du PDN, rechargés à
+// chaque démarrage) n'est pas dans le registre : on le dit au lieu de ne rien faire en silence.
 el.photoRemoveBtn.addEventListener('click', () => {
   const name = currentPlayerName(photoPopoverSide).trim();
-  if (name && playerPhotoRegistry[name]) {
-    delete playerPhotoRegistry[name];
+  const keys = manualPhotoKeys(playerPhotoRegistry, name);
+  if (keys.length > 0) {
+    keys.forEach((key) => { delete playerPhotoRegistry[key]; });
     savePlayerPhotoRegistry();
-    applyAvatar(photoPopoverSide, name);
-    showToast('Photo retirée.', 'success');
+    applyAvatar('white', headers.White);
+    applyAvatar('black', headers.Black);
+    // Il peut rester une photo à l'écran : une AUTRE entrée du registre au même nom de famille (nom tapé = nom
+    // de famille seul, une 2e pression retire celle-là) ou la photo automatique. On le dit, sans rien supprimer de plus.
+    if (manualPhotoKeys(playerPhotoRegistry, name).length > 0) {
+      showToast('Photo retirée ; une autre photo du même nom de famille est encore affichée (Retirer de nouveau pour la supprimer aussi).', 'success');
+    } else if (lookupPhotoUrl(name)) {
+      showToast('Photo manuelle retirée ; la photo automatique (Toernooibase) reste affichée.', 'success');
+    } else {
+      showToast('Photo retirée.', 'success');
+    }
+  } else if (lookupPhotoUrl(name)) {
+    showToast('Cette photo vient du pré-remplissage automatique (Toernooibase) : elle ne peut pas être retirée ici.', 'error');
   }
   closePhotoPopover();
 });
@@ -2077,18 +2056,14 @@ function renderLibrary() {
   el.libraryHeadCount.textContent = library.length === 0 ? '' : `${library.length} partie${library.length > 1 ? 's' : ''}`;
   el.librarySearchRow.hidden = library.length === 0;
 
-  const visibleIndexes = library.map((entry, idx) => idx).filter((idx) => {
-    if (libraryFilter === 'favorites' && !libraryFavorites.has(gameFingerprint(library[idx]))) return false;
-    if (libraryFilter === 'recent' && !libraryRecent.includes(gameFingerprint(library[idx]))) return false;
-    return entryMatchesSearch(library[idx], librarySearchQuery);
-  });
-  // Ordre "Récentes" (le plus récemment ouvert en premier) pour cette vue ; "Toutes"/"Favoris"
-  // gardent l'ordre de `library`.
-  if (libraryFilter === 'recent') {
-    visibleIndexes.sort((a, b) => (
-      libraryRecent.indexOf(gameFingerprint(library[a])) - libraryRecent.indexOf(gameFingerprint(library[b]))
-    ));
-  }
+  // Parties à afficher, DANS L'ORDRE d'affichage (js/library-view.js) : "Récentes" = le plus récemment
+  // ouvert en premier ; "Toutes"/"Favoris" gardent l'ordre de `library`. La boucle ci-dessous parcourt ce
+  // tableau (pas `library`) : sinon l'ordre calculé ici n'était jamais appliqué à l'écran.
+  const visibleIndexes = libraryVisibleOrder(
+    library,
+    { filter: libraryFilter, favorites: libraryFavorites, recent: libraryRecent, query: librarySearchQuery },
+    { fingerprint: gameFingerprint, matches: entryMatchesSearch },
+  );
   el.libraryFilterEmpty.hidden = library.length === 0 || visibleIndexes.length > 0;
   // Réordonnancement manuel : seulement quand rien ne change le contenu affiché par rapport à
   // `library` elle-même (vue "Toutes", pas de recherche active) — cf.
@@ -2097,8 +2072,8 @@ function renderLibrary() {
   // filtré de `library`.
   const dragEnabled = libraryFilter === 'all' && !librarySearchQuery;
 
-  library.forEach((entry, idx) => {
-    if (!visibleIndexes.includes(idx)) return;
+  visibleIndexes.forEach((idx) => {
+    const entry = library[idx];
     // Purge un `headers.Label` résiduel (ancienne fonctionnalité de renommage libre,
     // retirée — cf. libraryEntryTitle) qui pourrait encore traîner dans une bibliothèque
     // rechargée depuis un fichier .pdn ou un ancien localStorage : il n'est plus lu nulle
@@ -3612,6 +3587,10 @@ function alignLayout() {
   // On repart d'une position neutre avant de mesurer, sinon une correction précédente
   // fausserait la mesure suivante (dérive cumulative).
   resetLayoutTransforms();
+  // Mise en page en colonne (≤ 900 px, téléphone) : le rail, le damier et le panneau sont EMPILÉS, ces
+  // alignements pensés pour 3 colonnes côte à côte n'ont aucun sens (ils décalaient le damier de 400 px vers le
+  // bas, hors de l'écran : « écran noir » du lien de partage). On les laisse remis à zéro.
+  if (getComputedStyle(el.layoutRoot).flexDirection === 'column') return;
 
   const canvasRect = canvas.getBoundingClientRect();
   // Référence = haut du PANNEAU (+ son filet de 1 px, soit là où commençaient les onglets), pas les

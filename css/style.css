@@ -2035,8 +2035,30 @@ body {
 
 #easter-egg { cursor: default; }
 
+/* ---------- Téléphone / fenêtre étroite (≤ 900 px) : mise en page en colonne ----------
+   Cause de l'« écran noir » du lien de partage sur téléphone (20/10/2026) : sous 900 px le gabarit pensé pour
+   3 colonnes restait en place → #app (100dvh, overflow hidden) coupait tout ce qui dépassait, le rail des joueurs
+   (4 cartes en une seule rangée) faisait 700 px de haut, le panneau latéral était écrasé à 2 px et alignLayout()
+   (main.js) décalait le damier de 400 px vers le bas : il ne restait que la barre du haut sur fond sombre. Ici : la
+   page défile, le rail passe à la ligne (méta pleine largeur, puis Noirs · score · Blancs), le panneau a une hauteur
+   propre, les commandes passent à la ligne. La largeur du damier est prise sur tout l'écran par
+   BoardRenderer.resize() (flex-direction: column) et alignLayout() ne décale plus rien dans ce mode.
+   La jauge d'évaluation est MASQUÉE (elle est posée à gauche du damier, donc hors écran) : le score, le meilleur coup
+   et la flèche verte restent affichés. */
 @media (max-width: 900px) {
-  .layout { flex-direction: column; padding: 15px; gap: 17px; }
-  .side-panel { flex: 1 1 auto; max-height: 40vh; width: 100%; }
-  .board-column { width: 100%; }
+  html, body { height: auto; }
+  #app { height: auto; min-height: 100dvh; overflow-x: clip; overflow-y: visible; }
+  .layout { flex: none; flex-direction: column; padding: 15px; gap: 17px; }
+  .players-rail { flex-wrap: wrap; align-items: stretch; gap: 10px; }
+  .game-meta-card { flex: 1 1 100%; }
+  .player-card { flex: 1 1 0; min-width: 0; }
+  .score-center { flex: none; align-self: center; }
+  .board-column { width: 100%; min-width: 0; }
+  .controls-bar { width: 100%; flex-wrap: wrap; }
+  .ctrl-sep { display: none; }
+  .side-panel { flex: none; height: 60vh; min-height: 340px; max-height: none; width: 100%; max-width: none; }
+  .topbar-inner { flex-wrap: wrap; gap: 8px; padding: 10px 15px; }
+  .topbar-actions { flex-wrap: wrap; }
+  .eval-bar { display: none; }
+  .layout.analysis-on .players-rail { padding-right: 0; }
 }
