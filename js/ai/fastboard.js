@@ -83,6 +83,33 @@ const MAX_CAPS_STACK = MAX_PLY * 20;
 // = 25 coups de chaque camp = 50 demi-coups consécutifs sans coup de pion ni prise.
 export const DRAW_QUIET_PLIES = 50;
 
+// Limites de finale (FMJD, Annexe 1, art. 6.3 et 6.4, texte 2024). Implémentation RAPIDE, incrémentale ; la version de
+// RÉFÉRENCE est dans js/engine/rules.js (endgameStep) et tests/endgame-rules.mjs les compare coup par coup. Règle complète
+// (familles, comptage, clause de la grande diagonale, priorité de la perte) : commentaire d'en-tête de rules.js.
+//   famille 1 = art. 6.3 : un camp a une dame seule, l'autre 3 dames / 2 dames + 1 pion / 1 dame + 2 pions → 16 coups ;
+//   famille 2 = art. 6.4 : un camp a une dame seule, l'autre 2 dames / 1 dame + 1 pion / 1 dame → 5 coups.
+// Compteurs de FastBoard (mis à jour par makeMove / unmakeMove, comme `quiet`) :
+//   eg  : demi-coups depuis l'apparition de la finale (-1 : hors famille) ; egLim : 32 ou 10, fixé à l'apparition ;
+//   dg  : demi-coups depuis que la dame seule occupe seule la grande diagonale (-1 : non).
+export const DRAW_ENDGAME16_PLIES = 32;
+export const DRAW_ENDGAME5_PLIES = 10;
+export const DRAW_DIAGONAL_PLIES = 10;
+export const ENDGAME_REASONS = [null, 'endgame16', 'endgame5', 'diagonal5'];
+
+// Famille d'après les effectifs (pions blancs, dames blanches, pions noirs, dames noires) : 0, 1 ou 2.
+export function endgameFamilyOfCounts(wm, wk, bm, bk) {
+  let m, k;
+  if (bm === 0 && bk === 1) { m = wm; k = wk; }
+  else if (wm === 0 && wk === 1) { m = bm; k = bk; }
+  else return 0;
+  if ((k === 3 && m === 0) || (k === 2 && m === 1) || (k === 1 && m === 2)) return 1;
+  if ((k === 2 && m === 0) || (k === 1 && m === 1) || (k === 1 && m === 0)) return 2;
+  return 0;
+}
+
+// Grande diagonale (cases FMJD 5, 10, 14, 19, 23, 28, 32, 37, 41, 46), en index 0..49.
+const LONG_DIAGONAL_SQ = Int8Array.of(4, 9, 13, 18, 22, 27, 31, 36, 40, 45);
+
 export class FastBoard {
   constructor() {
     this.board = new Int8Array(50);
@@ -92,6 +119,19 @@ export class FastBoard {
     // reprise en cours de partie.
     this.quiet = 0;
     this._stkQuiet = new Int16Array(MAX_PLY);
+
+    // Limites de finale (art. 6.3 / 6.4) : effectifs par code de pièce (cnt[1..4]), nombre total de pièces, compteurs.
+    // Les effectifs sont tenus à jour par makeMove / unmakeMove à partir de la première utilisation (fromUiBoard,
+    // initial, ou premier makeMove d'un plateau rempli à la main) : ne pas modifier `board` à la main ensuite.
+    this.cnt = new Int8Array(5);
+    this.np = 0;
+    this._counted = false;
+    this.eg = -1;
+    this.egLim = 0;
+    this.dg = -1;
+    this._stkEg = new Int16Array(MAX_PLY);
+    this._stkEgLim = new Int8Array(MAX_PLY);
+    this._stkDg = new Int16Array(MAX_PLY);
 
     // Pièces prises dans la rafle en cours d'exploration : elles restent sur le plateau (donc
     // bloquantes) jusqu'à la fin du coup et ne peuvent pas être sautées deux fois.
@@ -117,6 +157,7 @@ export class FastBoard {
     const fb = new FastBoard();
     for (let i = 0; i < 20; i++) fb.board[i] = BM;
     for (let i = 30; i < 50; i++) fb.board[i] = WM;
+    fb.initEndgame();
     return fb;
   }
 
@@ -255,9 +296,14 @@ export class FastBoard {
 
   // --- Jouer / annuler un coup --------------------------------------------------------------
   makeMove(m) {
+    if (!this._counted) this.initEndgame();
     const board = this.board;
     const sp = this._sp;
     const piece = board[m.from];
+    const prevEg = this.eg, prevEgLim = this.egLim, prevDg = this.dg;
+    this._stkEg[sp] = prevEg;
+    this._stkEgLim[sp] = prevEgLim;
+    this._stkDg[sp] = prevDg;
     this._stkFrom[sp] = m.from;
     this._stkTo[sp] = m.to;
     this._stkPiece[sp] = piece;
@@ -266,18 +312,26 @@ export class FastBoard {
     this._stkQuiet[sp] = this.quiet;
     this.quiet = (piece <= 2 || caps.length > 0) ? 0 : this.quiet + 1; // coup de pion (promotion comprise) ou prise
     let cp = this._cp;
+    const cnt = this.cnt;
     for (let k = 0; k < caps.length; k++) {
       const c = caps[k];
+      const q = board[c];
       this._capSq[cp] = c;
-      this._capPiece[cp] = board[c];
+      this._capPiece[cp] = q;
+      cnt[q]--;
       board[c] = EMPTY;
       cp++;
     }
     this._cp = cp;
     board[m.from] = EMPTY; // avant l'écriture de `to` : from peut être égal à to (rafle en boucle)
     board[m.to] = m.promo ? piece + 2 : piece;
+    if (m.promo) { cnt[piece]--; cnt[piece + 2]++; }
+    this.np -= caps.length;
     this.side ^= 1;
     this._sp = sp + 1;
+    // Limites de finale : une finale n'existe qu'à 4 pièces au plus.
+    if (this.np > 4) { this.eg = -1; this.egLim = 0; this.dg = -1; }
+    else this._egUpdate(prevEg, prevEgLim, prevDg);
   }
 
   unmakeMove() {
@@ -285,14 +339,91 @@ export class FastBoard {
     const sp = --this._sp;
     this.side ^= 1;
     this.quiet = this._stkQuiet[sp];
-    board[this._stkTo[sp]] = EMPTY;
-    board[this._stkFrom[sp]] = this._stkPiece[sp];
+    this.eg = this._stkEg[sp];
+    this.egLim = this._stkEgLim[sp];
+    this.dg = this._stkDg[sp];
+    const cnt = this.cnt;
+    const to = this._stkTo[sp], piece = this._stkPiece[sp];
+    const placed = board[to];
+    if (placed !== piece) { cnt[placed]--; cnt[piece]++; } // promotion annulée
+    board[to] = EMPTY;
+    board[this._stkFrom[sp]] = piece;
     let cp = this._cp;
-    for (let k = this._stkNcap[sp]; k > 0; k--) {
+    const ncap = this._stkNcap[sp];
+    for (let k = ncap; k > 0; k--) {
       cp--;
-      board[this._capSq[cp]] = this._capPiece[cp];
+      const q = this._capPiece[cp];
+      board[this._capSq[cp]] = q;
+      cnt[q]++;
     }
     this._cp = cp;
+    this.np += ncap;
+  }
+
+  // --- Limites de finale (art. 6.3 / 6.4) ------------------------------------------------------------
+  // Compte les pièces du plateau et fixe l'état de finale de la position courante. `endgame` = { plies, limit, diag }
+  // (état de la finale à CETTE position, d'après l'historique de la partie : voir endgameState() de rules.js) ; absent :
+  // la finale est supposée apparaître ici (compteur à 0), ce qui est le cas de toute analyse sans historique.
+  initEndgame(endgame = null) {
+    const board = this.board, cnt = this.cnt;
+    cnt.fill(0);
+    let np = 0;
+    for (let sq = 0; sq < 50; sq++) {
+      const p = board[sq];
+      if (p !== EMPTY) { cnt[p]++; np++; }
+    }
+    this.np = np;
+    this._counted = true;
+    const family = np <= 4 ? endgameFamilyOfCounts(cnt[WM], cnt[WK], cnt[BM], cnt[BK]) : 0;
+    if (family === 0) { this.eg = -1; this.egLim = 0; this.dg = -1; return; }
+    const valid = endgame && Number.isInteger(endgame.plies) && endgame.plies >= 0
+      && (endgame.limit === DRAW_ENDGAME16_PLIES || endgame.limit === DRAW_ENDGAME5_PLIES);
+    this.eg = valid ? endgame.plies : 0;
+    this.egLim = valid ? endgame.limit : (family === 1 ? DRAW_ENDGAME16_PLIES : DRAW_ENDGAME5_PLIES);
+    const alone = family === 1 && this._loneKingAlone();
+    const given = valid && Number.isInteger(endgame.diag) ? endgame.diag : -1;
+    this.dg = alone ? Math.max(0, given) : -1;
+  }
+
+  // La dame seule d'un camp occupe-t-elle SEULE la grande diagonale (aucune autre pièce sur ses 10 cases) ?
+  _loneKingAlone() {
+    const board = this.board;
+    let on = 0, p = EMPTY;
+    for (let i = 0; i < 10; i++) {
+      const q = board[LONG_DIAGONAL_SQ[i]];
+      if (q !== EMPTY) { on++; p = q; }
+    }
+    if (on !== 1 || p <= 2) return false;
+    return this.cnt[p === WK ? WM : BM] === 0 && this.cnt[p] === 1; // sa couleur n'a ni pion ni autre dame
+  }
+
+  // Mise à jour de l'état de finale après un coup (effectifs déjà à jour, np ≤ 4).
+  _egUpdate(prevEg, prevLim, prevDg) {
+    const cnt = this.cnt;
+    const family = endgameFamilyOfCounts(cnt[WM], cnt[WK], cnt[BM], cnt[BK]);
+    if (family === 0) { this.eg = -1; this.egLim = 0; this.dg = -1; return; }
+    if (prevEg < 0) {
+      this.eg = 0;
+      this.egLim = family === 1 ? DRAW_ENDGAME16_PLIES : DRAW_ENDGAME5_PLIES;
+    } else {
+      this.eg = prevEg + 1;
+      this.egLim = prevLim;
+    }
+    this.dg = family === 1 && this._loneKingAlone() ? (prevDg >= 0 ? prevDg + 1 : 0) : -1;
+  }
+
+  // État de la finale de la position courante : { plies, limit, diag } ou null (hors famille).
+  egState() {
+    return this.eg < 0 ? null : { plies: this.eg, limit: this.egLim, diag: this.dg };
+  }
+
+  // Motif de nulle par limite de finale : 0 aucun, 1 art. 6.3 (16 coups), 2 art. 6.4 (5 coups), 3 grande diagonale
+  // (5 coups). À tester APRÈS « le camp au trait n'a plus de coup » (une perte au dernier coup l'emporte).
+  egDrawReason() {
+    if (this.eg < 0) return 0;
+    if (this.dg >= DRAW_DIAGONAL_PLIES) return 3;
+    if (this.eg >= this.egLim) return this.egLim === DRAW_ENDGAME16_PLIES ? 1 : 2;
+    return 0;
   }
 
   // --- perft ---------------------------------------------------------------------------------
@@ -323,7 +454,7 @@ export class FastBoard {
 
   // --- Conversion depuis / vers la position de l'interface ---------------------------------------
   // Format interface : tableau de 51 éléments (index 1..50), null ou { color: 'w'|'b', king }.
-  static fromUiBoard(uiBoard, sideToMove, quiet = 0) {
+  static fromUiBoard(uiBoard, sideToMove, quiet = 0, endgame = null) {
     const fb = new FastBoard();
     fb.quiet = quiet;
     for (let sq = 1; sq <= 50; sq++) {
@@ -332,6 +463,7 @@ export class FastBoard {
       fb.board[sq - 1] = p.color === 'w' ? (p.king ? WK : WM) : (p.king ? BK : BM);
     }
     fb.side = sideToMove === 'b' ? BLACK : WHITE;
+    fb.initEndgame(endgame);
     return fb;
   }
 

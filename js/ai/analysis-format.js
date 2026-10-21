@@ -5,6 +5,8 @@
 //   { score, mate, bestMove, bestMoveNotation, pv, pvNotation, depth, … }
 //   score : centipions, point de vue des BLANCS ; mate : null ou { winner: 'w'|'b', in: N }.
 
+import { endgameStateAfter } from '../engine/rules.js';
+
 // Profondeur minimale avant d'afficher la flèche du meilleur coup et la ligne « Meilleur » : avant,
 // le coup change à chaque itération et la flèche clignoterait. La barre et le score n'attendent pas.
 export const MIN_DEPTH_FOR_MOVE = 4;
@@ -167,8 +169,12 @@ export function positionKey(board, side) {
 // réversibles consécutifs juste avant la position affichée (plafonné à 50 : la partie est déjà nulle
 // au-delà) ; `positions` = les positions correspondantes, SANS la position affichée, du plus ancien
 // au plus récent. Aucun historique (quiet = 0) : { positions: [], quiet: 0 }.
+// Limites de finale (FMJD art. 6.3 / 6.4) : si `currentBoard` (le plateau affiché) est donné et que la position est une
+// finale concernée, `endgame` = { plies, limit, diag } est ajouté : état de la finale à la position affichée, calculé en
+// rejouant TOUS les plateaux de la partie (la finale apparaît à la prise ou à la promotion qui crée l'effectif ; les coups
+// de pion y sont permis, donc la fenêtre « quiet » ci-dessus ne suffit pas). Voir endgameState() dans js/engine/rules.js.
 export const QUIET_CAP = 50;
-export function analysisHistory(entries) {
+export function analysisHistory(entries, currentBoard = null) {
   let quiet = 0;
   for (let k = entries.length - 1; k >= 0 && quiet < QUIET_CAP; k--) {
     const mv = entries[k].move;
@@ -176,5 +182,10 @@ export function analysisHistory(entries) {
     else break;
   }
   const positions = entries.slice(entries.length - quiet).map((e) => ({ board: e.board, side: e.sideToMove }));
-  return { positions, quiet };
+  const history = { positions, quiet };
+  if (currentBoard && entries.every((e) => Array.isArray(e.board))) {
+    const endgame = endgameStateAfter([...entries.map((e) => e.board), currentBoard]);
+    if (endgame) history.endgame = endgame;
+  }
+  return history;
 }

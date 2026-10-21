@@ -6,12 +6,19 @@
 // expose du point de vue des BLANCS. Une défaite (camp au trait sans coup légal) vaut
 // -(MAT - ply) : plus le mat est proche, plus il pèse, donc le mat le plus court est préféré.
 //
-// Nulles par règle (FMJD, Annexe 1, art. 6.1 et 6.2 ; sources dans docs/SESSION_DERNIERE.md) :
+// Nulles par règle (FMJD, Annexe 1, art. 6.1 à 6.4 ; sources dans docs/SESSION_DERNIERE.md) :
 //   - 25 coups : 50 demi-coups consécutifs sans coup de pion ni prise (FastBoard.quiet) -> score 0.
 //   - répétition : (a) une position qui revient sur le chemin courant de la recherche (cycle : il peut
 //     être répété jusqu'à la 3e occurrence) -> 0 ; (b) une position qui serait la 3e occurrence en
 //     comptant l'historique de la partie transmis par l'appli (même position, même camp au trait) -> 0.
-// Ce qui n'existe PAS : les limites de finale (art. 6.3 : 16 coups, 6.4 : 5 coups), la nulle par accord.
+//   - limites de finale (art. 6.3 : 16 coups, 6.4 : 5 coups, grande diagonale : 5 coups) : compteurs eg / dg de
+//     FastBoard (règle complète dans l'en-tête de js/engine/rules.js) -> 0. À la racine, l'état de la finale vient de
+//     l'historique transmis (history.endgame) ; sans historique, la finale est supposée apparaître à la racine.
+// Ce qui n'existe PAS : la nulle par accord.
+//
+// Table de transposition et limites de finale : contrairement à la répétition, l'état des compteurs de finale est
+// ENTIER dans la clé de table (voir search()) : un score écrit pour un état n'est relu que pour le même état. Une nulle de
+// finale ne « teinte » donc pas le sous-arbre (drawHits) : la table reste exacte pour cette règle, y compris près de la limite.
 //
 // Table de transposition et historique : un score qui dépend de l'historique ne doit pas être mis en
 // cache pour d'autres chemins. Règle retenue (« teinte ») : `drawHits` compte les nulles par règle
@@ -24,7 +31,9 @@
 // lire/écrire la table aux nœuds dont le compteur de 25 coups est > 0 ; exacte mais +56 % de nœuds
 // en finale de dames, abandonnée.)
 
-import { FastBoard, WHITE, moveToUi, moveToString, DRAW_QUIET_PLIES } from './fastboard.js';
+import {
+  FastBoard, WHITE, moveToUi, moveToString, DRAW_QUIET_PLIES, DRAW_ENDGAME16_PLIES, DRAW_ENDGAME5_PLIES, ENDGAME_REASONS,
+} from './fastboard.js';
 import { evalWhite as defaultEvalWhite } from './eval.js';
 
 export const MATE = 30000;
@@ -69,10 +78,19 @@ export function positionHash(board, side) {
   return zobristHash(FastBoard.fromUiBoard(board, side));
 }
 
-// Historique de la partie : { hashes | positions, quiet }, du plus ancien au plus récent, SANS la
+// État de la finale (art. 6.3 / 6.4) à la position analysée : { plies, limit, diag } (voir FastBoard.initEndgame et
+// endgameState() de js/engine/rules.js), ou null si absent ou invalide.
+function normalizeEndgame(e) {
+  if (!e || !Number.isInteger(e.plies) || e.plies < 0) return null;
+  if (e.limit !== DRAW_ENDGAME16_PLIES && e.limit !== DRAW_ENDGAME5_PLIES) return null;
+  return { plies: e.plies, limit: e.limit, diag: Number.isInteger(e.diag) ? e.diag : -1 };
+}
+
+// Historique de la partie : { hashes | positions, quiet, endgame }, du plus ancien au plus récent, SANS la
 // position analysée. `hashes` : [{ lo, hi }] ou [[lo, hi]] ; `positions` : [{ board, side }] (hachées ici).
-// `quiet` : demi-coups consécutifs sans coup de pion ni prise AVANT la position analysée. Absent ou vide :
-// comportement sans historique. Retourne { lo: Int32Array, hi: Int32Array, quiet } ou null.
+// `quiet` : demi-coups consécutifs sans coup de pion ni prise AVANT la position analysée. `endgame` (facultatif) :
+// état de la finale à la position analysée, { plies, limit, diag } (limites 6.3 / 6.4). Absent ou vide :
+// comportement sans historique. Retourne { lo: Int32Array, hi: Int32Array, quiet, endgame } ou null.
 export function normalizeHistory(history) {
   if (!history) return null;
   const quiet = Number.isFinite(history.quiet) ? Math.max(0, Math.floor(history.quiet)) : 0;
@@ -86,7 +104,7 @@ export function normalizeHistory(history) {
   if (pairs.length > quiet) pairs = pairs.slice(pairs.length - quiet);
   const lo = new Int32Array(pairs.length), hi = new Int32Array(pairs.length);
   pairs.forEach((p, k) => { lo[k] = p.lo; hi[k] = p.hi; });
-  return { lo, hi, quiet };
+  return { lo, hi, quiet, endgame: normalizeEndgame(history.endgame) };
 }
 
 // Hash après le coup `m`, à partir du hash (lo, hi) AVANT le coup. À appeler avant makeMove :
@@ -222,8 +240,11 @@ class Searcher {
     if (moves.length === 0) return -(MATE - ply); // camp au trait sans coup : il a perdu
     // Nulles par règle (jamais à la racine : la recherche y choisit un coup quoi qu'il arrive).
     const quiet = fb.quiet;
-    if (ply > 0 && quiet >= 4) {
-      if (quiet >= DRAW_QUIET_PLIES || this.isRepetition(ply, quiet)) { this.drawHits++; return 0; }
+    if (ply > 0) {
+      if (quiet >= 4 && (quiet >= DRAW_QUIET_PLIES || this.isRepetition(ply, quiet))) { this.drawHits++; return 0; }
+      // Limites de finale (art. 6.3 / 6.4) : testées APRÈS « sans coup = perdu » ci-dessus (une perte au dernier coup
+      // l'emporte sur la nulle). Pas de « teinte » : l'état est dans la clé de table.
+      if (fb.eg >= 0 && fb.egDrawReason() !== 0) return 0;
     }
     if (depth <= 0) {
       // Quiescence : les prises sont obligatoires, donc tant que le camp au trait en a une, la
@@ -233,12 +254,22 @@ class Searcher {
 
     const alphaOrig = alpha;
     const hLo = this.hLo[ply], hHi = this.hHi[ply];
+    // Clé de table. Le hash de position (hLo/hHi) sert aussi à la répétition et reste donc celui de la position seule ;
+    // en finale (art. 6.3 / 6.4) la clé de table y ajoute l'état des compteurs (demi-coups écoulés, limite, grande
+    // diagonale) : sans cela un score calculé loin de la limite serait relu près de la limite, où la nulle change tout.
+    // Hors finale : clé inchangée.
+    let kLo = hLo, kHi = hHi;
+    if (fb.eg >= 0) {
+      const id = 1 + Math.min(fb.eg, 255) + (fb.egLim === DRAW_ENDGAME16_PLIES ? 256 : 0) + (Math.min(fb.dg + 1, 63) << 9);
+      kLo = hLo ^ Math.imul(id, 0x9E3779B1);
+      kHi = hHi ^ Math.imul(id, 0x85EBCA77);
+    }
     let ttF = -1, ttT = -1, slot = 0;
     // Table : pas d'écriture d'un sous-arbre où une nulle par règle a eu lieu (voir l'en-tête).
     const hits0 = this.drawHits;
     if (this.useTT && depth >= 1) {
-      slot = hLo & TT_MASK;
-      if (ttFlag[slot] !== 0 && ttLo[slot] === hLo && ttHi[slot] === hHi) {
+      slot = kLo & TT_MASK;
+      if (ttFlag[slot] !== 0 && ttLo[slot] === kLo && ttHi[slot] === kHi) {
         ttF = ttFrom[slot]; ttT = ttTo[slot];
         if (ply > 0 && ttDepth[slot] === depth) {
           let s = ttScore[slot];
@@ -284,11 +315,11 @@ class Searcher {
 
     if (this.useTT && depth >= 1 && this.drawHits === hits0) {
       // Remplacement : une entrée plus profonde du même hash n'est pas écrasée par une moins profonde.
-      const same = ttFlag[slot] !== 0 && ttLo[slot] === hLo && ttHi[slot] === hHi;
+      const same = ttFlag[slot] !== 0 && ttLo[slot] === kLo && ttHi[slot] === kHi;
       if (!same || ttDepth[slot] <= depth) {
         let s = best;
         if (s > MATE_BOUND) s += ply; else if (s < -MATE_BOUND) s -= ply;
-        ttLo[slot] = hLo; ttHi[slot] = hHi;
+        ttLo[slot] = kLo; ttHi[slot] = kHi;
         ttScore[slot] = s;
         ttDepth[slot] = depth;
         ttFlag[slot] = best <= alphaOrig ? TT_UPPER : best >= beta ? TT_LOWER : TT_EXACT;
@@ -307,6 +338,7 @@ export function searchFixedDepth(fb, depth, { prune = true, useTT = false, histo
   if (useTT) clearTT();
   const nh = normalizeHistory(history);
   if (nh) fb.quiet = nh.quiet;
+  if (nh && nh.endgame) fb.initEndgame(nh.endgame); else if (!fb._counted) fb.initEndgame();
   const s = new Searcher(fb, { useTT, prune, shouldStop: null, history: nh, evaluator });
   const h = zobristHash(fb);
   s.hLo[0] = h.lo; s.hHi[0] = h.hi;
@@ -332,7 +364,7 @@ function* analyseSteps(position, opts) {
   const maxTimeMs = opts.maxTimeMs ?? 1000;
   const useTT = opts.useTT ?? TT_DEFAULT;
   const history = normalizeHistory(opts.history ?? position.history);
-  const fb = FastBoard.fromUiBoard(position.board, position.side, history ? history.quiet : 0);
+  const fb = FastBoard.fromUiBoard(position.board, position.side, history ? history.quiet : 0, history ? history.endgame : null);
   const side = fb.side;
   const t0 = performance.now();
 
@@ -348,7 +380,7 @@ function* analyseSteps(position, opts) {
   const result = {
     score: 0, mate: null, bestMove: null, bestMoveNotation: null, pv: [], pvNotation: [],
     depth: 0, nodes: 0, nps: 0, timeMs: 0, stopped: false,
-    drawRule: null, // 'quiet' | 'repetition' : la position analysée est déjà nulle par règle (partie finie)
+    drawRule: null, // 'quiet' | 'repetition' | 'endgame16' | 'endgame5' | 'diagonal5' : la position analysée est déjà nulle par règle (partie finie)
   };
   const finish = () => {
     result.nodes = s.nodes;
@@ -366,6 +398,7 @@ function* analyseSteps(position, opts) {
     }
     if (seen >= 2) result.drawRule = 'repetition';
   }
+  if (result.drawRule === null) result.drawRule = ENDGAME_REASONS[fb.egDrawReason()];
 
   const rootMoves = fb.generateMoves();
   if (rootMoves.length === 0) { // le camp au trait a déjà perdu

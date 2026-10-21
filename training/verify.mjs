@@ -15,13 +15,15 @@ const max = maxIdx > 0 ? Number(process.argv[maxIdx + 1]) : Infinity;
 if (!dir) { console.error('Usage : node training/verify.mjs <dossier> [--max N]'); process.exit(2); }
 const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
 const maxPlies = meta.identity.maxPlies ?? DEFAULT_MAX_PLIES;
+// Parties enregistrées avant les limites de finale 6.3 / 6.4 : pas de champ endgameRules dans l'identité du run.
+const endgameRules = meta.identity.endgameRules !== undefined;
 const rl = readline.createInterface({ input: fs.createReadStream(path.join(dir, 'games.jsonl')), crlfDelay: Infinity });
 let n = 0, bad = 0, plies = 0;
 const reasons = {};
 for await (const line of rl) {
   if (!line.trim() || n >= max) continue;
   const rec = JSON.parse(line);
-  const v = verifyGame(rec, maxPlies);
+  const v = verifyGame(rec, maxPlies, { endgameRules });
   n++; plies += rec.moves.length;
   reasons[rec.reason] = (reasons[rec.reason] || 0) + 1;
   if (!v.ok) { bad++; console.log(`ILLÉGAL : ${rec.mode} ${rec.pair ?? rec.game}/${rec.g ?? ''} — ${v.error}`); }

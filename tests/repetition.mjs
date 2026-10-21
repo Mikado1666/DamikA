@@ -1,7 +1,9 @@
 // Nulles par règle dans le moteur d'analyse : répétition de position et règle des 25 coups.
 // Règles : FMJD, Annexe 1, art. 6.1 (3e occurrence, même camp au trait) et 6.2 (25 coups de chaque camp
 // = 50 demi-coups de dames seules, sans coup de pion ni prise). Sources : docs/SESSION_DERNIERE.md.
-// Les limites de finale (art. 6.3 : 16 coups, 6.4 : 5 coups) ne sont PAS implémentées.
+// Les limites de finale (art. 6.3 : 16 coups, 6.4 : 5 coups) ont leurs propres tests : tests/endgame-rules.mjs. Le contrôle
+// (d) ci-dessous (60 positions de tests/data/golden-scores.json, profondeur 7) reste valable : aucune de ces positions ne
+// change de score, de mat, de coup ni de variante avec les limites de finale (seuls 7 nombres de nœuds bougent).
 //
 // Usage : node tests/repetition.mjs
 import fs from 'node:fs';

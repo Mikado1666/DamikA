@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { resolveEvaluator, DEFAULT_MAX_PLIES } from './game.mjs';
+import { resolveEvaluator, DEFAULT_MAX_PLIES, ENDGAME_RULES_ID } from './game.mjs';
 import { matchStats, formatMatchStats } from './stats.mjs';
 import { preventSleep } from './sleep.mjs';
 
@@ -195,6 +195,9 @@ async function main() {
   const identity = {
     version: FORMAT_VERSION, mode, a: cfg.a.name, b: cfg.b.name, depthA, depthB, maxNodes: cfg.maxNodes, maxTimeMs: cfg.maxTimeMs,
     seed, open: cfg.open, explore: cfg.explore, maxPlies: cfg.maxPlies,
+    // Règles de nulle appliquées aux parties (limites de finale 6.3 / 6.4) : un run commencé avec d'autres règles ne se
+    // reprend pas (et verify.mjs sait quelles règles appliquer à des parties anciennes, sans ce champ).
+    endgameRules: ENDGAME_RULES_ID,
   };
 
   const out = path.resolve(args.out);

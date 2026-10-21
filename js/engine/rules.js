@@ -320,6 +320,100 @@ export function countPieces(board) {
   return { white, black, whiteKings, blackKings };
 }
 
+// --- Limites de finale (FMJD, Annexe 1, art. 6.3 et 6.4) ---------------------------------------------------------
+// Implémentation de RÉFÉRENCE sur le plateau de l'interface (51 cases, null ou { color, king }). Le moteur rapide
+// (js/ai/fastboard.js) en tient une seconde version, incrémentale, qui doit rester IDENTIQUE : tests/endgame-rules.mjs
+// les compare coup par coup. Texte de référence : édition 2024 des Annexes de la FMJD (voir docs/SESSION_DERNIERE.md,
+// section « Règles 6.3/6.4 », pour les références exactes et les points d'interprétation).
+//
+// Familles de finale, d'après les seuls EFFECTIFS (un camp a exactement UNE dame et aucun pion ; l'autre camp a :) :
+//   famille 1 (art. 6.3, 16 coups de chaque camp) : 3 dames, ou 2 dames et 1 pion, ou 1 dame et 2 pions ;
+//   famille 2 (art. 6.4, 5 coups de chaque camp)  : 2 dames, ou 1 dame et 1 pion, ou 1 dame (dame contre dame).
+// Compter : à partir de la position où la finale APPARAÎT (après la prise ou la promotion qui crée l'effectif), chaque
+// camp joue au plus 16 coups (famille 1) ou 5 coups (famille 2) : 32 ou 10 demi-coups. Une prise pendant ces coups ne
+// relance rien, et le maximum de 16 coups reste valable si l'on passe de la famille 1 à la famille 2 (texte 2024).
+// Une position qui sort des deux familles (par une prise) remet le compteur à zéro ; elle peut y rentrer plus tard
+// (par une promotion), le compte repart alors de cette position.
+// Clause de la grande diagonale (art. 6.3, texte 2024) : en famille 1, si la dame SEULE occupe seule la grande diagonale
+// (aucune autre pièce sur ses 10 cases), les deux camps ne jouent plus que 5 coups à partir du moment où cela devient vrai.
+// Au dernier coup, une perte (adversaire sans coup : bloqué ou sans pièce) l'emporte sur la nulle : c'est le contrôle
+// « camp au trait sans coup » qui doit donc toujours passer AVANT cette nulle.
+export const ENDGAME_PLIES_16 = 32;
+export const ENDGAME_PLIES_5 = 10;
+export const ENDGAME_DIAGONAL_PLIES = 10;
+// Cases de la grande diagonale (de la case 5 à la case 46), numérotation FMJD.
+export const LONG_DIAGONAL = [5, 10, 14, 19, 23, 28, 32, 37, 41, 46];
+export const ENDGAME_REASONS = [null, 'endgame16', 'endgame5', 'diagonal5'];
+
+// Famille d'après les effectifs : 0 aucune, 1 = art. 6.3, 2 = art. 6.4.
+export function endgameFamilyOfCounts(whiteMen, whiteKings, blackMen, blackKings) {
+  let m, k;
+  if (blackMen === 0 && blackKings === 1) { m = whiteMen; k = whiteKings; }
+  else if (whiteMen === 0 && whiteKings === 1) { m = blackMen; k = blackKings; }
+  else return 0;
+  if ((k === 3 && m === 0) || (k === 2 && m === 1) || (k === 1 && m === 2)) return 1;
+  if ((k === 2 && m === 0) || (k === 1 && m === 1) || (k === 1 && m === 0)) return 2;
+  return 0;
+}
+
+export function endgameFamily(board) {
+  let wm = 0, wk = 0, bm = 0, bk = 0;
+  for (let sq = 1; sq <= 50; sq++) {
+    const p = board[sq];
+    if (!p) continue;
+    if (p.color === WHITE) { if (p.king) wk++; else wm++; } else if (p.king) bk++; else bm++;
+  }
+  return endgameFamilyOfCounts(wm, wk, bm, bk);
+}
+
+// Vrai si un camp n'a qu'une dame, posée sur la grande diagonale, et qu'aucune autre pièce (des deux camps) n'y est.
+export function loneKingAloneOnLongDiagonal(board) {
+  let onDiagonal = 0, ownerSq = 0;
+  for (const sq of LONG_DIAGONAL) {
+    if (board[sq]) { onDiagonal++; ownerSq = sq; }
+  }
+  if (onDiagonal !== 1 || !board[ownerSq].king) return false;
+  // La seule pièce de la diagonale est une dame : elle doit être la seule pièce de son camp.
+  const color = board[ownerSq].color;
+  for (let sq = 1; sq <= 50; sq++) {
+    if (sq !== ownerSq && board[sq] && board[sq].color === color) return false;
+  }
+  return true;
+}
+
+// État de la finale APRÈS une position : null (hors famille) ou { plies, limit, diag }.
+//   plies : demi-coups depuis l'apparition de la finale (0 à la position où elle apparaît) ;
+//   limit : 32 (art. 6.3) ou 10 (art. 6.4), fixé à l'apparition ;
+//   diag  : demi-coups depuis que la dame seule occupe seule la grande diagonale (0 au moment où cela devient vrai),
+//           -1 si ce n'est pas le cas (ou hors famille 1).
+// `prev` = état de la position précédente (null : pas de finale, ou début de l'analyse).
+export function endgameStep(prev, board) {
+  const family = endgameFamily(board);
+  if (family === 0) return null;
+  const plies = prev ? prev.plies + 1 : 0;
+  const limit = prev ? prev.limit : (family === 1 ? ENDGAME_PLIES_16 : ENDGAME_PLIES_5);
+  const aloneNow = family === 1 && loneKingAloneOnLongDiagonal(board);
+  const diag = aloneNow ? (prev && prev.diag >= 0 ? prev.diag + 1 : 0) : -1;
+  return { plies, limit, diag };
+}
+
+// État à la dernière position d'une suite de plateaux (du début de la partie, ou de la position de départ de
+// l'analyse, jusqu'à la position courante comprise).
+export function endgameStateAfter(boards) {
+  let state = null;
+  for (const b of boards) state = endgameStep(state, b);
+  return state;
+}
+
+// Motif de nulle par limite de finale pour cet état : null, 'endgame16' (art. 6.3), 'endgame5' (art. 6.4) ou
+// 'diagonal5' (art. 6.3, grande diagonale). À tester APRÈS « le camp au trait n'a plus de coup » (perte prioritaire).
+export function endgameDrawReason(state) {
+  if (!state) return null;
+  if (state.diag >= ENDGAME_DIAGONAL_PLIES) return 'diagonal5';
+  if (state.plies >= state.limit) return state.limit === ENDGAME_PLIES_16 ? 'endgame16' : 'endgame5';
+  return null;
+}
+
 // --- Classe Game : encapsule l'état de la partie en cours -------------------
 export class DraughtsGame {
   constructor() {
@@ -344,6 +438,18 @@ export class DraughtsGame {
   isGameOver() {
     const { captures, simples } = this.legalMoves;
     return captures.length === 0 && simples.length === 0;
+  }
+
+  // Limites de finale (art. 6.3 / 6.4) pour la position affichée : état { plies, limit, diag } ou null, calculé en
+  // rejouant les plateaux de l'historique (la finale « apparaît » à la position où l'effectif est atteint) ;
+  // endgameDraw() donne le motif de nulle ('endgame16', 'endgame5', 'diagonal5') ou null. Interrogations seules :
+  // l'interface ne s'en sert pas pour arrêter la partie (comme pour la répétition et les 25 coups).
+  endgameState() {
+    return endgameStateAfter([...this.history.map((h) => h.board), this.board]);
+  }
+
+  endgameDraw() {
+    return endgameDrawReason(this.endgameState());
   }
 
   winner() {

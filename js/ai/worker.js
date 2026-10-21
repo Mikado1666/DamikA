@@ -22,13 +22,16 @@
 // Analyse : options = { maxDepth, maxTimeMs, useTT, engine } (voir js/ai/search.js). `engine` = 'v0' (défaut, absent =
 // 'v0') ou 'v1b' : moteur d'évaluation (js/ai/engines.js ; V1b charge son modèle au premier besoin, une seule fois par
 // Worker ; moteur inconnu ou modèle illisible = réponse { ok: false, error }). `history` (facultatif, absent =
-// comportement sans historique) = { positions | hashes, quiet } : positions de la partie AVANT la position
+// comportement sans historique) = { positions | hashes, quiet, endgame? } : positions de la partie AVANT la position
 // analysée, du plus ancien au plus récent ({ board, side } ou hashes [[lo, hi]]), limitées aux `quiet`
 // dernières (demi-coups consécutifs sans coup de pion ni prise), pour la répétition de position (3e
-// occurrence) et la règle des 25 coups (voir search.js, normalizeHistory). Le worker répond :
+// occurrence) et la règle des 25 coups (voir search.js, normalizeHistory). `endgame` = { plies, limit, diag } : état de
+// la finale à la position analysée pour les limites FMJD 6.3 / 6.4 (16 et 5 coups ; js/engine/rules.js, endgameState) ;
+// absent, la finale éventuelle est supposée apparaître à la position analysée. Le worker répond :
 //   - après CHAQUE profondeur terminée : { id, type: 'progress', ok: true, result }
 //     (result = { score, mate, bestMove, bestMoveNotation, pv, pvNotation, depth, nodes, nps, timeMs, stopped,
-//                 drawRule })  drawRule : null, 'quiet' ou 'repetition' (la position analysée est déjà nulle par règle)
+//                 drawRule })  drawRule : null, 'quiet', 'repetition', 'endgame16', 'endgame5' ou 'diagonal5' (la position
+//                 analysée est déjà nulle par règle)
 //   - une fois la recherche finie : { id, ok: true, result } (même forme, `stopped: true` si interrompue).
 // score : centipions, point de vue des Blancs. mate : null ou { winner: 'w'|'b', in: N }.
 //

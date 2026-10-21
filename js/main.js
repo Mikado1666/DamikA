@@ -630,7 +630,7 @@ function fallbackToDefaultEngine(reason) {
 
 function requestAnalysis() {
   if (analysisController.enabled) {
-    analysisController.request({ board: game.board, side: game.sideToMove }, analysisHistory(game.history));
+    analysisController.request({ board: game.board, side: game.sideToMove }, analysisHistory(game.history, game.board));
   }
 }
 

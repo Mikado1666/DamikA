@@ -51,6 +51,7 @@ sw.js                 service worker (désactivé côté client)
   Étape 4.1 : `node tests/engine-select.mjs` (V0 / V1b, ≈ 8 s) ; OUTILS de mesure (pas des tests) : `node tests/gauge-calibration.mjs`
   (jauge V0 contre V1b, ≈ 2,5 min), `node tests/bench-engines.mjs` (temps V0 / V1b dans le Worker, ≈ 3 min).
   Fonctions pures de l'interface : `node tests/library-order.mjs` (ordre Toutes / Récentes / Favoris), `node tests/photo-match.mjs` (nom → photo, « Retirer la photo »).
+  Limites de finale 6.3 / 6.4 : `node tests/endgame-rules.mjs` (≈ 10 s, ~90 vérifications) ; démonstration lisible : `node tests/endgame-demo.mjs`.
   `tests/solver.mjs` = solveur indépendant (rules.js seul) ; `tests/mine-positions.mjs` régénère
   `tests/data/` (positions sans aucun nom de joueur, suivies par git). Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
   joueurs). Pour l'interface, il n'y a pas de suite de tests. Pour tester une position : listener temporaire
@@ -307,9 +308,8 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
    hautes, `touch-action: none` du damier qui gêne le défilement, jauge d'évaluation masquée).
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
 Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
-conformité FMJD approfondie (dont les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » du moteur
-d'analyse : NON implémentées dans `main` ; implémentées et commitées sur la branche `regles-6-3-6-4` (worktree `..\DamikA-regles`,
-commit `afe5157`), NON fusionnées ; voir étape 2), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
+conformité FMJD approfondie (les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » sont implémentées
+fusionnées dans `main` : voir « Chantier règles 6.3 / 6.4 » plus bas), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
 (moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
 « État final du chantier IA » en §3 bis ; l'étage 3 (apprentissage) est en cours : étapes 3.1, 3.2 et 3.3 livrées (V1b reste le meilleur modèle validé), voir plus bas.
 
@@ -476,11 +476,8 @@ Règles lues dans les textes officiels : [FMJD Annexe 1, art. 6](https://www.fmj
 et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/FMJD_Annexes_2024_8-sig.pdf) (l'anglais fait foi).
 - **6.1** : nulle à la 3e occurrence de la même position, même camp au trait. **6.2** : nulle après 25 coups de chaque
   camp (= 50 demi-coups) où seules les dames ont bougé, sans prise ni coup de pion. Les deux sont IMPLÉMENTÉES.
-- **6.3 (16 coups : 3 dames, 2 dames + pion, dame + 2 pions contre une dame ; 5 coups si la dame seule tient la grande
-  diagonale, texte 2024) et 6.4 (5 coups : 2 dames, dame + pion, dame contre dame) : NON implémentées.** Décision de
-  Mickaël : plus tard, à décider (elles exigent un historique de l'arrivée de la finale, et les textes 2015 et 2024 diffèrent).
-  **Mise à jour 20/10/2026** : implémentées sur la branche `regles-6-3-6-4` (commit `afe5157`, rapport « Règles 6.3/6.4 » dans le
-  `docs/SESSION_DERNIERE.md` de cette branche), NON fusionnées dans `main`.
+- **6.3 (16 coups) et 6.4 (5 coups) : implémentées ensuite** (20/10/2026, fusionnées dans `main` le 21/10/2026, voir « Chantier règles
+  6.3 / 6.4 » plus bas) ; elles exigent l'état de la finale à la position analysée (history.endgame), les textes 2015 et 2024 diffèrent.
 - Moteur : `FastBoard.quiet` (demi-coups sans prise ni coup de pion, tenu par make/unmake, `DRAW_QUIET_PLIES = 50`) ;
   dans `search.js`, un nœud sous la racine vaut 0 si `quiet ≥ 50` ou en répétition (jamais à la racine) ; répétition =
   retour sur le chemin de la recherche (dès la 2e occurrence : cycle) OU 3e occurrence en comptant l'historique de la
@@ -513,7 +510,7 @@ et [FMJD Annexes 2024, Annexe 1, art. 6, p. 14](https://www.fmjd.org/downloads/F
   `--game-weight 1` ou une forte régularisation : les longues nulles de finale noient les données. La perte de validation ne prédit pas la force :
   seule l'arène juge. Évaluer avec une graine DIFFÉRENTE de celle de l'auto-jeu d'entraînement (nuit 1 : graine 1 ; évaluation : 777).
 - Limites : étiquettes issues de V0 (circularité), mesures à profondeur fixe contre V0 seulement, tables sans notion de structure (étape 3.3 : testée, voir ci-dessous),
-  échelle différente de V0 (jauge de la liseuse à recaler si V1b y entre). Limites de finale FMJD 6.3/6.4 : non implémentées dans `main` (branche `regles-6-3-6-4`, non fusionnée).
+  échelle différente de V0 (jauge de la liseuse à recaler si V1b y entre). Limites de finale FMJD 6.3/6.4 : fusionnées dans `main` (les parties des étapes 3.x ont été jouées SANS).
 
 **Chantier IA, Étage 3, étape 3.3 « caractéristiques de STRUCTURE (V2) » (20/10/2026) : commité ; V1b reste le meilleur modèle validé.** Détail et
 chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 3.3 »). Aucun changement visible dans l'appli.
@@ -556,6 +553,24 @@ Détail et chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 4.1 », avec
   selon la position (×0,87 à ×4,06) ; dans le budget réel de 1,5 s, profondeur moyenne identique (11,2 contre 11,2). Chargement du modèle ≈ 4 ms sous Node.
 - **Service Worker** (désactivé) : à sa réactivation, ajouter `js/ai/engines.js`, `data/models/v1b-l0.json` (et les autres `js/ai/*.js`) à `ASSETS`. `deploy.ps1` copie
   déjà tout `data/`.
+**Chantier règles 6.3 / 6.4 « limites de finale » (20/10/2026) : FUSIONNÉ dans `main` (21/10/2026, depuis la branche `regles-6-3-6-4`, commit `afe5157` ; le worktree `..\DamikA-regles` est conservé), NON déployé.** Lecture de la grande diagonale (« la dame seule doit être SEULE sur la diagonale ») confirmée par Mickaël.
+Détail, sources, points d'interprétation, effets sur le fichier de référence : `docs/SESSION_DERNIERE.md` (« Règles 6.3/6.4 »).
+- **Règle** (FMJD, Annexe 1, art. 6.3 et 6.4, texte 2024 ; le texte de 2015 n'a pas les précisions) : un camp a UNE dame seule (pas de pion) ; l'autre a 3 dames,
+  ou 2 dames + 1 pion, ou 1 dame + 2 pions → **16 coups de chaque camp = 32 demi-coups** (famille 1) ; ou 2 dames, ou dame + pion, ou une dame (dame contre dame) →
+  **5 coups = 10 demi-coups** (famille 2). Le compte part de la position où l'effectif APPARAÎT (0 à cette position) ; une prise ne le relance pas et le maximum de 16
+  reste valable en passant en famille 2 ; sortir des deux familles le remet à zéro (une nouvelle apparition repart de 0) ; clause de la grande diagonale (famille 1) : la
+  dame seule occupe SEULE la grande diagonale (aucune autre pièce dessus) → 5 coups à partir du moment où cela devient vrai (le plus court des délais) ; la PERTE au
+  dernier coup prime (le contrôle « sans coup » passe avant la nulle). Motifs : `'endgame16'`, `'endgame5'`, `'diagonal5'` (`drawRule`, `reason` des parties).
+- **Code** : référence sur le plateau d'interface dans `js/engine/rules.js` (`endgameStep`, `endgameStateAfter`, `endgameDrawReason`, `DraughtsGame.endgameState()`),
+  version rapide incrémentale dans `js/ai/fastboard.js` (`eg` / `egLim` / `dg`, effectifs `cnt` / `np`, `initEndgame()`, `egState()`, `egDrawReason()`) : les deux DOIVENT
+  rester identiques (`tests/endgame-rules.mjs`, coup pour coup). `search.js` : nulle à tout nœud sous la racine, APRÈS « sans coup = perdu » ; l'état de finale est dans la
+  CLÉ de la table de transposition (pas de « teinte »). Un plateau rempli à la main est compté au premier `makeMove` (ne plus modifier `board` à la main ensuite).
+- **Historique** : `history.endgame = { plies, limit, diag }` = état à la position analysée, fabriqué par `analysisHistory(game.history, game.board)`, transmis par le
+  contrôleur (même à `quiet = 0`) puis le Worker ; absent : la finale « apparaît » à la racine (compteur 0).
+- **Auto-jeu** : `GameState.terminal()` (`training/game.mjs`) applique la même règle ; `verifyGame(rec, maxPlies, { endgameRules, start })` la rejoue avec rules.js ;
+  `arena.mjs` écrit `endgameRules` (`ENDGAME_RULES_ID`) dans l'identité du run, `verify.mjs` l'y lit (absent = anciennes règles).
+- **Effets** : `tests/data/golden-scores.json` inchangé (60/60 positions identiques en score, mat, coup et variante ; 7 nombres de nœuds bougent à cause de la clé de table) ;
+  perft inchangé (même nombre de nœuds, même vitesse) ; l'interface n'arrête pas la partie sur ces nulles (comme pour la répétition et les 25 coups).
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.
