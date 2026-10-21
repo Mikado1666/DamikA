@@ -14,6 +14,7 @@ rien ici ne change l'interface ni l'analyse. Les parties et les journaux vont da
 | `sleep.mjs` | empêche la mise en veille de Windows pendant le calcul |
 | `fit.mjs`, `fit-lib.mjs` | **étape 3.2** : apprend des tables d'évaluation (V1, V1b) à partir de parties d'auto-jeu |
 | `fit-struct.mjs`, `fit-struct-run.mjs` | **étape 3.3** : tables + caractéristiques de STRUCTURE (V2), choix global / par phase par la mesure |
+| `chain-nuit2.mjs` | **étape 3.4** : attend la fin de la nuit 2 puis enchaîne verify, réentraînement n12, matchs d'arène et test à temps égal, avec reprise (`--dry-run` pour voir le plan) |
 | `bench-eval.mjs` | coût en vitesse des évaluateurs (ns par position, nœuds/s de la recherche), sur positions réelles |
 | `models/` | tables apprises (petits JSON d'entiers, utilisables par `--evaluator learned:…`) |
 
