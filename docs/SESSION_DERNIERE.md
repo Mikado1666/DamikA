@@ -1096,3 +1096,19 @@ Fichier : tests/pdn-local/td-complet/td-complet.pdn (992 Mo, lecture seule en fl
 - **Aucune partie illégale sur 763 021 : ni notre lecture (notation des prises, BOM, CRLF, commentaires, variantes) ni nos règles (rules.js) ne sont en cause.** Rien n'a été corrigé ni créé (pas de jeu de données filtré).
 - Point à examiner, vraisemblablement côté DONNÉES (non vérifié partie par partie) : 20 parties se terminent sur « plus de coup » avec un résultat qui ne correspond pas au camp bloqué ; 4 735 doublons (0,6 %) ; 61 résultats « * ».
 
+
+## Jeu de données propre Turbo Dambase (chantier A) — plan et choix (21/10/2026)
+
+Outil : `node training/td-clean.mjs [--out dossier] [--limit n] [--workers n] [--no-report]` (lecture en flux, `td-lib.mjs` réutilisé, mêmes
+découpage en parties et rejeu `rules.js` que `td-full.mjs`). Sortie : `tests/pdn-local/td-propre/td-propre.pdn` + `rapport.txt` (dossier ignoré par
+git ; **noms de joueurs conservés dans le PDN, en local seulement** ; le rapport n'en contient aucun). Le script refuse toute sortie hors
+`tests/pdn-local/` ou `training/data/`. Pas de filtre Elo, pas de livre d'ouvertures, pas d'apprentissage.
+- **Motifs d'exclusion** (premier rencontré, dans cet ordre) : [Setup]/[FEN] · variantes (…) · illégale · résultat absent ou « * » · balise Result ≠
+  résultat des coups · « plus de coup » incohérent avec le résultat (les 20 cas connus) · doublon. Le doublon est testé en DERNIER : la première
+  occurrence (ordre du fichier) d'une partie par ailleurs propre est gardée.
+- **Format de sortie** : balises d'origine dans l'ordre (+ `Result` garanti), coups ré-écrits sans commentaire ni annotation (`!?+#`), 78 colonnes.
+  Un contrôle par `td-full.mjs` sur la sortie de l'essai : 969 légales, 0 illégale, 0 incohérence.
+- **Elo** = minimum des deux joueurs (`WhiteRating`/`WhiteElo`, `BlackRating`/`BlackElo`) ; si un seul est présent, celui-là ; aucun = « inconnu ».
+- **Essai sur les 1 000 premières parties** (1 s, 1 worker) : 969 gardées ; exclues : Setup/FEN 22, variantes 2, résultat « * » 7, autres motifs 0.
+  Elo inconnu pour 90 % de ces parties (archives anciennes, décennies 1880-1900 : 87 %). Le lancement COMPLET attend le feu vert de Mickaël
+  (nuit 3 en cours jusqu'à ≈ 17h05) ; la section de résultats sera alors ajoutée ici par le script.
