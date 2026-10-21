@@ -168,6 +168,22 @@ const tgt = makeTargets(D, 0, Kt); // λ = 0 : cible = σ(score/K), sans bruit
     ok('v1-l0 : tables d\'entiers (50 + 50)', m1.man.length === 50 && m1.king.length === 50 && m1.man.every(Number.isInteger) && m1.king.every(Number.isInteger));
     const rep = JSON.parse(fs.readFileSync(path.join(out, 'fit-report.json'), 'utf8'));
     ok('rapport : perte de validation de V1 inférieure à celle de V0 (cible λ = 0 exacte)', rep.runs.find((x) => x.name === 'v1-l0').val < rep.runs.find((x) => x.name === 'v1-l0').v0Val);
+
+    // --anchor : la régularisation s'attache au modèle donné (et non à V0). Régularisation énorme = le modèle d'ancrage lui-même ;
+    // régularisation faible = un modèle différent ; --anchor sans --phases 3 = refusé.
+    const anchorFile = path.join(out, 'v1b-l0.json');
+    const anchorModel = JSON.parse(fs.readFileSync(anchorFile, 'utf8'));
+    const runAnchor = (alphas, extra = []) => spawnSync(process.execPath, [path.join(here, '..', 'training', 'fit.mjs'), '--data', dir, '--out', path.join(tmp, 'anc'), '--lambda', '1', '--phases', '3', '--alphas', alphas, '--anchor', anchorFile, '--tag', 'anc', '--grids', 'none', ...extra], { encoding: 'utf8', timeout: 300000 });
+    let ra = runAnchor('1e9');
+    ok('--anchor : s\'exécute sans erreur et annonce l\'ancrage', ra.status === 0 && /ANCRAGE/.test(ra.stdout), ra.status === 0 ? '' : (ra.stderr || ra.stdout).slice(-300));
+    const tight = JSON.parse(fs.readFileSync(path.join(tmp, 'anc', 'anc-v1b-l1.json'), 'utf8'));
+    ok('--anchor, régularisation énorme : tables = celles du modèle d\'ancrage (3 phases)', tight.phases.length === 3 && tight.phases.every((ph, k) => ph.man.join() === anchorModel.phases[k].man.join() && ph.king.join() === anchorModel.phases[k].king.join()));
+    ra = runAnchor('1e-6');
+    const loose = JSON.parse(fs.readFileSync(path.join(tmp, 'anc', 'anc-v1b-l1.json'), 'utf8'));
+    ok('--anchor, régularisation faible : tables différentes de l\'ancrage, valeurs entières, modèle chargeable', ra.status === 0 && loose.phases.some((ph, k) => ph.man.join() !== anchorModel.phases[k].man.join())
+      && loose.phases.every((ph) => ph.man.every(Number.isInteger) && ph.king.every(Number.isInteger)) && resolveEvaluator(`learned:${path.join(tmp, 'anc', 'anc-v1b-l1.json')}`).kind === 'tables');
+    ra = spawnSync(process.execPath, [path.join(here, '..', 'training', 'fit.mjs'), '--data', dir, '--out', path.join(tmp, 'anc2'), '--phases', '1', '--anchor', anchorFile, '--grids', 'none'], { encoding: 'utf8', timeout: 300000 });
+    ok('--anchor sans --phases 3 : refusé (code 2)', ra.status === 2);
   }
 }
 

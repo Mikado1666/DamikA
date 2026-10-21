@@ -52,6 +52,7 @@ sw.js                 service worker (désactivé côté client)
   (jauge V0 contre V1b, ≈ 2,5 min), `node tests/bench-engines.mjs` (temps V0 / V1b dans le Worker, ≈ 3 min).
   Fonctions pures de l'interface : `node tests/library-order.mjs` (ordre Toutes / Récentes / Favoris), `node tests/photo-match.mjs` (nom → photo, « Retirer la photo »).
   Limites de finale 6.3 / 6.4 : `node tests/endgame-rules.mjs` (≈ 10 s, ~90 vérifications) ; démonstration lisible : `node tests/endgame-demo.mjs`.
+  Convertisseur de parties réelles (nuit 4) : `node tests/td-positions.mjs` (positions contre rules.js, filtre Elo).
   `tests/solver.mjs` = solveur indépendant (rules.js seul) ; `tests/mine-positions.mjs` régénère
   `tests/data/` (positions sans aucun nom de joueur, suivies par git). Les PDN de test vont dans `tests/pdn-local/` (ignoré par git : noms de
   joueurs). Pour l'interface, il n'y a pas de suite de tests. Pour tester une position : listener temporaire

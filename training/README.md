@@ -15,6 +15,8 @@ rien ici ne change l'interface ni l'analyse. Les parties et les journaux vont da
 | `fit.mjs`, `fit-lib.mjs` | **étape 3.2** : apprend des tables d'évaluation (V1, V1b) à partir de parties d'auto-jeu |
 | `fit-struct.mjs`, `fit-struct-run.mjs` | **étape 3.3** : tables + caractéristiques de STRUCTURE (V2), choix global / par phase par la mesure |
 | `chain-nuit2.mjs` | **étape 3.4** : attend la fin de la nuit 2 puis enchaîne verify, réentraînement n12, matchs d'arène et test à temps égal, avec reprise (`--dry-run` pour voir le plan) |
+| `chain-nuit3.mjs`, `chain-nuit4.mjs` | enchaînements des nuits 3 et 4 (nuit 4 : parties réelles Turbo Dambase, F1 à temps égal, auto-jeu borné dans le temps, matchs finaux ; `--dry-run` pour voir le plan et les heures) |
+| `td-positions.mjs` | positions de parties RÉELLES (Turbo Dambase propre, Elo ≥ 2100) au format d'auto-jeu, pour `fit.mjs --lambda 1` (aucun nom écrit) |
 | `bench-eval.mjs` | coût en vitesse des évaluateurs (ns par position, nœuds/s de la recherche), sur positions réelles |
 | `models/` | tables apprises (petits JSON d'entiers, utilisables par `--evaluator learned:…`) |
 
@@ -135,5 +137,6 @@ node training/fit.mjs --data training/data/selfplay-nuit-1 --base training/model
 node training/fit.mjs … --combo kvm,fort,wing --combo-name KFW --lambda 0.5 --game-weight 1 --freeze-tables 1 --tag x33
 node training/bench-eval.mjs training/models/v1b-l0.json training/models/s33-F5.json
 ```
+`--anchor <modèle.json>` (3 phases) attache la régularisation, la baseline et K_m à ce modèle au lieu de V0 (réglage fin d'un modèle sur de nouvelles données ; exige `--phases 3`).
 `--freeze-tables` n'apprend que les poids de structure (les tables restent celles de la base) ; `--data a,b` lit plusieurs auto-jeux.
 Un modèle dont la borne de mat dépasse 29 000 est refusé par l'évaluateur et signalé INVALIDE par l'apprentissage.

@@ -8,6 +8,8 @@
 //   --alphas 1e-6,1e-5,… (régularisation vers V0, choisie sur la validation)  --seed 1  --val 0.15 (part de PARTIES)
 //   --game-weight 0|0.5|1 (poids 1/longueur^p par partie)  --kt <cp> (impose K_t au lieu de le calibrer)
 //   --tag <nom> (préfixe des fichiers)  --grids all|v1|none
+//   --anchor <modèle.json> (3 phases, sans caractéristiques) : la régularisation, la baseline et K_m s'attachent aux tables de ce
+//     modèle au lieu de V0 (réglage fin d'un modèle existant sur de nouvelles données ; exige --phases 3)
 // Sorties : <out>/<tag->v1-l<λ>.json, <tag->v1b-l<λ>.json (tables en entiers, utilisables par `--evaluator learned:…`)
 // et <out>/<tag->fit-report.json (tous les chiffres).
 //
@@ -17,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { evalBound, MAX_EVAL_BOUND } from '../js/ai/eval-learned.js';
+import { evalBound, MAX_EVAL_BOUND, normalizeTables } from '../js/ai/eval-learned.js';
 import {
   loadDataset, checkV0Identity, setGameWeights, v0Theta, evalAll, makeTargets, meanLoss, meanEntropy, minimizeK,
   fitNewton, thetaToTables, tablesToTheta, formatGrid, sanityReport, MAX_ABS_SCORE,
@@ -76,7 +78,23 @@ setGameWeights(D, gamePower);
 if (gamePower !== 0) say(`  poids par partie : 1/longueur^${gamePower}`);
 
 const theta0 = v0Theta();
-const e0 = evalAll(D, theta0);
+// --anchor : un jeu de paramètres par phase, pris dans le modèle d'ancrage (même découpage que V1b : ≥ 30 / 15–29 / < 15 pièces).
+let anchorTheta = null;
+if (args.anchor !== undefined) {
+  if (args.families !== undefined || args.features !== undefined || args.combo !== undefined) { console.error('--anchor ne se combine pas avec --families / --features / --combo'); process.exit(2); }
+  if (phaseConfigs.length !== 1 || phaseConfigs[0] !== 3) { console.error('--anchor exige --phases 3'); process.exit(2); }
+  const ph = normalizeTables(JSON.parse(fs.readFileSync(args.anchor, 'utf8')));
+  if (ph.length !== 3 || ph.some((p, k) => p.minPieces !== PHASE_MIN[k]) || ph.some((p) => p.feat.some((v) => v !== 0))) { console.error('--anchor : modèle à 3 phases (30 / 15 / 0) sans caractéristiques de structure attendu'); process.exit(2); }
+  anchorTheta = ph.map((p) => Float64Array.from([...p.man, ...p.king]));
+  say(`  ANCRAGE : régularisation, baseline et K_m attachés à ${path.basename(args.anchor)} (et non à V0) ; « V0 » dans les lignes ci-dessous = ce modèle`);
+}
+const e0 = (() => {
+  if (!anchorTheta) return evalAll(D, theta0);
+  const es = anchorTheta.map((th) => evalAll(D, th));
+  const out = new Float64Array(D.n);
+  for (let i = 0; i < D.n; i++) out[i] = es[phaseOf(D.pieces[i])][i];
+  return out;
+})();
 
 say('Étape 2/6 : calibration de la température K_t (score de recherche → probabilité de gain, sur les résultats)…');
 const sc = new Float64Array(D.n); for (let i = 0; i < D.n; i++) sc[i] = D.score[i];
@@ -143,7 +161,7 @@ for (const lambda of lambdas) {
       let init = null, best = null;
       const rows = [];
       for (const alpha of alphas) {
-        const fit = fitNewton(D, t, sub.train, { theta0, K: Km.K, alpha, init });
+        const fit = fitNewton(D, t, sub.train, { theta0: anchorTheta ? anchorTheta[s] : theta0, K: Km.K, alpha, init });
         init = fit.theta; // convexe : le point de départ ne change pas le minimum, il l'atteint plus vite
         const th = Float64Array.from(fit.theta);
         const e = evalAll(D, th);
@@ -177,7 +195,7 @@ for (const lambda of lambdas) {
     if (bound > MAX_EVAL_BOUND) say(`  ⚠ ${name} : l'évaluation pourrait atteindre ±${bound} > ${MAX_EVAL_BOUND} : le fichier serait REFUSÉ par l'évaluateur (zone des scores de mat) ; augmenter la régularisation`);
     const meta = { format: 'damika-tables', version: 1, name: `${tag}${name}`, lambda, Kt: Kt.K, Km: Km.K, alphas: chosen.map((c) => c.alpha),
       source: `${path.basename(path.dirname(dataFile))} : ${D.games} parties, ${D.n} positions retenues, validation ${valFraction * 100} % des parties (graine ${seed})`,
-      valLoss: valRound, v0ValLoss: baseVal, gamePower };
+      valLoss: valRound, v0ValLoss: baseVal, gamePower, anchor: args.anchor !== undefined ? path.basename(args.anchor) : undefined };
     fs.writeFileSync(path.join(outDir, `${tag}${name}.json`), JSON.stringify({ ...meta, ...model }));
     if (gridsMode === 'all' || (gridsMode === 'v1' && nph === 1)) {
       if (nph === 1) showTables(name, phaseTables[0], v0t);
