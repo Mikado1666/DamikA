@@ -1112,3 +1112,62 @@ git ; **noms de joueurs conservés dans le PDN, en local seulement** ; le rappor
 - **Essai sur les 1 000 premières parties** (1 s, 1 worker) : 969 gardées ; exclues : Setup/FEN 22, variantes 2, résultat « * » 7, autres motifs 0.
   Elo inconnu pour 90 % de ces parties (archives anciennes, décennies 1880-1900 : 87 %). Le lancement COMPLET attend le feu vert de Mickaël
   (nuit 3 en cours jusqu'à ≈ 17h05) ; la section de résultats sera alors ajoutée ici par le script.
+
+## Jeu de données propre Turbo Dambase (chantier A) — résultats (21/10/2026, `node training/td-clean.mjs`, sans noms de joueurs)
+
+Entrée : tests/pdn-local/td-complet/td-complet.pdn · sortie : tests/pdn-local/td-propre/td-propre.pdn (962 Mo, local, jamais commité) · 4 worker(s).
+
+### Bilan : 763399 parties lues · **758150 gardées** (99.3 %) · 5249 exclues.
+
+### Exclusions (premier motif rencontré, dans cet ordre)
+- position de départ ([Setup]/[FEN]) : 378
+- variantes (…) dans les coups : 71
+- illégale (rejeu rules.js) : 0
+- résultat absent ou « * » : 61
+- balise Result ≠ résultat des coups : 0
+- « plus de coup » incohérent avec le résultat : 20
+- doublon (séquence de coups déjà gardée) : 4719
+
+### Parties gardées : longueur moyenne 50.8 coups complets
+
+### Elo (minimum des deux joueurs, tranches de 100 ; « inconnu » = aucun Elo)
+- 1400–1499 : 628 (0.1 %)
+- 1500–1599 : 559 (0.1 %)
+- 1600–1699 : 2263 (0.3 %)
+- 1700–1799 : 24978 (3.3 %)
+- 1800–1899 : 74396 (9.8 %)
+- 1900–1999 : 209562 (27.6 %)
+- 2000–2099 : 164248 (21.7 %)
+- 2100–2199 : 124299 (16.4 %)
+- 2200–2299 : 59023 (7.8 %)
+- 2300–2399 : 20387 (2.7 %)
+- 2400–2499 : 2974 (0.4 %)
+- inconnu : 74833 (9.9 %)
+
+### Décennies (balise Date)
+- 0s : 1 (0.0 %)
+- 1800s : 3 (0.0 %)
+- 1870s : 6 (0.0 %)
+- 1880s : 138 (0.0 %)
+- 1890s : 333 (0.0 %)
+- 1900s : 432 (0.1 %)
+- 1910s : 940 (0.1 %)
+- 1920s : 2091 (0.3 %)
+- 1930s : 2275 (0.3 %)
+- 1940s : 2533 (0.3 %)
+- 1950s : 6807 (0.9 %)
+- 1960s : 16434 (2.2 %)
+- 1970s : 26600 (3.5 %)
+- 1980s : 62997 (8.3 %)
+- 1990s : 128703 (17.0 %)
+- 2000s : 166966 (22.0 %)
+- 2010s : 225284 (29.7 %)
+- 2020s : 115497 (15.2 %)
+- date inconnue : 110 (0.0 %)
+
+### Temps : **1 min 40 s** (7630 parties/s)
+
+### Contrôle du fichier propre (chantier A, 21/10/2026)
+`node training/td-full.mjs tests/pdn-local/td-propre/td-propre.pdn` sur la sortie : 758 150 parties lues (= gardées), **758 150 légales, 0 illégale, 0 doublon,
+0 incohérence de résultat** (5 385 finies sur « plus de coup », toutes cohérentes), 0 variante, 0 [Setup]/[FEN]. Résultats : nulles 41,9 % · Blancs 29,3 % · Noirs 28,8 %.
+Coût du lancement complet : 1 min 40 s avec 4 workers. Chantier A terminé ; rien d'autre n'est commencé.
