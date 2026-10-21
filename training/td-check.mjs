@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialBoard, generateLegalMoves, applyCaptureSequence, applySimpleMove } from '../js/engine/rules.js';
+import { TAG_RE, parseMovetext, replay } from './td-lib.mjs';
 import { parsePdn } from '../js/pdn/parser.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,14 +27,12 @@ const REPORT = path.resolve(ROOT, optVal('report', 'docs/SESSION_DERNIERE.md'));
 
 // --- Lecture du PDN --------------------------------------------------------------------------------------------------------
 const text = fs.readFileSync(FILE, 'utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
-const RESULTS = new Set(['1-0', '0-1', '1/2-1/2', '*']);
-
 function readGames(src) {
   const games = [];
   let cur = null;
   const flush = () => { if (cur && (Object.keys(cur.tags).length || cur.body.length)) games.push(cur); cur = null; };
-  for (const line of src.split('\n')) {
-    const tag = /^\s*\[(\w+)\s+"(.*)"\]\s*$/.exec(line);
+  for (const line of src.split(/\n/)) {
+    const tag = TAG_RE.exec(line);
     if (tag) {
       if (!cur || cur.body.some((l) => l.trim())) { flush(); cur = { tags: {}, body: [] }; } // nouvelle partie dès qu'une balise suit du texte de coups
       cur.tags[tag[1]] = tag[2];
@@ -44,68 +42,7 @@ function readGames(src) {
     }
   }
   flush();
-  return games.map((g) => {
-    // Texte de coups : commentaires {…} (éventuellement sur plusieurs lignes) et variantes (…) retirés, puis jetons.
-    const noComments = g.body.join('\n').replace(/\{[^}]*\}/g, ' ').replace(/;[^\n]*/g, ' ');
-    let depth = 0;
-    let hasVariation = false;
-    let raw = '';
-    for (const ch of noComments) { // variantes (…), imbriquées ou non : ignorées (seule la ligne principale est rejouée)
-      if (ch === '(') { depth++; hasVariation = true; raw += ' '; } else if (ch === ')') { depth = Math.max(0, depth - 1); raw += ' '; } else if (depth === 0) raw += ch;
-    }
-    const moves = [];
-    let result = null;
-    for (const tok of raw.split(/\s+/)) {
-      if (!tok) continue;
-      if (RESULTS.has(tok)) { result = tok; continue; }
-      const t = tok.replace(/^\d+\.(\.\.)?/, ''); // « 12. », « 12... » ou collé : « 12.32-28 »
-      if (!t || /^\$\d+$/.test(t)) continue;
-      const m = /^(\d{1,2})([-x])(\d{1,2})((?:x\d{1,2})*)[!?+#]*$/.exec(t);
-      if (m) moves.push({ text: t, from: Number(m[1]), sep: m[2], to: Number(m[3]), via: m[4] ? m[4].split('x').filter(Boolean).map(Number) : [] });
-      else moves.push({ text: t, bad: true });
-    }
-    return { tags: g.tags, moves, result, hasVariation };
-  });
-}
-
-// --- Rejeu avec rules.js ---------------------------------------------------------------------------------------------------
-function replay(g) {
-  let board = initialBoard();
-  let side = 'w';
-  let ambiguous = 0;
-  for (let i = 0; i < g.moves.length; i++) {
-    const mv = g.moves[i];
-    const no = `${Math.floor(i / 2) + 1}${i % 2 ? '...' : '.'} ${mv.text}`;
-    if (mv.bad) return { ok: false, ply: i + 1, no, why: 'jeton non reconnu comme un coup' };
-    const { captures, simples } = generateLegalMoves(board, side);
-    if (captures.length === 0 && simples.length === 0) return { ok: false, ply: i + 1, no, why: 'la partie devrait être terminée (aucun coup légal)' };
-    const piece = board[mv.from];
-    if (!piece) return { ok: false, ply: i + 1, no, why: `case de départ ${mv.from} vide` };
-    if (piece.color !== side) return { ok: false, ply: i + 1, no, why: `pièce en ${mv.from} de la mauvaise couleur (trait aux ${side === 'w' ? 'Blancs' : 'Noirs'})` };
-    if (mv.sep === 'x') {
-      if (captures.length === 0) return { ok: false, ply: i + 1, no, why: 'prise notée (x) mais aucune prise légale' };
-      let cands = captures.filter((s) => s[0].from === mv.from && s[s.length - 1].to === mv.to);
-      if (mv.via.length) { // chemin complet noté : cases d'arrivée de chaque étape
-        const wanted = [mv.to, ...mv.via];
-        cands = captures.filter((s) => s[0].from === mv.from && s.length === wanted.length && s.every((st, j) => st.to === wanted[j]));
-      }
-      if (cands.length === 0) {
-        const same = captures.filter((s) => s[0].from === mv.from);
-        return { ok: false, ply: i + 1, no, why: same.length ? `prise ${mv.from}x${mv.to} impossible (autres prises de cette pièce vers ${[...new Set(same.map((s) => s[s.length - 1].to))].join(', ')})` : `la pièce en ${mv.from} n'a pas de prise (prises légales : ${[...new Set(captures.map((s) => `${s[0].from}x${s[s.length - 1].to}`))].join(', ')})` };
-      }
-      if (new Set(cands.map((s) => s.map((x) => x.capturedThisStep).sort((a, b) => a - b).join(','))).size > 1) ambiguous++;
-      board = applyCaptureSequence(board, piece, cands[0]).board;
-    } else {
-      if (captures.length > 0) return { ok: false, ply: i + 1, no, why: `coup simple alors qu'une prise est obligatoire (prises légales : ${[...new Set(captures.map((s) => `${s[0].from}x${s[s.length - 1].to}`))].join(', ')})` };
-      const found = simples.find((m) => m.from === mv.from && m.to === mv.to);
-      if (!found) return { ok: false, ply: i + 1, no, why: `coup ${mv.from}-${mv.to} non légal pour cette pièce` };
-      board = applySimpleMove(board, piece, found).board;
-    }
-    side = side === 'w' ? 'b' : 'w';
-  }
-  const end = generateLegalMoves(board, side);
-  const noMoves = end.captures.length === 0 && end.simples.length === 0;
-  return { ok: true, plies: g.moves.length, ambiguous, noMoves, loser: noMoves ? side : null };
+  return games.map((g) => ({ tags: g.tags, ...parseMovetext(g.body.join(String.fromCharCode(10))) }));
 }
 
 // --- Exécution -------------------------------------------------------------------------------------------------------------

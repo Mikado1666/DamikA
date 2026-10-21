@@ -1025,3 +1025,74 @@ Fichier non modifié. Comparaison de l'ancien moteur (commit `f65173f`, extrait 
 
 ### 7. Fichiers
 **Modifiés** : `js/engine/rules.js`, `js/ai/fastboard.js`, `js/ai/search.js`, `js/ai/worker.js` (commentaires), `js/ai/analysis-format.js`, `js/ai/analysis-controller.js`, `js/main.js` (un argument), `training/game.mjs`, `training/arena.mjs`, `training/verify.mjs`, `training/README.md`, `tests/repetition.mjs` (commentaire d'en-tête), `CLAUDE.md`, `docs/SESSION_DERNIERE.md`. **Nouveaux** : `tests/endgame-rules.mjs`, `tests/endgame-demo.mjs`. **Non touchés** : `tests/data/golden-scores.json`, `js/ai/eval.js`, `js/ai/eval-learned.js`, tout le dossier `DamikA`.
+
+## Échantillon Turbo Dambase (21/10/2026, `node training/td-check.mjs`, sans noms de joueurs)
+
+Fichier : tests/pdn-local/td-echantillon-1000.pdn (lecture seule, jamais commité).
+
+### Résultat
+- Parties lues : **1000** · rejouées depuis la position initiale : 978 · **légales : 978** · **illégales : 0** · avec position de départ ([Setup]/[FEN]) : 22 (comptées à part, ignorées).
+- Longueur moyenne des parties légales : **52.8 coups complets** (105.6 demi-coups ; 103311 demi-coups au total).
+- Parties avec au moins un Elo : **102** sur 1000.
+- Répartition des résultats (toutes parties, balise Result) : * : 7 (0.7 %) · 0-1 : 300 (30.0 %) · 1-0 : 339 (33.9 %) · 1/2-1/2 : 354 (35.4 %).
+- Cohérence : balise Result ≠ résultat écrit dans le texte des coups : 0 partie(s) ; parties légales finies sur « plus de coup » : 9, dont 0 avec un résultat ne correspondant pas au camp bloqué ; parties contenant des variantes (…) ignorées : 2 ; rafles ambiguës (même départ et arrivée, pièces prises différentes, la première retenue) : 0.
+- Lecture par l'appli (parsePdn) : même nombre de parties et même nombre de coups pour chaque partie.
+
+### Les 10 premiers coups Blancs les plus fréquents (parties légales)
+| Coup | Parties | Fréquence | Blancs gagnent | Nulles | Noirs gagnent |
+|---|---|---|---|---|---|
+| 33-28 | 495 | 50.6 % | 165 (33.3 %) | 181 (36.6 %) | 149 (30.1 %) |
+| 34-30 | 124 | 12.7 % | 47 (37.9 %) | 48 (38.7 %) | 28 (22.6 %) |
+| 31-26 | 112 | 11.5 % | 38 (33.9 %) | 36 (32.1 %) | 38 (33.9 %) |
+| 32-28 | 108 | 11.0 % | 26 (24.1 %) | 41 (38.0 %) | 39 (36.1 %) |
+| 31-27 | 58 | 5.9 % | 24 (41.4 %) | 19 (32.8 %) | 14 (24.1 %) |
+| 33-29 | 32 | 3.3 % | 7 (21.9 %) | 10 (31.3 %) | 12 (37.5 %) |
+| 34-29 | 27 | 2.8 % | 8 (29.6 %) | 12 (44.4 %) | 7 (25.9 %) |
+| 35-30 | 12 | 1.2 % | 7 (58.3 %) | 2 (16.7 %) | 3 (25.0 %) |
+| 32-27 | 9 | 0.9 % | 4 (44.4 %) | 2 (22.2 %) | 3 (33.3 %) |
+
+### Parties illégales (0)
+Aucune.
+
+## Turbo Dambase complet (21/10/2026, `node training/td-full.mjs`, sans noms de joueurs)
+
+Fichier : tests/pdn-local/td-complet/td-complet.pdn (992 Mo, lecture seule en flux, jamais commité) · 7 worker(s) · lots de 1000 parties.
+
+### 1. Parties lues
+- **763399** parties lues (attendu : 763399) → **identique**. Contrôle indépendant : 763399 balises [Event] ; parties sans aucune balise : 0.
+
+### 2. Légalité (rejeu avec rules.js depuis la position initiale)
+- **Légales : 763021** · **illégales : 0** · avec position de départ ([Setup]/[FEN], comptées à part, ignorées) : **378**.
+- Aucune partie illégale.
+- Cohérence : balise Result ≠ résultat écrit dans les coups : 0 ; parties légales finies sur « plus de coup » : 5405, dont 20 avec un résultat incohérent avec le camp bloqué ; parties avec variantes (…) (ignorées) : 71 ; rafles ambiguës (même départ et arrivée, pièces prises différentes) : 0.
+
+### 3. Doublons (empreinte = séquence de coups seule, parmi les parties légales)
+- **Uniques : 758286** · **doublons : 4735** (0.6 % des parties légales).
+
+### 4. Résultats, longueur, Elo, dates
+- Résultats, toutes parties : 1/2-1/2 : 319104 (41.8 %) · 1-0 : 224143 (29.4 %) · 0-1 : 220091 (28.8 %) · * : 61 (0.0 %).
+- Résultats, parties légales uniques : 1/2-1/2 : 317982 (41.9 %) · 1-0 : 222118 (29.3 %) · 0-1 : 218138 (28.8 %) · * : 48 (0.0 %).
+- Longueur moyenne : **50.5 coups complets** sur les parties légales (101.0 demi-coups) ; 50.8 sur les uniques.
+- Parties avec au moins un Elo : **687641** (90.1 %).
+- Décennies (balise Date, toutes parties) : 0s : 1 · 1800s : 3 · 1870s : 6 · 1880s : 139 · 1890s : 338 · 1900s : 451 · 1910s : 968 · 1920s : 2141 · 1930s : 2321 · 1940s : 2562 · 1950s : 6883 · 1960s : 16541 · 1970s : 26720 · 1980s : 63264 · 1990s : 129421 · 2000s : 168069 · 2010s : 226970 · 2020s : 116483 · date inconnue : 118.
+
+### 5. Les 10 premiers coups Blancs les plus fréquents (parties légales uniques)
+| Coup | Parties | Fréquence | Blancs gagnent | Nulles | Noirs gagnent |
+|---|---|---|---|---|---|
+| 32-28 | 396849 | 52.3 % | 105553 (26.6 %) | 171693 (43.3 %) | 119583 (30.1 %) |
+| 33-29 | 85757 | 11.3 % | 33733 (39.3 %) | 34352 (40.1 %) | 17664 (20.6 %) |
+| 34-29 | 77133 | 10.2 % | 24819 (32.2 %) | 34535 (44.8 %) | 17776 (23.0 %) |
+| 33-28 | 75155 | 9.9 % | 19937 (26.5 %) | 28173 (37.5 %) | 27036 (36.0 %) |
+| 34-30 | 55463 | 7.3 % | 15356 (27.7 %) | 22771 (41.1 %) | 17331 (31.2 %) |
+| 31-27 | 30015 | 4.0 % | 9797 (32.6 %) | 11883 (39.6 %) | 8332 (27.8 %) |
+| 31-26 | 22729 | 3.0 % | 6850 (30.1 %) | 9186 (40.4 %) | 6693 (29.4 %) |
+| 35-30 | 12143 | 1.6 % | 5278 (43.5 %) | 4258 (35.1 %) | 2607 (21.5 %) |
+| 32-27 | 3041 | 0.4 % | 794 (26.1 %) | 1131 (37.2 %) | 1116 (36.7 %) |
+
+### 6. Temps de traitement
+- **1 min 27 s** (8747 parties/s, 7 worker(s)).
+
+### 7. Lecture des résultats
+- **Aucune partie illégale sur 763 021 : ni notre lecture (notation des prises, BOM, CRLF, commentaires, variantes) ni nos règles (rules.js) ne sont en cause.** Rien n'a été corrigé ni créé (pas de jeu de données filtré).
+- Point à examiner, vraisemblablement côté DONNÉES (non vérifié partie par partie) : 20 parties se terminent sur « plus de coup » avec un résultat qui ne correspond pas au camp bloqué ; 4 735 doublons (0,6 %) ; 61 résultats « * ».
+
