@@ -4,6 +4,7 @@ import {
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { createAnalysisController } from './ai/analysis-controller.js';
 import { ENGINES, DEFAULT_ENGINE, isEngineId } from './ai/engines.js';
+import { applyTool, emptyBoard, startBoard, cloneBoard, validatePosition, buildGameFromPosition } from './position-editor.js';
 import { libraryVisibleOrder } from './library-view.js';
 import { lookupInTable, manualPhotoKeys, nameTokens } from './photo-match.js';
 import {
@@ -137,6 +138,9 @@ window.addEventListener('pointerdown', () => {
 
 // --- état d'interaction -----------------------------------------------------
 let selectedSquare = null;
+// Mode « Éditer une position » : null hors édition, sinon { board, side, tool, analysisWasOn }. La partie `game` n'est JAMAIS
+// touchée pendant l'édition (Annuler = simple fermeture) ; seul « Analyser » la remplace.
+let editor = null;
 let isAnimating = false;
 let autoplayTimer = null;
 let isPlaying = false;
@@ -369,6 +373,9 @@ const el = {
   brand: document.querySelector('.brand'),
   fileInput: document.getElementById('pdn-file-input'),
   btnNewGame: document.getElementById('btn-new-game'),
+  btnEditPosition: document.getElementById('btn-edit-position'),
+  editorBar: document.getElementById('editor-bar'),
+  editorMessage: document.getElementById('editor-message'),
   confirmOverlay: document.getElementById('confirm-overlay'),
   confirmMessage: document.getElementById('confirm-message'),
   confirmOk: document.getElementById('confirm-ok'),
@@ -635,6 +642,7 @@ function requestAnalysis() {
 }
 
 function toggleAnalysis() {
+  if (editor) return; // pas d'analyse pendant l'édition : « Analyser » la lance sur la position validée
   if (analysisController.enabled) {
     analysisController.disable();
     return;
@@ -751,6 +759,7 @@ function refreshUI() {
     el.statusText.textContent = `Trait aux ${game.sideToMove === WHITE ? 'Blancs' : 'Noirs'}`;
   }
 
+  if (editor) el.statusText.textContent = 'Mode édition — cliquez une case pour poser ou effacer une pièce';
   renderMoveList();
   updateNavButtons();
   renderBoardState();
@@ -758,6 +767,7 @@ function refreshUI() {
 }
 
 function renderBoardState() {
+  if (editor) { renderer.setState({ board: editor.board, selectedSquare: null, legalTargets: [], mandatorySquares: new Set(), lastMove: null }); return; }
   const { mustCapture, captures } = game.legalMoves;
   let legalTargets = [];
   const mandatorySquares = mustCapture ? game.mandatorySquares : new Set();
@@ -965,6 +975,7 @@ function jumpToPly(targetIdx) {
 }
 
 function updateNavButtons() {
+  if (editor) { for (const b of [el.btnUndo, el.btnRedo, el.btnPrev, el.btnNext, el.btnFirst, el.btnLast]) b.disabled = true; return; }
   el.btnUndo.disabled = game.history.length === 0;
   el.btnRedo.disabled = game.future.length === 0;
   el.btnPrev.disabled = game.history.length === 0;
@@ -980,13 +991,14 @@ function updateNavButtons() {
 // 'click'). 'pointerdown' se déclenche dès l'appui, de façon fiable, souris comme tactile.
 canvas.addEventListener('pointerdown', async (e) => {
   if (e.pointerType === 'mouse' && e.button !== 0) return; // ignorer clic droit/molette
-  if (isAnimating || game.isGameOver()) return;
+  if (!editor && (isAnimating || game.isGameOver())) return;
   const rect = canvas.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
   const xFrac = (e.clientX - rect.left) / rect.width;
   const yFrac = (e.clientY - rect.top) / rect.height;
   const sq = renderer.squareAtFraction(xFrac, yFrac);
   if (sq == null) return;
+  if (editor) { editorPlace(sq); return; }
 
   const { mustCapture, captures, simples } = game.legalMoves;
   const piece = game.board[sq];
@@ -1126,6 +1138,7 @@ el.btnLast.addEventListener('click', () => { stopAutoplay(); while (game.redo())
 let lastWheelNavAt = 0;
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
+  if (editor) return;
   const now = performance.now();
   if (now - lastWheelNavAt < 150) return;
   lastWheelNavAt = now;
@@ -1346,6 +1359,11 @@ window.addEventListener('keydown', (e) => {
   // causé un bug par le passé (Espace avalé par le raccourci lecture auto — historique
   // f2def34/64d7e8b) quand la zone de commentaire existait encore.
   if (e.target && (e.target.isContentEditable || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (editor) {
+    if (e.key === 'Escape' && !isModalOpen()) closeEditor();
+    else if (['ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+    if (['ArrowLeft', 'ArrowRight', ' ', 'a', 'A'].includes(e.key)) return;
+  }
   switch (e.key) {
     case 'ArrowLeft': e.preventDefault(); goToPrevMove(); break;
     case 'ArrowRight': e.preventDefault(); goToNextMove(); break;
@@ -2367,6 +2385,7 @@ try {
 // à charger. Confirmation si des coups ont déjà été joués (history OU future, pour couvrir
 // le cas où on a navigué en arrière avant de cliquer) afin d'éviter une perte accidentelle.
 async function startNewGame() {
+  if (editor) closeEditor();
   // Partie de la bibliothèque (libraryActiveIndex >= 0) : déjà enregistrée automatiquement,
   // rien n'est perdu, pas de confirmation.
   if (libraryActiveIndex < 0 && (game.history.length > 0 || game.future.length > 0)) {
@@ -2395,11 +2414,88 @@ el.btnNewGame.addEventListener('click', startNewGame);
 // reste un écouteur séparé sur #easter-egg, indépendant de celui-ci.
 el.brand.addEventListener('click', startNewGame);
 
+// --- éditeur de position (P4) ---------------------------------------------------------------
+// Logique pure (validation, construction de la partie) : js/position-editor.js, testée sous Node. Ici seulement le DOM.
+function editorCountsText() {
+  const c = countPieces(editor.board);
+  return `Blancs : ${c.white} · Noirs : ${c.black} (20 au maximum par camp)`;
+}
+function editorShowMessage(errors = null) {
+  el.editorMessage.classList.toggle('error', !!errors);
+  el.editorMessage.textContent = '';
+  if (!errors) { el.editorMessage.textContent = editorCountsText(); return; }
+  for (const m of errors) { const d = document.createElement('div'); d.textContent = m; el.editorMessage.appendChild(d); }
+}
+function editorSync() {
+  for (const b of el.editorBar.querySelectorAll('.editor-tool')) b.classList.toggle('active', b.dataset.tool === editor.tool);
+  for (const b of el.editorBar.querySelectorAll('.editor-side')) b.setAttribute('aria-pressed', String(b.dataset.side === editor.side));
+  renderBoardState();
+}
+function editorPlace(sq) {
+  editor.board = applyTool(editor.board, sq, editor.tool);
+  editorShowMessage();
+  renderBoardState();
+}
+function openEditor() {
+  if (editor) return;
+  stopAutoplay();
+  const analysisWasOn = analysisController.enabled;
+  if (analysisWasOn) analysisController.disable();
+  editor = { board: cloneBoard(game.board), side: game.sideToMove, tool: 'wm', analysisWasOn };
+  selectedSquare = null;
+  el.editorBar.hidden = false;
+  el.btnEditPosition.setAttribute('aria-pressed', 'true');
+  editorShowMessage();
+  refreshUI();
+  editorSync();
+}
+// Sortie sans rien changer : la partie précédente n'a jamais été touchée.
+function closeEditor() {
+  if (!editor) return;
+  const wasOn = editor.analysisWasOn;
+  editor = null;
+  el.editorBar.hidden = true;
+  el.btnEditPosition.setAttribute('aria-pressed', 'false');
+  if (wasOn) toggleAnalysis();
+  refreshUI();
+}
+async function editorAnalyse() {
+  const v = validatePosition(editor.board, editor.side);
+  if (!v.ok) { editorShowMessage(v.errors); return; }
+  if (libraryActiveIndex < 0 && (game.history.length > 0 || game.future.length > 0)) {
+    const ok = await confirmModal('Analyser cette position ? La partie en cours (coups joués) sera remplacée.', 'Analyser');
+    if (!ok) return;
+  }
+  const newGame = buildGameFromPosition(editor.board, editor.side);
+  editor = null;
+  el.editorBar.hidden = true;
+  el.btnEditPosition.setAttribute('aria-pressed', 'false');
+  stopAutoplay();
+  game = newGame;
+  headers = { Event: 'Position éditée' };
+  selectedSquare = null;
+  libraryActiveIndex = -1; // comme « Nouvelle partie » : une partie de la Bibliothèque est déjà enregistrée, rien n'est perdu
+  captureActiveEntryBaseline();
+  renderLibrary();
+  syncHeaderFieldsFromState();
+  if (!analysisController.enabled) toggleAnalysis();
+  refreshUI();
+  playSound('game-start');
+}
+el.btnEditPosition.addEventListener('click', () => (editor ? closeEditor() : openEditor()));
+for (const b of el.editorBar.querySelectorAll('.editor-tool')) b.addEventListener('click', () => { editor.tool = b.dataset.tool; editorSync(); });
+for (const b of el.editorBar.querySelectorAll('.editor-side')) b.addEventListener('click', () => { editor.side = b.dataset.side; editorSync(); });
+document.getElementById('editor-clear').addEventListener('click', () => { editor.board = emptyBoard(); editorShowMessage(); renderBoardState(); });
+document.getElementById('editor-start').addEventListener('click', () => { editor.board = startBoard(); editor.side = WHITE; editorShowMessage(); editorSync(); });
+document.getElementById('editor-cancel').addEventListener('click', closeEditor);
+document.getElementById('editor-analyse').addEventListener('click', editorAnalyse);
+
 // --- chargement d'une partie parsée (PDN) ----------------------------------------------
 // `silent` : le clic sur une entrée de la Bibliothèque pour l'ouvrir ne doit jouer AUCUN son
 // (retour Mickaël) — seul le son de début de partie serait concerné ici (move/capture
 // restent inchangés, ils ne se déclenchent que pendant le jeu réel, cf. playMove()).
 function loadParsedGame(parsedGame, { silent = false } = {}) {
+  if (editor) closeEditor();
   stopAutoplay();
   const { game: newGame, headers: newHeaders, result, warnings, loadedMoves, totalMoves } = loadGameFromPdn(parsedGame);
   game = newGame;

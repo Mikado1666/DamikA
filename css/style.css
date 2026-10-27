@@ -2062,3 +2062,54 @@ body {
   .eval-bar { display: none; }
   .layout.analysis-on .players-rail { padding-right: 0; }
 }
+
+/* ---------- Éditeur de position (P4) ---------- */
+.editor-bar {
+  width: var(--frame-px, 100%);
+  max-width: 100%;
+  margin: 10px auto 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+.editor-bar[hidden] { display: none; }
+.editor-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.editor-row[hidden] { display: none; }
+.editor-spacer { flex: 1 1 auto; }
+.editor-label { font-size: 14px; color: var(--text-2); margin-right: 2px; }
+.editor-tool, .editor-side, .editor-btn {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 14.5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.editor-tool:hover, .editor-side:hover, .editor-btn:hover { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-text); }
+.editor-tool.active, .editor-side[aria-pressed="true"] { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-text); font-weight: 600; }
+.editor-primary { margin-left: auto; font-weight: 600; border-color: var(--gold); }
+.editor-actions { justify-content: space-between; }
+.editor-piece { width: 18px; height: 18px; border-radius: 50%; display: inline-block; box-sizing: border-box; flex: none; }
+.editor-piece.wm, .editor-piece.wk { background: #efe6d0; border: 2px solid #7a6a48; }
+.editor-piece.bm, .editor-piece.bk { background: #2a2622; border: 2px solid #8a8378; }
+.editor-piece.wk { box-shadow: inset 0 0 0 3px #efe6d0, inset 0 0 0 5px #c9a24a; }
+.editor-piece.bk { box-shadow: inset 0 0 0 3px #2a2622, inset 0 0 0 5px #c9a24a; }
+.editor-piece.er { border: 2px dashed var(--text-2); background: transparent; }
+.editor-message { min-height: 20px; font-size: 14px; color: var(--text-2); line-height: 1.35; }
+.editor-message.error { color: var(--danger); }
+.editor-message.error div + div { margin-top: 3px; }
+@media (max-width: 900px) {
+  .editor-tool, .editor-side, .editor-btn { height: 40px; }
+}

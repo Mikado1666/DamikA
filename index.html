@@ -42,6 +42,7 @@
       <div class="topbar-actions">
         <input type="file" id="pdn-file-input" accept=".pdn,.txt" multiple hidden />
         <button id="btn-new-game" class="action-btn" title="Nouvelle partie">✚ Nouvelle partie</button>
+        <button id="btn-edit-position" class="action-btn" title="Poser une position à la main puis l'analyser" aria-pressed="false">✎ Éditer une position</button>
         <button id="btn-import" class="action-btn" title="Importer un fichier PDN">📂 Importer</button>
         <button id="btn-paste" class="icon-btn" title="Coller une partie (presse-papier)">📋</button>
         <button id="btn-copy" class="icon-btn" title="Copier la partie (presse-papier)">⧉</button>
@@ -185,6 +186,29 @@
         <span class="tempo-delta" id="tempo-delta" title="Compteur de temps (théorie des finales)">0</span>
         <span class="status-sep">·</span>
         <span id="status-text">Trait aux Blancs</span>
+      </div>
+
+      <div class="editor-bar" id="editor-bar" hidden>
+        <div class="editor-row" role="toolbar" aria-label="Pièces à poser">
+          <button type="button" class="editor-tool" data-tool="wm" title="Pion blanc"><i class="editor-piece wm"></i>Pion blanc</button>
+          <button type="button" class="editor-tool" data-tool="bm" title="Pion noir"><i class="editor-piece bm"></i>Pion noir</button>
+          <button type="button" class="editor-tool" data-tool="wk" title="Dame blanche"><i class="editor-piece wk"></i>Dame blanche</button>
+          <button type="button" class="editor-tool" data-tool="bk" title="Dame noire"><i class="editor-piece bk"></i>Dame noire</button>
+          <button type="button" class="editor-tool" data-tool="erase" title="Gomme : efface la pièce de la case"><i class="editor-piece er"></i>Gomme</button>
+        </div>
+        <div class="editor-row">
+          <span class="editor-label">Trait aux</span>
+          <button type="button" class="editor-side" data-side="w" aria-pressed="true">Blancs</button>
+          <button type="button" class="editor-side" data-side="b" aria-pressed="false">Noirs</button>
+          <span class="editor-spacer"></span>
+          <button type="button" class="editor-btn" id="editor-clear">Vider</button>
+          <button type="button" class="editor-btn" id="editor-start">Position initiale</button>
+        </div>
+        <div class="editor-message" id="editor-message" role="status"></div>
+        <div class="editor-row editor-actions">
+          <button type="button" class="editor-btn" id="editor-cancel" title="Quitter sans rien changer (Échap)">Annuler</button>
+          <button type="button" class="editor-btn editor-primary" id="editor-analyse" title="Jouer à partir de cette position et lancer l'analyse">Analyser</button>
+        </div>
       </div>
 
       <div class="controls-bar">
