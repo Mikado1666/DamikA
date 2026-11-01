@@ -1468,3 +1468,40 @@ Aperçu sans rien lancer : `node training/chain-nuit4.mjs --dry-run --start 19:4
 - **Partie complète** : `training/data/p18-B-vs-v1b-t1500` (B contre V1b, 2 paires = 4 parties, 1,5 s par coup, profondeur 24, graine 18, via l'arène) : B +2 =1 −1 ; `training/verify.mjs` : 4 parties (544 demi-coups) rejouées avec `rules.js`, TOUTES légales. Limite : cette partie passe par l'arène (mêmes évaluateurs et recherche que le Worker), pas par l'interface ; la sélection V2b dans l'UI n'a été vérifiée que par le menu (3 entrées) et le Worker du navigateur, pas par une partie jouée à la souris.
 - **Revenir à V1b** : rien à faire pour l'utilisateur (V1b est sélectionnable) ; pour retirer V2b : supprimer la ligne `v2b` d'`ENGINES` et l'entrée de `MODELS` dans `js/ai/engines.js` (une valeur `v2b` mémorisée est alors ignorée = V0). Pour faire de V2b le moteur par défaut : `DEFAULT_ENGINE = 'v2b'` (non fait : jauge non recalibrée pour B, `node tests/gauge-calibration.mjs` à refaire d'abord).
 - **Pas fait** : jauge (`BAR_SCALE_CP`, paliers) non recalibrée pour B ; pas de test visuel dans l'interface ; ni push ni déploiement.
+
+## P19 — Variété d'ouverture de V2b (SECTION PROVISOIRE : chantier mis en pause, mesure finale non faite)
+
+- **Statut** : implémenté et testé ; la marge **M = 10** est retenue PROVISOIREMENT, SANS mesure finale du coût en force avec la version actuelle du code. Chantier mis en pause pour laisser le processeur à des parties jouées à la main.
+- **Ce qui existait avant** : aucun livre d'ouvertures ; recherche alpha-bêta classique (seul le meilleur coup de la racine a un score exact, pas de multi-PV) : position de départ + même temps = toujours 32-27 comme premier coup.
+- **Ce qui est fait** :
+  - `js/ai/search.js` : option `variety = { margin, seed, prefer? }`. Après la recherche normale, chaque coup de la racine est testé une profondeur plus bas (`VARIETY_DEPTH_LAG = 1`) avec la fenêtre [meilleur − marge − 1, +∞[ ; candidats = coups à moins de `margin` cp du meilleur ; un coup non testé faute de temps est EXCLU (jamais un coup non vérifié ; `variety.unverified` les compte). Tirage pondéré par `drawVaried` (ne dépend que de la graine et de la position : même graine + même position = même coup) ; poids 0,3 pour 32-27 dans la position de départ (`VARIETY_START_WEIGHTS`). Budget de temps partagé : 60 % recherche normale (`VARIETY_SEARCH_SHARE`), 40 % tests. Pendant la recherche le meilleur coup n'est pas communiqué (il changerait à la fin). Le résultat porte `variety: { margin, depth, picked, forced, unverified, candidates: [{ move, score, weight }] }` ; score et coup affichés = ceux du coup tiré.
+  - `js/ai/engines.js` : `OPENING_VARIETY = { margin: 10, plies: 10 }` (UNE définition : marge, et nombre de demi-coups pendant lesquels la variété s'applique, 5 par camp).
+  - `js/ai/worker.js` : option honorée pour `engine === 'v2b'` SEULEMENT ; `js/ai/analysis-controller.js` : `request(position, history, variety)`, transmise seulement avec V2b et incluse dans la clé de déduplication. V0 et V1b : messages et résultats strictement inchangés (testé).
+  - `js/main.js` + `index.html` : section « Variété d'ouverture » du menu 🎨 (Activée par défaut / Désactivée, clé `damika:opening-variety`) ; variété seulement si V2b, partie jouée EN DIRECT (`game === liveGame` : page fraîche ou « Nouvelle partie » ; une partie importée, de la Bibliothèque, restaurée ou éditée garde l'analyse d'avant) et moins de 10 demi-coups joués ; graine tirée à chaque nouvelle partie ; le coup déjà proposé pour une position de la partie est mémorisé (`prefer`) : la réanalyse ne fait pas changer le « Meilleur ». Budget de l'appli inchangé : 1,5 s, profondeur 24 (valeurs par défaut du contrôleur).
+  - `training/arena.mjs` : `--variety-a / --variety-b <marge>` et `--variety-plies <n>` (comptés après l'ouverture imposée de 8 demi-coups) ; `training/variety-diversity.mjs` (distribution des coups sur N graines) ; `tests/opening-variety.mjs` (tout vert), ainsi que `engine-select`, `eval-patterns`, `eval-symmetry`, `analysis-controller`, `analysis-format`, `worker-analyse`, `worker`, `eval-structure`, `search-consistency`, `repetition`.
+- **Mesures terminées** (V2b p17-B-l025 avec variété contre le même sans variété, `--depth 30 --time 100`, 400 paires, graine 5151) :
+
+| Mesure | Version du code | Résultat |
+|---|---|---|
+| M = 30 | ancienne (test à pleine profondeur) | **−41 Elo [−59 ; −23]** (186 / 334 / 280) : hors tolérance |
+| M = 1 (isole le coût du partage du temps) | ancienne | 49,8 % sur 398 paires lors de l'interruption ; terminé ensuite : −0 [−18 ; +17] (220 / 359 / 221) |
+| M = 10 | ancienne | +2 Elo [−16 ; +20] (234 / 336 / 230) : **NON VALABLE pour le code actuel** |
+| M = 10 | ACTUELLE | **interrompue à 275 paires sur 400** (550 parties, A 49,9 %, reprise possible) |
+| M = 20 | ACTUELLE | pas commencée |
+
+- **Diversité (M = 10, code actuel, 1,5 s, 100 graines ; candidats calculés une fois, puis un tirage par graine)** :
+  - Blancs, premier coup : les 9 coups sont candidats ; 34-29 19, 32-28 13, 35-30 13, 33-29 12, 33-28 11, 34-30 10, 31-27 10, 31-26 9, **32-27 3**.
+  - Noirs après 32-28 (8 candidats, 0 non testé) : 19-23 16, 17-21 14, 18-22 14, 17-22 14, 16-21 13, 18-23 11, 20-25 10, 19-24 8.
+  - Noirs après 31-26 (3 candidats, 3 non testés) : 18-23 36, 17-21 33, 20-24 31.
+  - Noirs après 34-30 (5, 1 non testé) : 19-23 26, 16-21 21, 20-25 20, 17-21 17, 19-24 16.
+  - Noirs après 33-29 (5, 3 non testés) : 20-25 27, 16-21 20, 17-21 20, 18-22 18, 17-22 15.
+  - Noirs après 32-27 (8, 0 non testé) : 20-25 20, 17-21 15, 20-24 14, 18-23 12, 18-22 11, 17-22 11, 19-24 9, 19-23 8.
+  Limite : quand des coups ne sont pas testés faute de temps, ceux générés en dernier sont absents (légère perte de diversité, jamais de coup mauvais). Les fichiers `training/data/p19-diversity-m10.json` et `-m20.json` datent de l'ANCIENNE version (à régénérer).
+- **Commandes pour reprendre** (une seule à la fois, jamais deux calculs lourds en parallèle ; reprise automatique depuis les `games.jsonl` existants en relançant la MÊME commande) :
+  1. `node training/arena.mjs match --a learned:training/models/p17-B-l025.json --b learned:training/models/p17-B-l025.json --variety-a 10 --variety-plies 10 --depth 30 --time 100 --pairs 400 --seed 5151 --workers 7 --out training/data/p19b-var10-vs-plain-t100-s5151` (environ 8 min restantes)
+  2. la même commande avec `--variety-a 20` et `--out training/data/p19b-var20-vs-plain-t100-s5151` (environ 25 min)
+  3. `node training/variety-diversity.mjs --margin 10 --games 100 --out training/data/p19-diversity-m10.json` (puis `--margin 20 … p19-diversity-m20.json`) : 1 à 2 min chacune.
+  Lecture du résultat : `node training/pool.mjs <dossier de match>`.
+- **Reste à faire** : (1) finir M = 10 (actuelle) et mesurer M = 20 ; garder la plus grande marge dont la perte est < 10 Elo (sinon réduire) ; (2) régénérer le tableau de diversité avec la marge finale, dont celui des Noirs sur 100 parties ; (3) décider si on réduit le nombre de coups non testés (plus de temps de test ou profondeur de test plus basse) ; (4) test visuel du réglage dans l'interface (menu 🎨, partie neuve) : non fait ; (5) transformer cette section provisoire en section finale.
+- **Comment désactiver** : menu 🎨 → « Variété d'ouverture » → Désactivée (mémorisé). Dans le code : `openingVarietyOn` dans `js/main.js`, ou `OPENING_VARIETY.plies = 0` dans `js/ai/engines.js`. V0 et V1b ne sont jamais concernés.
+- Aucun push ni déploiement ; `data/models/` inchangé ; aucun calcul lourd lancé depuis la pause.
