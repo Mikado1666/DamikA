@@ -6,11 +6,12 @@
 // la position MIROIR (rotation de 180° + couleurs échangées). Aucune des tables de voisinage du code testé n'est réutilisée.
 //
 // Usage : node tests/eval-structure.mjs
+import fs from 'node:fs';
 import { squareToRC, rcToSquare } from '../js/engine/rules.js';
 import { mirrorBoard } from '../js/ai/eval.js';
 import {
   FEATURES, NFEAT, FEATURE_INDEX, ALL_FEATURES_MASK, MAX_EVAL_BOUND, computeFeatures, createTableEvaluator,
-  normalizeTables, tablesToPlain, evalBound, v0Tables,
+  normalizeTables, tablesToPlain, evalBound, v0Tables, CLOSED_MAX_FREE,
 } from '../js/ai/eval-learned.js';
 import { mulberry32, randomFastPosition } from './helpers.mjs';
 
@@ -31,12 +32,16 @@ const isWhite = (code) => code === 1 || code === 3;
 // Caractéristiques du camp BLANC seul (les Blancs montent : avant = rangée − 1). Retourne un objet nommé.
 function refWhite(board) {
   const g = gridOf(board);
-  const r = { sup: 0, pair: 0, blocked: 0, free: 0, kmob: 0, wing: 0, promo: 0, isol: 0, nMen: 0, nKings: 0, nPieces: 0, mainKing: 0 };
+  const r = { sup: 0, pair: 0, blocked: 0, free: 0, kmob: 0, wing: 0, promo: 0, isol: 0, csoutenu: 0, bq: 0, nMen: 0, nKings: 0, nPieces: 0, mainKing: 0 };
   let left = 0, right = 0;
   for (let row = 0; row < 10; row++) {
     for (let col = 0; col < 10; col++) {
       const code = g[row][col];
       if (isWhite(code)) r.nPieces++;
+      if (code === 2 && [5, 14, 15, 19, 20, 24].includes(rcToSquare(row, col))) { // pion NOIR de la zone, bloqué par les Blancs
+        const fwdB = [[row + 1, col - 1], [row + 1, col + 1]].filter(([a, b]) => inB(a, b));
+        if (fwdB.every(([a, b]) => g[a][b] !== 0)) r.bq++;
+      }
       if (code === 1) {
         r.nMen++;
         const fwd = [[row - 1, col - 1], [row - 1, col + 1]].filter(([a, b]) => inB(a, b));
@@ -49,6 +54,7 @@ function refWhite(board) {
         if (row === 1 && free > 0) r.promo++;
         const allNb = [...fwd, ...back];
         if (!allNb.some(([a, b]) => isWhite(g[a][b]))) r.isol++;
+        if ([22, 23, 27, 28, 32, 33].includes(rcToSquare(row, col)) && back.length === 2 && back.every(([a, b]) => isWhite(g[a][b]))) r.csoutenu++;
         if (col <= 4) left++; else right++;
       } else if (code === 3) {
         r.nKings++;
@@ -69,7 +75,21 @@ function refFeatures(board) {
   const w = refWhite(board);
   const b = refWhite(mirrorBoard(board));
   const out = {};
-  for (const name of ['sup', 'pair', 'blocked', 'free', 'kmob', 'wing', 'promo', 'isol']) out[name] = w[name] - b[name];
+  for (const name of ['sup', 'pair', 'blocked', 'free', 'kmob', 'wing', 'promo', 'isol', 'csoutenu']) out[name] = w[name] - b[name];
+  for (const k of [3, 4, 5]) out[`bloq${k}`] = (w.bq >= k ? 1 : 0) - (b.bq >= k ? 1 : 0);
+  // « tretNf » : référence directe sur la grille, sans aucune table de voisinage du code testé (la table de médianes est une donnée)
+  {
+    const g = gridOf(board);
+    let tw = 0, tb = 0, mob = 0, men = 0, kings = 0;
+    for (let row = 0; row < 10; row++) for (let col = 0; col < 10; col++) {
+      const c = g[row][col];
+      if (c === 3 || c === 4) kings++;
+      if (c === 1) { men++; tw += 10 - row; for (const dc of [-1, 1]) if (inB(row - 1, col + dc) && g[row - 1][col + dc] === 0) mob++; }
+      if (c === 2) { men++; tb += row + 1; for (const dc of [-1, 1]) if (inB(row + 1, col + dc) && g[row + 1][col + dc] === 0) mob++; }
+    }
+    const closed = kings === 0 && men <= 40 && mob <= CLOSED_MAX_FREE[men];
+    for (const k of [3, 5, 7]) out[`tret${k}f`] = closed ? (tb - tw >= k ? 1 : 0) - (tw - tb >= k ? 1 : 0) : 0;
+  }
   out.kvm = w.nKings * b.nMen - b.nKings * w.nMen;
   const fort = (x, y) => (x.nMen === 0 && x.nKings === 1 && x.mainKing === 1 && y.nPieces >= 2 && y.nPieces <= 3 ? 1 : 0);
   out.fort = fort(w, b) - fort(b, w);
@@ -88,7 +108,29 @@ const feat = (list) => asNamed(computeFeatures(boardOf(list), new Int32Array(NFE
 // --- 1. Cas faits main (numéros FMJD 1..50 ; les Blancs montent vers les petits numéros) ------------------------------------------
 {
   // 28 a derrière lui les cases 32 et 33 ; ses cases avant sont 22 et 23.
-  let f = feat([[28, 1], [33, 1]]);
+  let f = feat([[28, 1], [32, 1], [33, 1], [27, 1], [38, 3], [37, 1]]);
+  ok('centre soutenu : 28 (32, 33 derrière) et 32 (37 pion, 38 dame derrière) comptent, 27 (31 vide) non → csoutenu 2', f.csoutenu === 2, JSON.stringify(f));
+  f = feat([[28, 1], [32, 1], [33, 1], [23, 2], [18, 2], [19, 2]]);
+  ok('centre soutenu : miroir Noirs (23 soutenu par 18 et 19, image de 28) → Blancs − Noirs = 0', f.csoutenu === 0, JSON.stringify(f));
+  // pions noirs sur toute la zone {5, 14, 15, 19, 20, 24} ; les Blancs occupent les cases avant : 10 (de 5), 18-19 (de 14), 19-20 (de 15),
+  // 23-24 (de 19), 24-25 (de 20), 29-30 (de 24). On retire des cases avant une à une pour faire tomber le nombre de bloqués : 6, 5, 4, 3.
+  const zone = [5, 14, 15, 19, 20, 24].map((q) => [q, 2]);
+  const bq = (whites) => feat([...zone, ...whites.map((q) => [q, 1])]);
+  const all = [10, 18, 23, 25, 29, 30];
+  const q6 = bq(all), q5 = bq(all.filter((q) => q !== 30)), q4 = bq(all.filter((q) => q !== 30 && q !== 25)), q3 = bq(all.filter((q) => q !== 30 && q !== 25 && q !== 10));
+  const t3 = (x) => JSON.stringify([x.bloq3, x.bloq4, x.bloq5]);
+  ok('bloq : 6 bloqués → seuils 3, 4, 5 à +1', t3(q6) === '[1,1,1]', t3(q6));
+  ok('bloq : 5 bloqués (30 vide : le pion en 24 est libre) → 3, 4, 5 à +1', t3(q5) === '[1,1,1]', t3(q5));
+  ok('bloq : 4 bloqués (25 vide aussi) → 3 et 4 à +1, 5 à 0', t3(q4) === '[1,1,0]', t3(q4));
+  ok('bloq : 3 bloqués (10 vide aussi) → 3 à +1, 4 et 5 à 0', t3(q3) === '[1,0,0]', t3(q3));
+  // temps : Blancs 38,43,44,45 (rangées 7, 8, 8, 8 → 3 + 2 + 2 + 2 = 9), Noirs 1-4 (rangée 0 → 1 chacun = 4) : écart Blancs − Noirs = +5, Noirs en retard de 5.
+  // Position « fermée » : pions Noirs en 1-4 tous bloqués par des Blancs ? non : on vérifie seulement la cohérence signe / seuil / dame.
+  { const wh = [[46, 1], [47, 1], [48, 1], [49, 1], [50, 1], [41, 1], [42, 1], [43, 1]], bl = [[1, 2], [2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2]];
+    const fa = feat([...wh, ...bl]), fb = feat([...wh, ...bl, [30, 3]]);
+    ok('tret : la dame (ici blanche en 30) désactive les compteurs', fb.tret3f === 0 && fb.tret5f === 0 && fb.tret7f === 0, JSON.stringify([fa.tret3f, fa.tret5f, fa.tret7f]));
+    const mir = feat([...bl.map(([q]) => [51 - q, 1]), ...wh.map(([q]) => [51 - q, 2])]);
+    ok('tret : miroir exact (position miroir = compteurs opposés)', mir.tret3f === -fa.tret3f && mir.tret5f === -fa.tret5f && mir.tret7f === -fa.tret7f, JSON.stringify([fa.tret3f, mir.tret3f])); }
+  f = feat([[28, 1], [33, 1]]);
   ok('pion soutenu : 28 soutenu par 33 (sup 1) ; paire 33-28 (pair 1) ; pas isolés (isol 0)', f.sup === 1 && f.pair === 1 && f.isol === 0, JSON.stringify(f));
   f = feat([[28, 1]]);
   ok('pion seul au milieu : non soutenu, isolé, 2 cases avant libres, non bloqué', f.sup === 0 && f.isol === 1 && f.free === 2 && f.blocked === 0);
@@ -140,6 +182,26 @@ const feat = (list) => asNamed(computeFeatures(boardOf(list), new Int32Array(NFE
     for (const name of Object.keys(want)) if (want[name] !== got[name]) { bad++; badNames.add(name); }
   }
   ok(`les ${NFEAT} caractéristiques = référence lente indépendante : ${n} positions (dont ${withKings} avec dames), AUCUN écart`, bad === 0, `${bad} écart(s) ${[...badNames].join(',')}`);
+}
+
+// --- 2 bis. Positions de parties réelles (si training/data/td-positions-2100 est présent) : tretNf, bloqN, csoutenu y sont non nuls --------------
+{
+  const f = new URL('../training/data/td-positions-2100/games.jsonl', import.meta.url);
+  if (!fs.existsSync(f)) console.log('--  parties réelles absentes : contrôle sauté');
+  else {
+    const CODE = { '.': 0, w: 1, b: 2, W: 3, B: 4 };
+    const lines = fs.readFileSync(f, 'utf8').split(String.fromCharCode(10), 400).filter(Boolean).slice(0, 300);
+    let n = 0, bad = 0; const nz = { tret3f: 0, tret5f: 0, tret7f: 0, bloq3: 0, csoutenu: 0 };
+    const b = new Int8Array(50);
+    for (const line of lines) for (const r of JSON.parse(line).p) {
+      for (let i = 0; i < 50; i++) b[i] = CODE[r[0][i]];
+      const want = refFeatures(b), got = asNamed(computeFeatures(b, fast));
+      n++;
+      for (const name of Object.keys(want)) if (want[name] !== got[name]) bad++;
+      for (const k of Object.keys(nz)) if (got[k] !== 0) nz[k]++;
+    }
+    ok(`parties réelles : ${n} positions, AUCUN écart avec la référence ; positions à compteur non nul : ${JSON.stringify(nz)}`, bad === 0 && nz.tret3f > 0 && nz.tret5f > 0 && nz.tret7f > 0, `${bad} écart(s)`);
+  }
 }
 
 // --- 3. Antisymétrie miroir exacte (caractéristiques, puis évaluateur complet) ---------------------------------------------------

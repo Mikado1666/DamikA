@@ -1,4 +1,4 @@
-const CACHE_NAME = 'damika-v4';
+const CACHE_NAME = 'damika-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,22 @@ const ASSETS = [
   './js/pdn/parser.js',
   './js/pdn/loader.js',
   './js/pdn/serializer.js',
+  './js/pdn/storage.js',
+  './js/library-view.js',
+  './js/photo-match.js',
+  './js/position-editor.js',
+  // IA : analyse (Worker) et moteurs V0 / V1b / V2b ; modèles appris (data/models/ = copies de training/models/)
+  './js/ai/analysis-controller.js',
+  './js/ai/analysis-format.js',
+  './js/ai/engines.js',
+  './js/ai/eval-learned.js',
+  './js/ai/eval-patterns.js',
+  './js/ai/eval.js',
+  './js/ai/fastboard.js',
+  './js/ai/search.js',
+  './js/ai/worker.js',
+  './data/models/v1b-l0.json',
+  './data/models/p17-B-l025.json',
   './icons/icon-192.svg',
   './icons/icon-512.svg',
 ];

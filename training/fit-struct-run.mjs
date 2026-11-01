@@ -28,6 +28,11 @@ export async function runStructure({ D, args, Kt, e0, outDir, tag, say, dataDesc
   // --freeze-tables : les tables restent celles de la base ; seuls les poids de structure sont appris (et K_m est le meilleur K
   // de la BASE sur la validation, pas celui de V0 : les tables n'étant pas réajustées, leur échelle est celle de la base).
   const freezeTables = args['freeze-tables'] !== undefined;
+  // --km-base : K_m = meilleur K de la BASE sur la validation même en ajustement conjoint (base apprise ≠ V0, ex. n123).
+  // --score-from-base : données SANS score de recherche (parties réelles : champ « score » = 0) : le score de la cible
+  //   (1−λ)·σ(score/K_t) devient l'évaluation de la BASE (centipions), K_t = meilleur K de la base contre les résultats ; sans
+  //   cette option, λ < 1 sur de telles données tire vers σ(0) = 0,5 (cible sans sens).
+  const kmBase = args['km-base'] !== undefined, scoreFromBase = args['score-from-base'] !== undefined;
 
   // Familles demandées : --families F1,F2 (noms du registre) ; --features a,b ou --combo a,b = une famille sur mesure.
   const jobs = [];
@@ -51,14 +56,22 @@ export async function runStructure({ D, args, Kt, e0, outDir, tag, say, dataDesc
 
   const report = { data: dataDesc, base: basePath, seed, valFraction, Kt: Kt.K, threshold, alphas, runs: [] };
 
+  const layout0 = makeLayout([]);
+  const eBase = evalAllX(D, layout0, baseThetaFromTables(baseTables, layout0));
+  let KtUse = Kt.K;
+  if (scoreFromBase) {
+    const tRes = makeTargets(D, 1, 1);
+    KtUse = minimizeK((k) => meanLoss(D, eBase, tRes, k, D.trainIdx)).K;
+    for (let i = 0; i < D.n; i++) D.score[i] = eBase[i];
+    say(`  --score-from-base : score de la cible = évaluation de la base ; K_t = ${fmt(KtUse, 1)} cp (meilleur K de la base contre les résultats, apprentissage)`);
+    report.Kt = KtUse; report.scoreFromBase = true;
+  }
+
   for (const lambda of lambdas) {
-    const t = makeTargets(D, lambda, Kt.K);
-    const layout0 = makeLayout([]);
-    const th0 = baseThetaFromTables(baseTables, layout0);
-    const eBase = evalAllX(D, layout0, th0);
+    const t = makeTargets(D, lambda, KtUse);
     const Km = args.km !== undefined ? { K: Number(args.km) }
-      : freezeTables ? minimizeK((k) => meanLoss(D, eBase, t, k, D.valIdx)) : minimizeK((k) => meanLoss(D, e0, t, k, D.valIdx));
-    say(`\nλ = ${lambda} : K_m (meilleur K de ${freezeTables ? 'la BASE (tables figées)' : 'V0'} sur la validation) = ${fmt(Km.K, 1)} cp${freezeTables ? ' — TABLES FIGÉES, seuls les poids de structure sont appris' : ''}`);
+      : freezeTables || kmBase ? minimizeK((k) => meanLoss(D, eBase, t, k, D.valIdx)) : minimizeK((k) => meanLoss(D, e0, t, k, D.valIdx));
+    say(`\nλ = ${lambda} : K_m (meilleur K de ${freezeTables || kmBase ? 'la BASE' : 'V0'} sur la validation) = ${fmt(Km.K, 1)} cp${freezeTables ? ' — TABLES FIGÉES, seuls les poids de structure sont appris' : ''}`);
 
     // Baseline : V1b tel quel (tables arrondies du fichier), puis « témoin » = tables de V1b réajustées sans aucune caractéristique.
     const baseVal = meanLoss(D, eBase, t, Km.K, D.valIdx), baseTrain = meanLoss(D, eBase, t, Km.K, D.trainIdx);

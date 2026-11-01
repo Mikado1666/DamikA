@@ -10,6 +10,8 @@
 // Usage : node tests/bench-engines.mjs [--reps 5] [--reps-deep 3] [--budget-reps 5]
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+// P18 : le 2e moteur mesuré est v1b par défaut ; `--engine v2b` mesure le modèle par motifs (la colonne s'appelle toujours « V1b »).
+const EB = (process.argv.includes('--engine') ? process.argv[process.argv.indexOf('--engine') + 1] : 'v1b');
 import { parsePos } from './helpers.mjs';
 
 const args = process.argv.slice(2);
@@ -72,7 +74,7 @@ for (const [depth, reps] of [[8, REPS], [10, REPS_DEEP]]) {
     for (let r = 0; r < reps; r++) {
       const order = r % 2 === 0 ? ['v0', 'v1b'] : ['v1b', 'v0'];
       for (const e of order) {
-        const a = await w.ask(p.position, { maxDepth: depth, maxTimeMs: 1e9, ...(e === 'v1b' ? { engine: 'v1b' } : {}) });
+        const a = await w.ask(p.position, { maxDepth: depth, maxTimeMs: 1e9, ...(e === 'v1b' ? { engine: EB } : {}) });
         t[e].push(a.result.timeMs);
         if (e === 'v0') r0 = a.result; else r1 = a.result;
       }
@@ -94,7 +96,7 @@ console.log('   position                       V0                V1b');
     for (let r = 0; r < REPS_BUDGET; r++) {
       const order = r % 2 === 0 ? ['v0', 'v1b'] : ['v1b', 'v0'];
       for (const e of order) {
-        const a = await w.ask(p.position, { maxDepth: 24, maxTimeMs: 1500, ...(e === 'v1b' ? { engine: 'v1b' } : {}) });
+        const a = await w.ask(p.position, { maxDepth: 24, maxTimeMs: 1500, ...(e === 'v1b' ? { engine: EB } : {}) });
         d[e].push(a.result.depth);
       }
     }
@@ -113,7 +115,7 @@ console.log('\nC. Démarrage à froid d\'un Worker neuf : aller-retour d\'une an
   for (let r = 0; r < 7; r++) {
     for (const e of (r % 2 === 0 ? ['v0', 'v1b'] : ['v1b', 'v0'])) {
       const fresh = await startWorker();
-      const a = await fresh.ask(POSITIONS[2].position, { maxDepth: 1, maxTimeMs: 1e9, ...(e === 'v1b' ? { engine: 'v1b' } : {}) });
+      const a = await fresh.ask(POSITIONS[2].position, { maxDepth: 1, maxTimeMs: 1e9, ...(e === 'v1b' ? { engine: EB } : {}) });
       cold[e].push(a.rtt);
       await fresh.terminate();
     }

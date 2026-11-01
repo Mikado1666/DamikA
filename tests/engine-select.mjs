@@ -19,8 +19,9 @@ import { analyseSync } from '../js/ai/search.js';
 import { FastBoard, WM, BM, WK, BK } from '../js/ai/fastboard.js';
 import { mirrorBoard } from '../js/ai/eval.js';
 import { createTableEvaluator, normalizeTables, evalBound, MAX_EVAL_BOUND } from '../js/ai/eval-learned.js';
-import { ENGINES, DEFAULT_ENGINE, V1B_MODEL_PATH, isEngineId, loadEvaluator } from '../js/ai/engines.js';
+import { ENGINES, DEFAULT_ENGINE, V1B_MODEL_PATH, B_MODEL_PATH, isEngineId, loadEvaluator } from '../js/ai/engines.js';
 import { createAnalysisController } from '../js/ai/analysis-controller.js';
+import { createFastModelEvaluator } from '../js/ai/eval-patterns.js';
 import { formatMeta } from '../js/ai/analysis-format.js';
 import { mulberry32, randomFastPosition, toPosition } from './helpers.mjs';
 
@@ -75,8 +76,8 @@ const modelJson = JSON.parse(fs.readFileSync(trainingModelUrl, 'utf8'));
   const msgs = [];
   for (const bad of ['v2', 'toString', '__proto__', 'V1B', '', null, 42]) msgs.push(await rejects(loadEvaluator(bad)));
   check('B2 moteur inconnu (v2, toString, __proto__, V1B, vide, null, 42) : refusé', msgs.every((m) => m && m.includes('inconnu')), msgs.map(String).join(' | ').slice(0, 120));
-  check("B2 isEngineId n'accepte que v0 et v1b", ['v0', 'v1b'].every(isEngineId) && ['toString', '__proto__', 'V0', ' v0', null, undefined, 0].every((x) => !isEngineId(x)));
-  check('B2 chaque moteur a un libellé de menu et un nom court', Object.keys(ENGINES).join() === 'v0,v1b' && Object.values(ENGINES).every((e) => e.label && e.short));
+  check("B2 isEngineId n'accepte que v0 et v1b", ['v0', 'v1b', 'v2b'].every(isEngineId) && ['toString', '__proto__', 'V0', ' v0', null, undefined, 0].every((x) => !isEngineId(x)));
+  check('B2 chaque moteur a un libellé de menu et un nom court', Object.keys(ENGINES).join() === 'v0,v1b,v2b' && Object.values(ENGINES).every((e) => e.label && e.short));
 
   const garbage = await rejects(loadEvaluator('v1b', async () => ({ man: [1, 2, 3] })));
   check('B3 modèle illisible (tables incomplètes) : refusé avec un message', !!garbage, String(garbage).slice(0, 90));
@@ -356,6 +357,22 @@ const modelJson = JSON.parse(fs.readFileSync(trainingModelUrl, 'utf8'));
   check('F1 V0 : « Évaluation indicative · profondeur 9 » inchangé', formatMeta(r) === 'Évaluation indicative · profondeur 9' && formatMeta(r, null) === formatMeta(r));
   check('F1 V1b : « … · moteur V1b » ajouté', formatMeta(r, 'V1b') === 'Évaluation indicative · profondeur 9 · moteur V1b');
   check('F1 partie terminée ou pas de résultat : rien, avec ou sans nom de moteur', formatMeta({ score: 0, mate: { winner: 'w', in: 0 }, depth: 0 }, 'V1b') === '' && formatMeta(null, 'V1b') === '');
+}
+
+// --- G. V2b (P18) : modèle par motifs B ------------------------------------------------------------------------------------
+{
+  const dataB = new URL(`../${B_MODEL_PATH}`, import.meta.url), trainB = new URL('../training/models/p17-B-l025.json', import.meta.url);
+  check('G1 copie data/models identique au modèle d’entraînement p17-B-l025', fs.readFileSync(dataB, 'utf8') === fs.readFileSync(trainB, 'utf8'));
+  const ev = await loadEvaluator('v2b');
+  const direct = createFastModelEvaluator(JSON.parse(fs.readFileSync(dataB, 'utf8')));
+  check('G2 loadEvaluator(v2b) = évaluateur rapide (code généré) du fichier ; un seul chargement', typeof ev === 'function' && typeof direct === 'function' && (await loadEvaluator('v2b')) === ev);
+  const r = mulberry32(18); let bad = 0, same = 0, mx = 0;
+  for (let i = 0; i < 20000; i++) { const b = randomFastPosition(r, i).board; const s = ev(b); if (s !== -ev(mirrorBoard(b))) bad++; if (s === direct(b)) same++; mx = Math.max(mx, Math.abs(s)); }
+  check('G3 V2b : antisymétrie miroir exacte et scores identiques, 20 000 positions', bad === 0 && same === 20000 && mx < MAX_EVAL_BOUND, `${bad} écarts, |max| ${mx}`);
+  const pos = ref.positions.slice(0, 6); let ok = 0;
+  for (const g of pos) { const m = await viaWorker(g.pos, { maxDepth: 5, maxTimeMs: 1e9, engine: 'v2b' }); const e = analyseSync(g.pos, { maxDepth: 5, maxTimeMs: 1e9, evaluator: ev }); if (m && m.ok && m.result.score === e.score && m.result.bestMoveNotation === e.bestMoveNotation) ok++; }
+  check('G4 analyse par le Worker avec v2b = analyseSync avec l’évaluateur', ok === pos.length, `${ok}/${pos.length}`);
+  check('G5 formatMeta nomme V2b', /moteur V2b/.test(formatMeta({ depth: 9, mate: null }, ENGINES.v2b.short) || ''));
 }
 
 console.log(failures === 0 ? 'RÉSULTAT : tout concorde.' : `RÉSULTAT : ${failures} échec(s).`);

@@ -4,11 +4,13 @@
 // chaque : une charge passagère de la machine touche tous les modèles de la même façon, seuls les RAPPORTS sont fiables.
 //
 //   node training/bench-eval.mjs training/models/v1b-l0.json training/models/s33-F5.json … [--data dossier] [--rounds 7]
+//   (préfixe ref:<fichier> : évaluateur par motifs de référence, lent, au lieu de l'évaluateur rapide)
 //
 // Sortie : une ligne par modèle (ns/position, rapport au premier modèle, nœuds/s en profondeur 7, nœuds visités).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createTableEvaluator, tablesToPlain } from '../js/ai/eval-learned.js';
+import { createModelEvaluator, createReferenceModelEvaluator } from '../js/ai/eval-patterns.js';
 import { analyseSync } from '../js/ai/search.js';
 import { FastBoard } from '../js/ai/fastboard.js';
 
@@ -41,7 +43,11 @@ for (let gi = 0; gi < lines.length; gi++) {
 let pieces = 0; for (const b of boards) for (const c of b) if (c) pieces++;
 console.log(`${boards.length} positions réelles (${(pieces / boards.length).toFixed(1)} pièces en moyenne), ${searchPos.length} positions pour la recherche (profondeur ${depth}), ${rounds} tours entrelacés`);
 
-const models = files.map((f) => ({ name: path.basename(f, '.json'), E: createTableEvaluator(tablesToPlain(JSON.parse(fs.readFileSync(f, 'utf8')))), ns: Infinity, nps: 0, nodes: 0 }));
+// Préfixe « ref: » : évaluateur par motifs de RÉFÉRENCE (P14, lent) au lieu de l'évaluateur rapide (P16), pour comparer les deux.
+const models = files.map((f) => {
+  const isRef = f.startsWith('ref:'), file = isRef ? f.slice(4) : f, json = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return { name: (isRef ? 'ref:' : '') + path.basename(file, '.json'), E: (isRef ? createReferenceModelEvaluator : createModelEvaluator)(json), ns: Infinity, nps: 0, nodes: 0 };
+});
 const REPS = Math.max(1, Math.floor(400000 / boards.length));
 for (let r = 0; r < rounds; r++) {
   for (const m of models) {

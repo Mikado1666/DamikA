@@ -1268,3 +1268,203 @@ Aperçu sans rien lancer : `node training/chain-nuit4.mjs --dry-run --start 19:4
 - **Limites** : (1) la partie éditée ne part pas de la position initiale : exporter en PDN/lien/ajouter à la Bibliothèque produirait un fichier SANS la position de départ (pas de balise FEN/Setup) ; après F5 la partie éditée est restaurée depuis la position initiale (le PDN sauvegardé n'a pas de départ) ; (2) pas de glisser-déposer ni de peinture continue, un clic = une case ; (3) pendant l'édition flèches, molette, Espace et A sont désactivés ; « Nouvelle partie » ou un chargement ferment l'éditeur ; (4) le compteur de temps et les limites de finale 6.3/6.4 repartent de la position éditée (pas de coups antérieurs).
 - P5 terminé, commits 1f6cfde et 921f18d, non poussés
 - P6 : version 856ceb5f-2fed-49f4-bfdf-f6df48c823d3 (éditeur de position P4) déployée à 100 % le 27/10/2026. Commits non poussés.
+
+## P7 — Glossaire v2 : fusion des définitions (30/10/2026) — LECTURE ET RÉDACTION SEULEMENT, rien de commité
+- **Plan** : lecture de l'INDEX et des notes A à Y (+ rapports en recoupement), fusion des variantes de nom, une entrée par terme (définition courte en mots propres, cases FMJD et miroir, sources, statut, mesurable), tri en lots de 10 par utilité pour la partie classique. Aucun livre relu, aucun code, rien dans `data/` ni dans un dossier suivi par git.
+- **Fichier** : `tests/pdn-local/strategie-ffjd/glossaire-v2.md` (ignoré par git). Ligne ajoutée dans `INDEX.md`.
+- **Chiffres** : 110 termes, 11 lots de 10, 3 termes reportés (triangle savant / zone Drenth, losange Barteling, pion kerkov), 15 conflits entre sources signalés avec leurs deux versions et non tranchés, liste des termes cités sans définition en fin de fichier.
+- **Écart avec la consigne** : `claude/damika-glossaire.md` (projet Claude) est absent du dépôt local ; les décisions tranchées ont été appliquées telles que listées dans la consigne P7.
+- **À valider par Mickaël** : lot par lot ; points d'attention : conflits 4 (Ghestem et trèfle), 6 (faux marchand de bois / batterie Tchijov), 8 (pion 15 / 36), 10 (piquet canadien) ; identité EAD = « 3 contre 5 » vue de l'autre couleur (déduite par miroir, terme 26).
+- P7 terminé
+
+## P8 — Scan des 5 notions de la partie classique sur td-propre (30/10/2026) — MESURE SEULEMENT, rien de commité
+- **Plan** : cadre de `mdb-scan.mjs` (td-propre.pdn, Elo min 2100, rejeu FastBoard, 1 partie sur 20 rejouée avec rules.js, n123 en lecture seule). Détecteurs `p8-lib.mjs` testés AVANT le scan par `p8-unit.mjs` (77 diagrammes à la main + 30 000 plateaux aléatoires contre une version naïve : 0 écart). Critère principal déclaré d'avance : résultat du détenteur − résultat attendu d'après n123 (courbe calculée par demi-coup), t = 24 à 48, IC par rééchantillonnage de joueurs (10 000 tirages), comparaison appariée (demi-coup, camp, Elo, éval, écart de temps). Tout le reste exploratoire.
+- **Fichiers** (tous dans `tests/pdn-local/strategie-ffjd/`, ignorés par git, aucun nom) : `p8-scan.mjs`, `p8-analyse.mjs`, `p8-lib.mjs`, `p8-unit.mjs`, `p8-scan-out/` (games.jsonl, summary.json), `p8-stats.json`, `rapport-p8-detaille.md` (résumé pour Mickaël en tête, source `p8-resume.md`).
+- **Durée / volume** : scan 80 s, analyse ≈ 170 s ; 206 683 parties (21 043 066 demi-coups), 1 415 799 positions (t = 16, 24, …, 64), 2 831 598 unités (position × détenteur), 979 884 séries ; rejeu de contrôle : 10 421 parties, 1 061 248 demi-coups, 0 écart (plateau, temps, détection). Base : Elo maximal 2476, la tranche 2500+ est vide.
+- **Un chiffre clé par notion** (excès sur n123, points de score, t = 24..48) : Ghestem −2,5 [−3,6 ; −1,5] sans trèfle adverse (−6 si le pion reste ≥ 6 demi-coups) ; trèfle +0,1 [−0,9 ; +1,0] (le gain observé avec 4 à 6 pions bloqués vient du blocage : même gain sans trèfle ; à bloqués égaux +0,8 / +0,3) ; majorité d'aile −0,2 [−1,1 ; +0,7] ; centre soutenu +1,5 [+0,6 ; +2,4] (apparié +1,9 [+1,6 ; +2,2]) ; écart de temps × fermé : camp en retard, fermé − ouvert = +0,66 [+0,36 ; +0,95].
+- **Conflits du glossaire** : CONFLIT-1 sans effet (0 ou 1 : même tranche dans 96,8 % des positions, +0,66 contre +0,52) ; CONFLIT-4 non tranché (avec − sans = +0,7 [−1,3 ; +2,6], les deux négatives) ; CONFLIT-5 : cas courant 3 bloqués (41 %), gain à partir de 4, « 6 » = 0,2 % des trèfles.
+- **Recommandations** (sans coder) : centre soutenu à injecter dans le prochain lot d'essai (arène à temps égal d'abord) ; Ghestem, compteur de pions bloqués dans la zone du trèfle et écart × fermé à creuser ; trèfle et majorité d'aile à laisser. Point d'attention : Ghestem (pion en 22) se confond avec le pion kerkov / cimetière (reporté).
+- P8 terminé
+
+## P9 — Essai « centre soutenu » comme caractéristique apprise (31/10/2026) — ARRÊT à l'étape 4, rien de commité
+- **Définition** (p8-lib.mjs, identique au rapport P8) : nombre de cases parmi 22-23-27-28-32-33 où le camp a un PION (pas une dame) dont les deux cases arrière sont occupées par une pièce alliée (pion ou dame) ; Noirs = miroir (n ↔ 51 − n). Compteur 0 à 6.
+- **Code** : caractéristique `csoutenu` (max 6) ajoutée au registre `FEATURES` de `js/ai/eval-learned.js` (une seule définition pour l'évaluateur et l'apprentissage). `tests/eval-structure.mjs` : référence lente indépendante + 2 cas faits main ; vert. `eval-symmetry`, `endgame-rules`, `search-consistency` verts. Aucune modification de `main.js`, `data/models/`, `V1B_MODEL_PATH`.
+- **Apprentissage** (base n123-l0.json, nuits 1+2+3, λ = 0, graine 1, validation 15 % des parties, α choisi sur la validation) : `training/models/p9-custom.json` (ajustement conjoint, α 1e-5) et `p9z-custom.json` (tables figées). Rapports `p9-fit-struct-report.json`, `p9z-fit-struct-report.json`. n123 non touché.
+- **Résultat** : poids **négatifs** : −2 (conjoint) et −1 (tables figées) cp par case soutenue, dans les 3 phases ; gain de perte de validation ≈ 1e-6 nat/position (nul). Étape 4 de la consigne : arrêt, AUCUNE arène lancée, pas de mesure de vitesse.
+- **Lecture** : avec λ = 0 les étiquettes sont des scores de recherche, qui contiennent déjà ce que n123 voit ; l'effet P8 (+1,5 à +1,9 points) vient des résultats de parties réelles, qu'on n'apprend pas ici. Piste non lancée (hors consigne) : ajustement ancré sur n123 avec les résultats des parties réelles (λ > 0, `--anchor` ne se combine pas avec `--features` : à adapter).
+- **Rejouer** : `node training/fit.mjs --data training/data/selfplay-nuit-1,training/data/selfplay-nuit-2,training/data/selfplay-nuit-3 --base training/models/n123-l0.json --features csoutenu --lambda 0 --tag p9 --out training/models --grids none` (ajouter `--freeze-tables --tag p9z` pour tables figées).
+
+## P11 — « centre soutenu » ajusté sur les résultats de parties RÉELLES, ancré sur n123 (31/10/2026) — ARRÊT après l'arène à profondeur 6, rien de commité
+- **Données** : `training/data/td-positions-2100` (déjà produit par `training/td-positions.mjs`, Elo ≥ 2100 sur au moins un camp) réutilisé tel quel : 206 683 parties, 2 470 382 positions (12 par partie, à partir du demi-coup 16 : tout le milieu de partie, pas seulement 24-48), étiquette = résultat. Séparation PAR PARTIE (15 %, graine 1, fonction de hachage de l'identifiant de partie : une partie est soit en validation, soit en apprentissage). Aucun nom de joueur.
+- **Outil** (`training/fit-struct-run.mjs`, comportement par défaut inchangé ; NB : l'analyseur d'arguments de `fit.mjs` donne à chaque option la valeur qui SUIT, donc écrire `--freeze-tables 1`, `--km-base 1`, `--score-from-base 1`) : `--km-base` (K_m = meilleur K de la base, pas de V0, en ajustement conjoint) ; `--score-from-base` (ces données n'ont aucun score de recherche : le score de la cible (1−λ)·σ(score/K_t) devient l'évaluation de n123, K_t = 154,4 cp). `--base n123-l0.json` fait déjà l'ancrage (L2 vers n123). Un premier lancement avait été faussé par l'oubli des valeurs (variantes figée et conjointe identiques) : écarté, tout relancé.
+- **Résultats** (λ ∈ {0,5 ; 1}, `--game-weight` ∈ {0 ; 0,5}, α ∈ {1e-6…1e-2}, α = 1e-6 retenu partout) :
+
+| variante | λ | poids `csoutenu` (≥ 30 / 15-29 / < 15 pièces) | gain de perte de validation |
+|---|---|---|---|
+| tables figées | 0,5 | +3 / +3 / +3 | 5,9·10⁻⁵ nat/position (contre n123 seul) |
+| tables figées | 1 | +2 / +10 / −5 (signes mêlés) | 3,7·10⁻⁴ |
+| conjoint | 0,5 | −3 / −3 / −3 | 8·10⁻⁶ contre le témoin (tables réajustées sans caractéristique) |
+| conjoint | 1 | −6 / −6 / −6 | 6·10⁻⁵ contre le témoin |
+  (game-weight 0,5 : mêmes poids.) Le gros de la baisse de perte (≈ 7·10⁻³ à λ = 1) vient du réajustement des TABLES, pas de la caractéristique.
+- **Arène** (seul candidat à poids positif cohérent : `training/models/p11-frz-gw0--cs-l05.json`) contre n123, profondeur 6, 400 paires, graine 777 : **−7 Elo [−28 ; +13]** (A +284 =215 −301). Pas positif : mesure à temps égal NON lancée. Coût : évaluation ×3,2 (363 contre 113 ns/position), recherche 0,88× en nœuds/s (691 k contre 784 k), mêmes nœuds à profondeur 7.
+- **Lecture** : l'effet de +1,5 à +1,9 point vu en P8 ne se retrouve pas comme poids utile : dès que les tables bougent, elles absorbent le signal et le poids de `csoutenu` devient négatif ; tables figées, il est de +3 cp, trop petit pour changer des coups. n123 reste le meilleur modèle. Non essayé : un compteur lié au trait / à l'écart de temps, ou des poids dépendant de la phase avec des données plus nombreuses.
+- **Fichiers** : `training/models/p11-{frz,joint}-gw{0,0.5}--cs-l{05,1}.json` + `*-fit-struct-report.json` ; match : `training/data/p11-frz-l05-n123-d6/`. Rejouer : `node training/fit.mjs --data training/data/td-positions-2100 --base training/models/n123-l0.json --features csoutenu --features-name cs --lambda 0.5,1 --game-weight 0 --score-from-base 1 --freeze-tables 1 --alphas 1e-6,1e-5,1e-4,1e-3,1e-2 --tag p11-frz-gw0- --out training/models --grids none` (conjoint : `--km-base 1` au lieu de `--freeze-tables 1`) ; `node training/arena.mjs match --a learned:training/models/p11-frz-gw0--cs-l05.json --b learned:training/models/n123-l0.json --depth 6 --pairs 400 --seed 777 --workers 7 --out training/data/p11-frz-l05-n123-d6`.
+- Tests verts : eval-symmetry, endgame-rules, search-consistency, eval-structure, fit-struct.
+
+## P12 — Compteurs « pions adverses bloqués » par seuils, tables n123 figées (31/10/2026) — ARRÊT après l'arène à profondeur 6, rien de commité
+- **Définition** (p8-lib.mjs, règle A, celle qui reproduit les chiffres du rapport P8 : +6 / +14 / +39 à 4 / 5 / 6 bloqués avec trèfle) : un pion ADVERSE est bloqué s'il est dans la zone {5, 14, 15, 19, 20, 24} (vue du camp qui bloque ; Noirs : image 51 − n) et que TOUTES ses cases avant existantes sont occupées (par n'importe quelle pièce). Comptée sans exiger le trèfle. La règle B (cases « battues » comptées bloquées, principale en P8) n'est pas codée : l'effet n'y apparaît pas (5 bloqués sans trèfle : +1,0 contre +16,5 en règle A).
+- **Distribution** (td-positions-2100, 2 470 382 positions, règle A, 0 à 6 bloqués) : Blancs bloquent 1 370 209 / 622 607 / 360 610 / 90 395 / 24 960 / 1 572 / 29 ; Noirs bloquent 1 372 745 / 628 591 / 339 212 / 95 060 / 32 566 / 2 149 / 59. Seuil ≥ 6 inutilisable (≈ 0,002 %) : seuils retenus 3, 4, 5 (≥ 5 : ≈ 0,07 %).
+- **Code** : `bloq3`, `bloq4`, `bloq5` (max 1 chacune, différence Blancs − Noirs d'un indicateur « ≥ N pions adverses bloqués ») dans `FEATURES` de `js/ai/eval-learned.js`, calculés dans la même passe que `blocked` (une seule définition). `tests/eval-structure.mjs` : référence lente indépendante (+ 4 cas faits main à 6 / 5 / 4 / 3 bloqués) ; eval-symmetry, endgame-rules, search-consistency, eval-structure, fit-struct verts.
+- **Apprentissage** (outils P11 : td-positions-2100, graine 1, `--base n123-l0.json --score-from-base 1 --freeze-tables 1`, α 1e-6…1e-2, α = 1e-6 retenu ; poids identiques dans les 3 phases) :
+
+| candidat | λ | bloq3 | bloq4 | bloq5 | gain de perte de validation (contre n123 seul) |
+|---|---|---|---|---|---|
+| tous ensemble | 0,5 | +4 | +7 | +41 | 4,2·10⁻⁵ |
+| tous ensemble | 1 | +9 | +14 | +87 | 1,7·10⁻⁴ |
+| bloq3 seul | 0,5 / 1 | +5 / +11 | | | 1,3·10⁻⁵ / 5,1·10⁻⁵ |
+| bloq4 seul | 0,5 / 1 | | +13 / +27 | | 2,3·10⁻⁵ / 9,3·10⁻⁵ |
+| bloq5 seul | 0,5 / 1 | | | +52 / +108 | 2,7·10⁻⁵ / 1,1·10⁻⁴ |
+  Poids positifs et croissants avec le seuil (cumulatifs : un camp à 5 bloqués reçoit bloq3 + bloq4 + bloq5 ≈ +100 cp à λ = 1) ; gain petit mais plus net que pour `csoutenu` (P11).
+- **Arène** contre n123, profondeur 6, 400 paires, graine 777 : `p12-all--all-l1` **−0 Elo [−17 ; +16]** (A +282 =235 −283) ; `p12-all--all-l05` **−3 [−18 ; +13]**. Aucune tendance : mesure à temps égal NON lancée. Coût (`p12-all--all-l1`) : évaluation ×3,2 (406 contre 125 ns/position), recherche 0,86× en nœuds/s (711 k contre 825 k), mêmes nœuds à profondeur 7.
+- **Lecture** : la caractéristique est apprise de façon cohérente mais ne change pas le jeu : ≥ 4 bloqués ne concerne que ≈ 1 % des positions et ≥ 5 ≈ 0,07 %, et la recherche voit déjà le blocage de ces pions avant (profondeur 12 à 13). n123 reste le meilleur modèle.
+- **Fichiers** : `training/models/p12-{all,b3,b4,b5}--{all,b3,b4,b5}-l{05,1}.json` + `p12-*-fit-struct-report.json` ; matchs : `training/data/p12-all-l{1,05}-n123-d6/`. Rejouer : `node training/fit.mjs --data training/data/td-positions-2100 --base training/models/n123-l0.json --features bloq3,bloq4,bloq5 --features-name all --lambda 0.5,1 --score-from-base 1 --freeze-tables 1 --alphas 1e-6,1e-5,1e-4,1e-3,1e-2 --tag p12-all- --out training/models --grids none` ; `node training/arena.mjs match --a learned:training/models/p12-all--all-l1.json --b learned:training/models/n123-l0.json --depth 6 --pairs 400 --seed 777 --workers 7 --out training/data/p12-all-l1-n123-d6`.
+
+## P13 — Écart de temps × position fermée, tables n123 figées (31/10/2026) — ARRÊT à l'étape 4 (poids incohérents), pas d'arène, rien de commité
+- **Définitions** (p8-lib.mjs / rapport P8) : temps = Σ par pion de (rangée de départ = 1 : Blancs 10 − rangée, Noirs rangée + 1), pions seulement, désactivé dès qu'une dame est présente ; écart = temps Blancs − temps Noirs ; le camp EN RETARD est celui qui a le moins de temps. Fermée (P8) = mobilité statique m = (couples pion / case avant vide, deux camps) / (nombre de pions) ≤ médiane de m AU MÊME DEMI-COUP. **Adaptation nécessaire** : l'évaluation ne connaît pas le demi-coup ; version retenue = (nombre total de cases avant libres) ≤ médiane de ce nombre à NOMBRE DE PIONS égal (table d'entiers `CLOSED_MAX_FREE`, 0 à 40 pions, tirée des positions sans dame de td-positions-2100 ; −1 = jamais fermée sous 4 pions). Part « fermée » : 43 % (t = 16), 55 à 63 % ensuite, 57 % au total.
+- **Distribution** (td-positions-2100 : 2 470 382 positions, 2 312 474 sans dame), écart Blancs − Noirs borné à ±10, fermée / non fermée : −10 : 35 058 / 21 166 ; −9 : 15 058 / 9 669 ; −8 : 22 766 / 15 181 ; −7 : 29 227 / 20 203 ; −6 : 42 946 / 30 952 ; −5 : 52 465 / 38 538 ; −4 : 73 676 / 56 603 ; −3 : 85 665 / 64 764 ; −2 : 111 711 / 88 416 ; −1 : 118 391 / 91 922 ; 0 : 127 619 / 101 846 ; +1 : 123 390 / 97 285 ; +2 : 103 236 / 82 269 ; +3 : 92 570 / 71 203 ; +4 : 70 774 / 52 842 ; +5 : 59 047 / 43 261 ; +6 : 42 650 / 29 997 ; +7 : 34 715 / 23 337 ; +8 : 23 809 / 15 651 ; +9 : 18 884 / 11 653 ; +10 ou plus : 39 140 / 22 919. |écart| ≥ 3 / 5 / 7 : 1 266 389 / 698 292 / 358 436 positions, dont fermées 738 450 / 415 765 / 218 657 : seuils 3, 5, 7 gardés.
+- **Code** : `tret3f`, `tret5f`, `tret7f` (max 1) dans `FEATURES` de `js/ai/eval-learned.js` : 1 si LE CAMP est en retard d'au moins 3 / 5 / 7 temps ET position fermée ET aucune dame ; différence Blancs − Noirs (calculés dans la passe de `blocked`, mêmes cases libres). `CLOSED_MAX_FREE` exportée. `tests/eval-structure.mjs` : référence lente indépendante sur la grille (la table de médianes y est une donnée), 2 cas faits main (dame désactive, miroir) et un contrôle sur 3 578 positions de parties réelles (si `training/data/td-positions-2100` est présent) : 0 écart, compteurs non nuls (tret3f 1 139, tret5f 674, tret7f 347). Tous les tests verts (eval-symmetry, endgame-rules, search-consistency, eval-structure, fit-struct).
+- **Apprentissage** (outils P11/P12, graine 1, `--base n123-l0.json --score-from-base 1 --freeze-tables 1`, α 1e-6…1e-2, α = 1e-6 retenu) : poids par phase (≥ 30 / 15-29 / < 15 pièces) et gain de perte de validation contre n123 seul :
+
+| candidat | λ | poids | gain |
+|---|---|---|---|
+| tous ensemble | 0,5 | tret3f −2, tret5f −1, tret7f −1 (global) | 1,1·10⁻⁵ |
+| tous ensemble | 1 | tret3f +4 / −6 / −21, tret5f −2, tret7f −1 | 1,6·10⁻⁴ |
+| tret3f seul | 0,5 / 1 | −3 / +3, −7, −23 | 1,0·10⁻⁵ / 1,6·10⁻⁴ |
+| tret5f seul | 0,5 / 1 | −4 / +6, −10, −24 | 7,8·10⁻⁶ / 1,4·10⁻⁴ |
+| tret7f seul | 0,5 / 1 | −4 / +10, −11, −23 | 4,7·10⁻⁶ / 7,3·10⁻⁵ |
+  Poids NÉGATIFS à λ = 0,5, et à λ = 1 de signe mêlé (positif seulement dans la phase ≥ 30 pièces, négatif ensuite) ; jamais croissants avec le seuil : le signe attendu en P8 (le camp en retard de temps fait mieux en position fermée) n'est pas retrouvé comme poids utile par-dessus n123. Le petit gain à λ = 1 vient du choix de poids par phase (3 degrés de liberté de plus).
+- **Arène** : NON lancée (règle de l'étape 4). n123 reste le meilleur modèle.
+- **Fichiers** : `training/models/p13-{all,t3,t5,t7}--{all,t3,t5,t7}-l{05,1}.json` + `p13-*-fit-struct-report.json`. Rejouer : `node training/fit.mjs --data training/data/td-positions-2100 --base training/models/n123-l0.json --features tret3f,tret5f,tret7f --features-name all --lambda 0.5,1 --score-from-base 1 --freeze-tables 1 --alphas 1e-6,1e-5,1e-4,1e-3,1e-2 --tag p13-all- --out training/models --grids none`.
+
+## P14 — Évaluation par MOTIFS (patterns) apprise sur parties réelles, par-dessus n123 (31/10/2026) — PREMIER SIGNAL POSITIF, rien de commité, rien intégré à l'appli
+- **Principe** : éval = éval(n123, tables figées) + Σ_p T[phase][p][config du motif p] − Σ_p T[phase][p][config du motif p sur le plateau MIROIR]. 4 états par case (vide, pion blanc, pion noir, dame : un seul état « dame » pour les deux camps), poids entiers en cp, 3 phases (≥ 30 / 15-29 / < 15 pièces). Miroir exact (éval(miroir) = −éval). Nouveau fichier `js/ai/eval-patterns.js` (voisin de eval-learned.js, aucun comportement par défaut changé) ; fichier de modèle = tables de base + champ `patterns` (`createModelEvaluator` ; sans `patterns` = `createTableEvaluator`). Garde-fou : borne exacte = borne de la base + Σ (max − min) des tables de chaque motif ≤ 29 000, poids sur 16 bits. Branché dans l'arène par `training/game.mjs` (`learned:` reconnaît `patterns`) et `training/bench-eval.mjs`.
+- **Jeu A** (`PATTERN_SETS.A`, cases FMJD) : 12 motifs de 5 cases : 6 losanges (case + 4 voisines diagonales) centrés en 27, 28, 22, 23, 32, 33 (centre, recouvrement) ; zigzags d'aile 16-21-26-31-36 et 15-20-25-30-35 ; lignes de fond 46-50 et 1-5 ; axe 25-30-35 : {25, 29, 30, 34, 35} et {24, 25, 29, 30, 34}. 12 × 4⁵ × 3 phases = **36 864 poids**.
+- **Apprentissage** (`training/fit-patterns.mjs`, nouveau) : td-positions-2100 (206 379 parties, 2 470 382 positions ; 175 241 parties / 2 097 713 positions en apprentissage, 31 138 / 372 669 en validation, séparation par partie, graine 1, contrôle : aucune partie commune), logit = (éval_n123 + motifs)/K_t, K_t = 154,4 cp, cible λ·résultat + (1−λ)·σ(éval_n123/K_t) ; Adam par lots (4096, pas 0,005), L2 vers 0 en « pseudo-observations » c ∈ {10, 30, 100, 300, 1000} choisi sur la validation, arrêt anticipé (patience 3), poids arrondis en cp (la perte de validation est recalculée sur le modèle arrondi et l'évaluateur réel redonne l'ajustement sur 7 454 positions : 0 écart). Durée : 61 s pour toute la grille. Une 1re passe (pas 0,02) donnait déjà 8,9·10⁻³ (λ = 1).
+- **Gain de perte de validation contre n123 seul** (c = 100 retenu partout) : λ = 0,5 : **2,7·10⁻³** nat/position (0,673423 → 0,670712) ; λ = 1 : **1,2·10⁻²** (0,673908 → 0,661836). Pour comparaison : compteurs P9-P13 ≈ 10⁻⁵ à 10⁻⁴ ; réajustement des tables n123 seul (P11, λ = 1) ≈ 7·10⁻³. |poids| max : 27 cp (λ = 0,5), 49 cp (λ = 1) ; ≈ 7 000 poids non nuls sur 36 864.
+- **Arène contre n123** : λ = 1 (`p14-A-l1`) : profondeur 6, 400 paires, graine 777 : **−142 Elo [−165 ; −120]** (le gain de perte avec λ = 1 apprend les habitudes des joueurs humains, pas la force de jeu : même constat qu'à l'étape 3.2). λ = 0,5 (`p14-A-l05`) : profondeur 6, 400 paires, graine 777 : **+27 [+8 ; +46]** (A +313 =236 −251) ; **TEMPS ÉGAL** (`--depth 30 --time 100`, 200 paires, graine 888) : **+29 [+5 ; +53]** (A +128 =177 −95).
+- **Coût** (`bench-eval`, p14-A-l05) : évaluation ×4,3 (434 contre 102 ns/position), recherche 0,84× en nœuds/s (710 k contre 849 k) et 139 k contre 124 k nœuds à la profondeur 7 ; le gain à temps égal est mesuré APRÈS ce coût. (Le coût de l'évaluation dépasse le ×2 prévu : boucle par motif sans branchement, 3 variantes essayées, la plus simple gardée ; non optimisé davantage.)
+- **Les 10 configurations les plus marquantes** (λ = 0,5, ≥ 1 000 occurrences d'apprentissage, par |poids| ; poids du point de vue des Blancs ; `phase` 0 = plus de 30 pièces, 1 = 15 à 29 ; lecture en langage simple, À PRENDRE COMME UNE LECTURE, pas comme une explication prouvée) :
+  1. −27 (> 30 pièces, 1 057 fois) : cases 24 noir, 25 blanc, 29 noir, 30 blanc, 34 blanc : deux pions noirs en 24 et 29 encadrent notre groupe 25-30-34, mauvais pour les Blancs.
+  2. −25 (15-29 pièces, 2 105) : 25 blanc, 29 noir, 30 blanc, 34 blanc, 35 blanc : un pion noir planté en 29 au milieu de l'aile droite blanche.
+  3. +24 (> 30, 2 729) : 25 blanc, 34 blanc, 35 NOIR, 29 et 30 vides : un pion noir isolé en 35, derrière nos lignes, bon pour les Blancs.
+  4. +22 (> 30, 6 711) : 16 blanc, 26 blanc, 36 noir, 21 et 31 vides : même idée à gauche, un pion noir isolé en 36.
+  5. −22 (> 30, 6 711) : 15 blanc, 25 noir, 35 noir, 20 et 30 vides : deux pions noirs tiennent le bord droit (25 et 35), bon pour les Noirs.
+  6. +22 (15-29, 1 809) : 22, 17, 18 noirs contre 27, 28 blancs : le trio noir 22-17-18 face à la paire blanche 27-28 est bon pour les Blancs.
+  7. −21 (> 30, 1 528) : ligne arrière blanche vide sauf un pion en 46 : plus de défenseurs sur la ligne de fond, mauvais pour les Blancs.
+  8. +21 (> 30, 1 528) : même fait vu de l'autre côté (ligne 1-5 vide sauf un pion noir en 5).
+  9. −21 (15-29, 13 198) : pion noir en 25 contre les quatre pions blancs 29, 30, 34, 35 : le pion noir en 25 gêne le groupe compact blanc.
+  10. −21 (15-29, 1 363) : même groupe que 1 (24 noir, 25 blanc, 29 noir, 30 blanc, 34 blanc), à 15-29 pièces.
+  Les poids restent modestes (≤ 27 cp ≈ un quart de pion) : l'effet vient du grand nombre de configurations, pas d'une seule. Les doublons miroir (7 et 8) sont les deux faces du même fait.
+- **Limites / à faire avant toute intégration** : une seule mesure à temps égal (200 paires, IC [+5 ; +53], graine 888) et une à profondeur 6 ; pas de comparaison contre V1b / V0 ni contre un moteur externe ; entraîné et validé sur la MÊME base de parties humaines (la validation est par partie, mais les joueurs se retrouvent) ; aucune confirmation sur d'autres graines ni à profondeur 8 ; poids bien lus seulement phase par phase ; version « plus grande » (k = 6, plus de motifs) non essayée ; λ intermédiaires (0,25, 0,75) non essayés ; coût d'évaluation ×4,3 (recherche 0,84×). Le modèle `p14-A-l05.json` N'EST PAS dans `data/models/` et V1B_MODEL_PATH n'a pas bougé.
+- **Fichiers** : `js/ai/eval-patterns.js`, `training/fit-patterns.mjs`, `tests/eval-patterns.mjs` (référence naïve avec plateau miroir explicite : 6 000 positions, 0 écart ; antisymétrie ; cas faits main ; garde-fous), modifications mineures de `training/game.mjs` et `training/bench-eval.mjs` ; modèles `training/models/p14-A-l05.json`, `p14-A-l1.json`, `p14-A-report.json` ; matchs `training/data/p14-A-l{05,1}-n123-d6/`, `training/data/p14-A-l05-n123-t100/`. Tests verts : eval-symmetry, endgame-rules, search-consistency, eval-structure, fit-struct, engine-select, eval-patterns.
+- **Rejouer** : `node training/fit-patterns.mjs --lambda 0.5,1 --reg 10,30,100,300,1000 --lr 0.005 --epochs 40 --patience 3 --tag p14-A --out training/models` ; `node training/arena.mjs match --a learned:training/models/p14-A-l05.json --b learned:training/models/n123-l0.json --depth 6 --pairs 400 --seed 777 --workers 7 --out training/data/p14-A-l05-n123-d6` ; temps égal : `--depth 30 --time 100 --pairs 200 --seed 888`.
+
+## P15 — Confirmation de p14-A-l05 (matchs seulement, aucun code)
+
+- **Conclusion : le gain de P14 n'est PAS confirmé** (plausible au mieux, de l'ordre de quelques Elo, pas prouvé). Arrêt anticipé selon la règle (mesure 1 négative) : les mesures 2 (profondeur 8) et 3 (contre V1b) n'ont PAS été lancées.
+- **Mesures** (candidat `p14-A-l05` contre `n123`, temps égal `--depth 30 --time 100`) :
+
+| Mesure | Paires | Victoires / nulles / défaites | Elo [IC 95 % par paires] |
+|---|---|---|---|
+| P14, graine 888 | 200 | 128 / 177 / 95 | +29 [+5 ; +53] |
+| P15, graine 999 | 400 | 237 / 314 / 249 | −5 [−23 ; +12] |
+| Poolé (888 + 999) | 600 | 365 / 491 / 344 | +6 [−8 ; +20] |
+
+- **Lecture** : la première mesure à temps égal était probablement une fluctuation favorable ; poolé, l'intervalle contient 0. Avec le coût de l'évaluation (×4,3), le gain à profondeur 6 (+27) ne se retrouve pas à temps égal. Pas d'intégration, pas de version plus grande à construire sans nouveau signe.
+- **Rejouer** : `node training/arena.mjs match --a learned:training/models/p14-A-l05.json --b learned:training/models/n123-l0.json --depth 30 --time 100 --pairs 400 --seed 999 --workers 7 --out training/data/p15-1-t100-s999` (sortie dans `training/data/p15-1-t100-s999`). Poolé : regrouper les paires des deux dossiers `games.jsonl` (`p14-A-l05-n123-t100`, `p15-1-t100-s999`) et appeler `matchStats` de `training/stats.mjs`.
+- Aucun commit ; `js/`, `data/models/`, `V1B_MODEL_PATH` et les modèles existants non touchés.
+
+## P16 — Évaluation par motifs accélérée (mêmes scores, ×1,12 de n123 au lieu de ×4,4)
+
+- **Résumé** : objectif de vitesse ATTEINT (évaluation ≤ ×2) sans toucher au moteur (étape 2a seulement). Gain à temps égal : **plausible mais non prouvé** (+14 Elo [−5 ; +33], 400 paires, graine 2026).
+- **Profil** (positions réelles, 17 pièces en moyenne) : n123 seul 99 ns ; calcul des 24 indices (12 motifs × 2 vues) 315 ns ; lecture des 24 poids ≈ 23 ns ; total 430 ns. Le temps partait dans les 120 lectures de cases, chacune avec 4 accès à des tableaux de géométrie.
+- **Optimisation** (`js/ai/eval-patterns.js`, `createFastModelEvaluator`) : code GÉNÉRÉ pour le jeu de motifs (`new Function`) : cases et décalages écrits en dur, une lecture de chacune des 50 cases, état par arithmétique (c − (c >> 2) ; vue miroir par échange des deux bits), phase choisie une fois, somme des tables de base dans la même fonction, poids en un seul `Int16Array`. Conditions : base sans caractéristiques de structure et phases 30/15/0 ou une seule ; sinon, ou si `new Function` est refusé (politique de sécurité), `createModelEvaluator` retombe sur la référence. L'ancienne version est gardée : `createReferenceModelEvaluator`. `eval-learned.js` : `pieceValueTable` exportée (seul changement). Ni FastBoard, ni la recherche, ni `main.js` n'ont changé (l'évaluation incrémentale (b) n'a pas été nécessaire).
+- **Identité** (`tests/eval-patterns.mjs`) : 51 452 positions (24 777 avec dames, 26 675 sans ; phases ≥30 / 15-29 / <15 : 7 493 / 15 840 / 28 119), pour 4 modèles (tables aléatoires ±40 et ±300, p14-A-l05 entraîné, base à une phase) : rapide = référence ET éval(miroir) = −éval, 0 écart. Repli testé. Tests verts : eval-patterns, eval-symmetry, endgame-rules, search-consistency, eval-structure, fit-struct, engine-select, worker.
+- **Vitesse** (`bench-eval.mjs`, 9 tours entrelacés) : n123 98 ns, 854 k nœuds/s ; p14 référence 436 ns (×4,43), 712 k (0,83×) ; **p14 rapide 110 ns (×1,12), 823 k nœuds/s (0,96×)** ; 139 k nœuds à la profondeur 7 (124 k pour n123).
+- **Arène à temps égal** (`--depth 30 --time 100`, p14-A-l05 contre n123) :
+
+| Mesure | Vitesse du modèle | Paires | V / N / D | Elo [IC 95 %] |
+|---|---|---|---|---|
+| graine 888 (P14) | lente (×4,3) | 200 | 128 / 177 / 95 | +29 [+5 ; +53] |
+| graine 999 (P15) | lente (×4,3) | 400 | 237 / 314 / 249 | −5 [−23 ; +12] |
+| graine 2026 (P16) | rapide (×1,12) | 400 | 262 / 308 / 230 | +14 [−5 ; +33] |
+| poolé 888 + 999 (lente) | lente | 600 | 365 / 491 / 344 | +6 [−8 ; +20] |
+| poolé des trois (MÉLANGE de deux vitesses) | | 1 000 | 627 / 799 / 574 | +9 [−2 ; +21] |
+
+- **Lecture** : l'accélération ramène le coût à peu près à zéro, mais le gain à temps égal reste faible (+14, intervalle contenant 0). Le poolé des trois mélange deux vitesses : à lire avec prudence. Pistes si l'on poursuit : nouvelle mesure du modèle rapide (autre graine) ou profondeur 8 ; sinon l'effet réel est probablement de l'ordre de +10 Elo.
+- **Rejouer** : `node tests/eval-patterns.mjs` ; `node training/bench-eval.mjs training/models/n123-l0.json ref:training/models/p14-A-l05.json training/models/p14-A-l05.json --rounds 9` ; `node training/arena.mjs match --a learned:training/models/p14-A-l05.json --b learned:training/models/n123-l0.json --depth 30 --time 100 --pairs 400 --seed 2026 --workers 7 --out training/data/p16-t100-s2026`.
+- Fichiers modifiés : `js/ai/eval-patterns.js`, `js/ai/eval-learned.js` (un `export`), `tests/eval-patterns.mjs`, `training/bench-eval.mjs`. Rien commité ; `main.js`, `data/models/`, `V1B_MODEL_PATH` et le modèle p14-A-l05 non touchés.
+
+## P17 — Évaluation par motifs, version plus grande (jeux B et C)
+
+- **Résumé** : le jeu **B** (23 motifs de 5 cases) fait mieux que A de façon **claire mais modeste** : à temps égal, **+60 Elo [+47 ; +74]** contre n123 (800 paires, deux graines), contre +32 [+19 ; +45] pour A ; écart apparié B − A : +4,0 points de % de score [±2,6] sur 800 paires, intervalle hors de zéro (≈ +28 Elo). Le jeu **C** (14 briques de 6 cases) : +46 [+33 ; +59], écart avec A : +2,0 [±2,5], non établi. Le coût en vitesse reste faible (évaluation ×1,56 pour B, ×1,40 pour C ; nœuds par seconde 0,97× et 0,95× de n123). V1b reste le modèle de l'appli ; rien n'est intégré.
+- **Découverte de conception** : un motif et sa rotation de 180° (mêmes cases, p ↔ 51−p) sont REDONDANTS (les Noirs lisent la même table sur le plateau miroir). Le jeu A contient 3 telles paires (losanges 28/23, ailes, lignes de fond) : il n'a que **9 motifs distincts sur 12**. B et C n'ont aucune paire redondante et couvrent les 50 cases ; le bloc auto-symétrique [22,23,24,27,28,29] (demi-capacité) a été écarté de C.
+- **Jeux** (`PATTERN_SETS` dans `js/ai/eval-patterns.js`, A inchangé) : B = 12 losanges (centres 27-34, 37-40), 5 rangées de 5, 2 ailes, 2 axes, 2 zigzags : 70 656 poids ; C = 14 briques de 6 cases (2 × 3 sur les bandes de rangées, 2 blocs de bord) : 172 032 poids ; A : 36 864 poids. Identité rapide = référence et antisymétrie vérifiées sur ≈ 51 000 positions pour B et C (`tests/eval-patterns.mjs`, aussi comparaison à la référence naïve).
+- **Apprentissage** (`training/fit-patterns.mjs`, td-positions-2100, validation 15 % des parties, graine 1, L2 c ∈ {10…3000}, arrêt anticipé, poids arrondis) : pas de surapprentissage notable (gain d'apprentissage ≥ gain de validation de 1 à 10 %).
+
+| Modèle | λ | Perte de validation (n123 → modèle) | Poids non nuls | Elo profondeur 6 (200 paires, graine 777) |
+|---|---|---|---|---|
+| B | 0,25 | 0,6732 → 0,67263 | 10 088 | **+83 [+53 ; +115]** |
+| B | 0,5 | 0,6734 → 0,67015 | 15 292 | +27 [0 ; +55] |
+| B | 0,75 | 0,6737 → 0,66553 | 13 838 | −74 [−103 ; −46] |
+| C | 0,25 | 0,6732 → 0,67255 | 12 928 | **+55 [+26 ; +85]** |
+| C | 0,5 | 0,6734 → 0,67005 | 17 254 | +30 [0 ; +60] |
+| C | 0,75 | 0,6737 → 0,66542 | 18 689 | −64 [−95 ; −34] |
+| A (réf., P14) | 0,5 | 0,6734 → 0,6707 | ≈ 7 000 | +27 [+8 ; +46] (400 paires) |
+
+  Plus λ est bas, mieux le modèle joue, alors que la perte de validation s'améliore avec λ : la perte ne prédit pas la force (même piège qu'en 3.2). Finalistes : B λ = 0,25 et C λ = 0,25. Piste non explorée : λ plus bas (0,1).
+- **Coût** (`bench-eval.mjs`, 9 tours entrelacés, profondeur 7) : n123 100 ns, 807 k nœuds/s ; A 122 ns (×1,22), 787 k ; B 156 ns (×1,56), 784 k (0,97×) ; C 140 ns (×1,40), 768 k (0,95×).
+- **Temps égal** (`--depth 30 --time 100`, contre n123, 400 paires par graine) :
+
+| Modèle | Graine 3131 | Graine 4747 | Poolé (800 paires) |
+|---|---|---|---|
+| B λ = 0,25 | +57 [+39 ; +76] (305 / 320 / 175) | +64 [+45 ; +83] | **+60 [+47 ; +74]** (614 / 647 / 339) |
+| C λ = 0,25 | +52 [+33 ; +70] (295 / 328 / 177) | +41 [+23 ; +58] | **+46 [+33 ; +59]** (576 / 659 / 365) |
+| A (p14-A-l05) | +33 [+14 ; +52] (279 / 317 / 204) | +32 [+14 ; +50] (280 / 313 / 207) | **+32 [+19 ; +45]** (559 / 630 / 411) |
+
+- **Lecture** : B > A est clair (apparié +4,0 [±2,6] points de %), C > A ne l'est pas. Contre n123, l'évaluation par motifs apporte de façon constante (+32 à +60 Elo à temps égal). Reste non mesuré : B contre V1b, B à profondeur 8, B contre A directement.
+- **B contre V1b** (le modèle de l'appli ; temps égal, `--depth 30 --time 100`, 400 paires par graine, `training/data/p17-B-vs-v1b-t100-s3131` et `…-s4747`) :
+
+| Graine | V / N / D | Elo [IC 95 %] |
+|---|---|---|
+| 3131 | 311 / 331 / 158 | +67 [+49 ; +86] |
+| 4747 | 319 / 326 / 155 | +72 [+54 ; +91] |
+| **Poolé (800 paires)** | 630 / 657 / 313 | **+70 [+57 ; +83]** (score 59,9 %) |
+
+  Poolé calculé par `node training/pool.mjs training/data/p17-B-vs-v1b-t100-s3131 training/data/p17-B-vs-v1b-t100-s4747` (nouvel outil : regroupe les scores par paire).
+- **Rejouer** : `node tests/eval-patterns.mjs` ; `node training/fit-patterns.mjs --set B --lambda 0.25 --tag p17-B …` (voir l'en-tête du script) ; `node training/arena.mjs match --a learned:training/models/p17-B-l025.json --b learned:training/models/n123-l0.json --depth 30 --time 100 --pairs 400 --seed 3131 --workers 7 --out training/data/p17-p17-B-l025-n123-t100-s3131` (idem graine 4747) ; `node training/bench-eval.mjs training/models/n123-l0.json training/models/p14-A-l05.json training/models/p17-B-l025.json training/models/p17-C-l025.json --rounds 9`.
+- **Configurations marquantes de B λ = 0,25** (`training/models/p17-B-report.json`, champ `top`, poids en centipions du point de vue des Blancs)  :
+  1. 15-29, motif 46-47-48-49-50 : 46:w 47:. 48:. 49:. 50:. → -14 cp (20472 occurrences)
+  2. 15-29, motif 31-26-27-36-37 : 31:w 26:b 27:w 36:. 37:w → -11 cp (10864 occurrences)
+  3. ≥ 30 pièces, motif 31-26-27-36-37 : 31:. 26:w 27:. 36:b 37:w → 10 cp (14124 occurrences)
+  4. ≥ 30 pièces, motif 46-47-48-49-50 : 46:w 47:. 48:. 49:. 50:. → -10 cp (1528 occurrences)
+  5. 15-29, motif 40-34-35-44-45 : 40:. 34:. 35:. 44:w 45:b → 10 cp (4901 occurrences)
+  6. < 15, motif 37-31-32-41-42 : 37:w 31:b 32:. 41:. 42:w → 10 cp (1586 occurrences)
+  7. ≥ 30 pièces, motif 30-24-25-34-35 : 30:w 24:w 25:. 34:. 35:. → -9 cp (2005 occurrences)
+  8. ≥ 30 pièces, motif 30-24-25-34-35 : 30:w 24:w 25:b 34:w 35:w → -9 cp (1376 occurrences)
+  9. ≥ 30 pièces, motif 32-27-28-37-38 : 32:. 27:b 28:b 37:. 38:w → -9 cp (3111 occurrences)
+  10. ≥ 30 pièces, motif 46-47-48-49-50 : 46:. 47:. 48:w 49:. 50:w → 9 cp (28410 occurrences)
+- Fichiers : `js/ai/eval-patterns.js` (B, C), `tests/eval-patterns.mjs` ; modèles `training/models/p17-{B,C}-l{025,05,075}.json` et `p17-{B,C}-report.json` ; données `training/data/p17-*`. Aucun commit ; `js/main.js`, `data/models/`, `V1B_MODEL_PATH` et les modèles existants non touchés.
+
+## P18 — Intégration du modèle B (p17-B-l025) dans l'appli : moteur « V2b (motifs) »
+
+- **Ce qui change** : un TROISIÈME moteur d'analyse, `v2b`, « V2b (motifs) » dans le menu 🎨 → « Moteur d'analyse » (ligne d'analyse : « … · moteur V2b »). V0 reste le moteur par défaut (`DEFAULT_ENGINE` inchangé) et V1b reste intact et sélectionnable : le réglage mémorisé `damika:analysis-engine` accepte maintenant `v2b`. Rien d'autre dans `js/main.js` (le menu est construit depuis `ENGINES`).
+- **Code** : `js/ai/engines.js` : `ENGINES.v2b`, `B_MODEL_PATH = 'data/models/p17-B-l025.json'` (UNIQUE constante du chemin, comme `V1B_MODEL_PATH`), table interne `MODELS` (chemin + fabrique d'évaluateur par moteur ; v2b utilise `createModelEvaluator` de `eval-patterns.js` = évaluateur rapide à code généré, repli automatique sur la référence si `new Function` est refusé). `data/models/p17-B-l025.json` = COPIE de `training/models/p17-B-l025.json` (148 300 octets, contre 1 587 pour V1b ; test d'identité). Le message `analyse` du Worker accepte `engine: 'v2b'` (contrôleur et Worker inchangés).
+- **Service Worker** (toujours désactivé) : `sw.js` mis à jour pour sa réactivation : `CACHE_NAME` `damika-v5`, `ASSETS` complété (modules `js/ai/*`, `js/pdn/storage.js`, `library-view`, `photo-match`, `position-editor`, modèles V1b et B). Chaque chemin vérifié (existe). Non testé en conditions réelles puisque le Service Worker n'est pas enregistré.
+- **Vérifications** : `tests/eval-patterns.mjs`, `eval-symmetry`, `engine-select` (étendu : blocs G1-G5 pour v2b : copie identique, un seul chargement, antisymétrie miroir exacte et scores identiques à l'évaluateur du fichier sur 20 000 positions, |éval| max 4 336 < 29 000, Worker = analyseSync, nom affiché), `analysis-controller`, `analysis-format`, `worker-analyse`, `worker`, `eval-structure` : tous verts. `tests/bench-engines.mjs` accepte `--engine v2b`.
+- **Vitesse** :
+  - Dans le NAVIGATEUR (Chrome, Worker module, 3 positions, profondeur 9, 3 tours entrelacés) : V1b 750 k nœuds/s, **V2b 729 k (0,97×)** ; nœuds à profondeur égale 1,40 M contre 1,41 M ; démarrage d'un Worker neuf avec chargement du modèle : 37 ms (V1b) et 34 ms (V2b) ; profondeur atteinte en 1,5 s : 10,7 (V1b) contre 10,3 (V2b) ; `new Function` accepté (évaluateur rapide actif).
+  - Sous Node (`bench-engines.mjs`, Worker, 5 positions) : V2b/V0 1,03× en temps à profondeur 8, 1,29× à profondeur 10 (V1b : 1,13× et 1,41×) ; profondeur en 1,5 s : V0 11,4, V1b 11,2, V2b 11,0 ; chargement du modèle ≈ 9 ms (V1b ≈ 3 ms).
+- **Partie complète** : `training/data/p18-B-vs-v1b-t1500` (B contre V1b, 2 paires = 4 parties, 1,5 s par coup, profondeur 24, graine 18, via l'arène) : B +2 =1 −1 ; `training/verify.mjs` : 4 parties (544 demi-coups) rejouées avec `rules.js`, TOUTES légales. Limite : cette partie passe par l'arène (mêmes évaluateurs et recherche que le Worker), pas par l'interface ; la sélection V2b dans l'UI n'a été vérifiée que par le menu (3 entrées) et le Worker du navigateur, pas par une partie jouée à la souris.
+- **Revenir à V1b** : rien à faire pour l'utilisateur (V1b est sélectionnable) ; pour retirer V2b : supprimer la ligne `v2b` d'`ENGINES` et l'entrée de `MODELS` dans `js/ai/engines.js` (une valeur `v2b` mémorisée est alors ignorée = V0). Pour faire de V2b le moteur par défaut : `DEFAULT_ENGINE = 'v2b'` (non fait : jauge non recalibrée pour B, `node tests/gauge-calibration.mjs` à refaire d'abord).
+- **Pas fait** : jauge (`BAR_SCALE_CP`, paliers) non recalibrée pour B ; pas de test visuel dans l'interface ; ni push ni déploiement.

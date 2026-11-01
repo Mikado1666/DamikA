@@ -20,7 +20,7 @@
 //   { type: 'stop' }                        → interrompt l'analyse en cours
 //
 // Analyse : options = { maxDepth, maxTimeMs, useTT, engine } (voir js/ai/search.js). `engine` = 'v0' (défaut, absent =
-// 'v0') ou 'v1b' : moteur d'évaluation (js/ai/engines.js ; V1b charge son modèle au premier besoin, une seule fois par
+// 'v0') ou 'v1b' / 'v2b' : moteur d'évaluation (js/ai/engines.js ; V1b charge son modèle au premier besoin, une seule fois par
 // Worker ; moteur inconnu ou modèle illisible = réponse { ok: false, error }). `history` (facultatif, absent =
 // comportement sans historique) = { positions | hashes, quiet, endgame? } : positions de la partie AVANT la position
 // analysée, du plus ancien au plus récent ({ board, side } ou hashes [[lo, hi]]), limitées aux `quiet`

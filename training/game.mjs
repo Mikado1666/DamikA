@@ -25,6 +25,7 @@ import { FastBoard, WHITE, BLACK, DRAW_QUIET_PLIES, ENDGAME_REASONS, moveToUi } 
 import { analyseSync, zobristHash } from '../js/ai/search.js';
 import { createEvaluator, EVAL_WEIGHTS } from '../js/ai/eval.js';
 import { createTableEvaluator, tablesToPlain } from '../js/ai/eval-learned.js';
+import { createModelEvaluator } from '../js/ai/eval-patterns.js';
 import {
   initialBoard, generateLegalMoves, applyCaptureSequence, applySimpleMove, endgameStep, endgameDrawReason,
 } from '../js/engine/rules.js';
@@ -102,6 +103,12 @@ export function resolveEvaluator(spec) {
     try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { throw new Error(`impossible de lire ${file} : ${e.message}`); }
     let tables;
     try { tables = tablesToPlain(raw); } catch (e) { throw new Error(`tables invalides dans ${file} : ${e.message}`); }
+    // Fichier de MOTIFS (P14) : tables de base + champ `patterns` (js/ai/eval-patterns.js) ; l'empreinte couvre les deux.
+    if (raw.patterns) {
+      tables = { ...tables, patterns: raw.patterns };
+      const id = crypto.createHash('sha1').update(JSON.stringify(tables)).digest('hex').slice(0, 10);
+      return { kind: 'tables', tables, id, label: `learned-${path.basename(file, '.json')}` };
+    }
     return { kind: 'tables', tables, id: tablesId(tables), label: `learned-${path.basename(file, '.json')}` };
   }
   const weights = resolveWeights(spec);
@@ -110,7 +117,7 @@ export function resolveEvaluator(spec) {
 
 // player = { name, kind?, weights | tables, depth, maxNodes?, maxTimeMs? } → ajoute `evaluate` (fonction evalWhite).
 export function makePlayer({ name, kind = 'weights', weights, tables, depth, maxNodes = Infinity, maxTimeMs = 1e9 }) {
-  const evaluate = kind === 'tables' ? createTableEvaluator(tables) : createEvaluator(weights);
+  const evaluate = kind === 'tables' ? (tables.patterns ? createModelEvaluator(tables) : createTableEvaluator(tables)) : createEvaluator(weights);
   return { name, kind, weights, tables, depth, maxNodes, maxTimeMs, evaluate };
 }
 

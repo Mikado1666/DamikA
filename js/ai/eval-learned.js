@@ -51,14 +51,29 @@ const LIMIT = 1e6; // simple contrôle de bon sens avant le calcul de la borne (
 //   fort     « forteresse » : une dame SEULE sur la grande diagonale (cases 5-46) face à 2 ou 3 pièces             (F5 dames)
 //   promo    pions à un pas de la promotion avec au moins une case de promotion libre                              (F6 idée du jeu)
 //   isol     pions ISOLÉS : aucune pièce alliée sur les 4 cases diagonales voisines                                (F6 idée du jeu)
+//   csoutenu CENTRE SOUTENU (P8/P9) : nombre de cases parmi 22-23-27-28-32-33 (miroir 51 − n pour les Noirs) où le camp a un
+//            PION dont les deux cases arrière sont occupées par une pièce alliée (pion ou dame)                     (P9)
+//   bloq3, bloq4, bloq5   SEUILS de « pions adverses bloqués » (P8 règle A, P12) : un pion ADVERSE est bloqué s'il est dans la zone
+//            FMJD {5, 14, 15, 19, 20, 24} (vue du camp qui bloque ; pour les Noirs, l'image 51 − n : {46, 37, 36, 32, 31, 27}) et que
+//            toutes ses cases avant existantes sont occupées ; blocN = 1 si le camp bloque au moins N pions adverses, sinon 0
+//   tret3f, tret5f, tret7f   (P8 notion 5, P13) = 1 si LE CAMP a au moins 3 / 5 / 7 temps de RETARD (temps = Σ rangées parcourues des pions,
+//            rangée de départ = 1, comme computeTempoScores de rules.js) ET la position est FERMÉE ET aucune dame sur le plateau, sinon 0.
+//            Fermée = nombre de cases avant libres des pions (les deux camps) ≤ CLOSED_MAX_FREE[nombre de pions] (médiane de ce nombre,
+//            à nombre de pions égal, sur les positions sans dame de td-positions-2100 ; remplace « sous la médiane au même demi-coup » de P8,
+//            l'évaluation ne connaissant pas le demi-coup ; -1 = jamais fermée : moins de 4 pions)
 export const FEATURES = [
   { name: 'sup', max: 20 }, { name: 'pair', max: 40 }, { name: 'blocked', max: 20 }, { name: 'free', max: 40 },
   { name: 'kmob', max: 360 }, { name: 'wing', max: 20 }, { name: 'kvm', max: 400 }, { name: 'fort', max: 1 },
-  { name: 'promo', max: 5 }, { name: 'isol', max: 20 },
+  { name: 'promo', max: 5 }, { name: 'isol', max: 20 }, { name: 'csoutenu', max: 6 },
+  { name: 'bloq3', max: 1 }, { name: 'bloq4', max: 1 }, { name: 'bloq5', max: 1 },
+  { name: 'tret3f', max: 1 }, { name: 'tret5f', max: 1 }, { name: 'tret7f', max: 1 },
 ];
 export const NFEAT = FEATURES.length;
 export const FEATURE_INDEX = Object.fromEntries(FEATURES.map((f, k) => [f.name, k]));
-const F_SUP = 0, F_PAIR = 1, F_BLOCKED = 2, F_FREE = 3, F_KMOB = 4, F_WING = 5, F_KVM = 6, F_FORT = 7, F_PROMO = 8, F_ISOL = 9;
+const F_SUP = 0, F_PAIR = 1, F_BLOCKED = 2, F_FREE = 3, F_KMOB = 4, F_WING = 5, F_KVM = 6, F_FORT = 7, F_PROMO = 8, F_ISOL = 9, F_CSOUT = 10, F_BLQ3 = 11, F_BLQ4 = 12, F_BLQ5 = 13, F_TR3 = 14, F_TR5 = 15, F_TR7 = 16;
+const TRET_MASK = (1 << F_TR3) | (1 << F_TR5) | (1 << F_TR7);
+export const CLOSED_MAX_FREE = Int8Array.from([-1, -1, -1, -1, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 20, 21, 21, 22, 22, 22, 23, 23, 23, 23, 23, 24, 23, 24, 23, 24, 22, 23, 22, 22, 20, 20, 19, 18]); // indexé par le nombre de pions des deux camps (0 à 40)
+const BLQ_MASK = (1 << F_BLQ3) | (1 << F_BLQ4) | (1 << F_BLQ5);
 export const ALL_FEATURES_MASK = (1 << NFEAT) - 1;
 
 // Géométrie du damier 10×10 sur les cases 0..49 (identique à eval.js / fastboard.js) : case i → rangée floor(i / 5),
@@ -69,6 +84,9 @@ const FWD_L = new Uint8Array(100), FWD_R = new Uint8Array(100), BACK_L = new Uin
 const NFWD = new Uint8Array(100);   // nombre de cases avant existantes d'un pion (couleur × 50 + case)
 const PENULT = new Uint8Array(100); // 1 si un pion de cette couleur sur cette case est à un pas de la promotion
 const WING_SIDE = new Uint8Array(50); // 0 : colonnes 0-4, 1 : colonnes 5-9
+const TEMPO = new Uint8Array(100); // temps d'un pion (couleur × 50 + case) : rangée de départ = 1 (Blancs 10 − rangée, Noirs rangée + 1)
+const ZONE_BLQ = new Uint8Array(100); // 1 si un pion de cette couleur (couleur × 50 + case) est dans la zone des pions bloqués
+const CENTRE = new Uint8Array(100); // 1 si la case (couleur × 50 + case) est une case du centre soutenu pour cette couleur
 const MAIN_DIAG = new Uint8Array(50); // grande diagonale (cases FMJD 5, 10, 14, 19, 23, 28, 32, 37, 41, 46)
 (function initGeometry() {
   const rowOf = (i) => (i / 5) | 0;
@@ -86,6 +104,13 @@ const MAIN_DIAG = new Uint8Array(50); // grande diagonale (cases FMJD 5, 10, 14,
     PENULT[50 + i] = r === 8 ? 1 : 0;  // Noirs : rangée 8 (la promotion est en rangée 9)
     WING_SIDE[i] = c <= 4 ? 0 : 1;
     MAIN_DIAG[i] = r + c === 9 ? 1 : 0;
+    // cases FMJD 22, 23, 27, 28, 32, 33 (index 21, 22, 26, 27, 31, 32) pour les Blancs ; leur image 51 − n (index 49 − i) pour les Noirs
+    // zone {5, 14, 15, 19, 20, 24} (index 4, 13, 14, 18, 19, 23) pour un pion NOIR (bloqué par les Blancs) ; image 49 − i pour un pion blanc
+    TEMPO[i] = 10 - r; TEMPO[50 + i] = r + 1;
+    ZONE_BLQ[50 + i] = [4, 13, 14, 18, 19, 23].includes(i) ? 1 : 0;
+    ZONE_BLQ[i] = [4, 13, 14, 18, 19, 23].includes(49 - i) ? 1 : 0;
+    CENTRE[i] = [21, 22, 26, 27, 31, 32].includes(i) ? 1 : 0;
+    CENTRE[50 + i] = [21, 22, 26, 27, 31, 32].includes(49 - i) ? 1 : 0;
   }
 })();
 
@@ -93,6 +118,8 @@ const MAIN_DIAG = new Uint8Array(50); // grande diagonale (cases FMJD 5, 10, 14,
 const PAD = new Int8Array(51);
 const ACC = new Int32Array(2 * NFEAT);
 const WINGS = new Int32Array(4);
+const TS = new Int32Array(2); // temps et pions/cases libres pour tretNf : temps par couleur
+const BLQ = new Int32Array(2); // pions de la zone bloqués, par couleur du pion bloqué
 const CNT = new Int32Array(5); // nombre de pièces par code fastboard (1 pion blanc, 2 pion noir, 3 dame blanche, 4 dame noire)
 // Tables de consultation « sans branchement » (les données du damier rendent les tests if très mal prédits) :
 const OCC = new Uint8Array([0, 1, 1, 1, 1]);      // case occupée ? (par code)
@@ -129,9 +156,11 @@ function scanPad(P, mask, V, out, n) {
   WINGS[0] = 0; WINGS[1] = 0; WINGS[2] = 0; WINGS[3] = 0;
   CNT[1] = 0; CNT[2] = 0; CNT[3] = 0; CNT[4] = 0;
   let mainK0 = 0, mainK1 = 0;
-  const mBlock = mask & ((1 << F_BLOCKED) | (1 << F_FREE) | (1 << F_PROMO));
+  const mBlock = mask & ((1 << F_BLOCKED) | (1 << F_FREE) | (1 << F_PROMO) | BLQ_MASK | TRET_MASK);
+  BLQ[0] = 0; BLQ[1] = 0; TS[0] = 0; TS[1] = 0;
+  let freeSum = 0, nPawns = 0, anyKing = 0;
   const mSup = mask & ((1 << F_SUP) | (1 << F_ISOL));
-  const needMan = mBlock | mSup | (mask & ((1 << F_PAIR) | (1 << F_WING)));
+  const needMan = mBlock | mSup | (mask & ((1 << F_PAIR) | (1 << F_WING) | (1 << F_CSOUT)));
   const needCnt = mask & ((1 << F_KVM) | (1 << F_FORT));
   for (let j = 0; j < n; j++) { // les n pièces (LIST rempli par listOccupied)
     const i = LIST[j];
@@ -149,6 +178,8 @@ function scanPad(P, mask, V, out, n) {
         ACC[o + F_BLOCKED] += free === 0 ? 1 : 0;
         ACC[o + F_FREE] += free;
         ACC[o + F_PROMO] += free > 0 ? PENULT[k] : 0;
+        BLQ[col] += free === 0 ? ZONE_BLQ[k] : 0;
+        freeSum += free; nPawns++; TS[col] += TEMPO[k];
       }
       if (mask & (1 << F_PAIR)) ACC[o + F_PAIR] += ISMAN[col * 5 + P[fl]] + ISMAN[col * 5 + P[fr]];
       if (mSup !== 0) {
@@ -158,8 +189,13 @@ function scanPad(P, mask, V, out, n) {
         // isolé : ni soutenu, ni aucune pièce alliée sur les deux cases avant
         ACC[o + F_ISOL] += (supported | OWN[oc + P[fl]] | OWN[oc + P[fr]]) ^ 1;
       }
+      if (mask & (1 << F_CSOUT)) {
+        const oc = col * 5;
+        ACC[o + F_CSOUT] += CENTRE[k] & OWN[oc + P[BACK_L[k]]] & OWN[oc + P[BACK_R[k]]];
+      }
       if (mask & (1 << F_WING)) WINGS[col * 2 + WING_SIDE[i]]++;
     } else { // dame
+      anyKing = 1;
       if (MAIN_DIAG[i] === 1) { if (col === 0) mainK0++; else mainK1++; }
       if (mask & (1 << F_KMOB)) {
         let m = 0;
@@ -174,6 +210,18 @@ function scanPad(P, mask, V, out, n) {
   SUMS[0] = s;
   // Les caractéristiques non demandées valent 0 (certains compteurs partagés peuvent avoir été touchés au passage).
   for (let f = 0; f < NFEAT; f++) out[f] = (mask & (1 << f)) !== 0 ? ACC[f] - ACC[NFEAT + f] : 0;
+  if (mask & BLQ_MASK) { // le camp qui bloque est l'autre : Blancs = pions noirs bloqués (BLQ[1]), Noirs = pions blancs bloqués (BLQ[0])
+    if (mask & (1 << F_BLQ3)) out[F_BLQ3] = (BLQ[1] >= 3 ? 1 : 0) - (BLQ[0] >= 3 ? 1 : 0);
+    if (mask & (1 << F_BLQ4)) out[F_BLQ4] = (BLQ[1] >= 4 ? 1 : 0) - (BLQ[0] >= 4 ? 1 : 0);
+    if (mask & (1 << F_BLQ5)) out[F_BLQ5] = (BLQ[1] >= 5 ? 1 : 0) - (BLQ[0] >= 5 ? 1 : 0);
+  }
+  if (mask & TRET_MASK) { // Blancs en retard : tempo Blancs < tempo Noirs (retard = TS[1] − TS[0]) ; Noirs : l'inverse
+    const closed = anyKing === 0 && nPawns <= 40 && freeSum <= CLOSED_MAX_FREE[nPawns];
+    const d = TS[1] - TS[0];
+    if (mask & (1 << F_TR3)) out[F_TR3] = closed ? (d >= 3 ? 1 : 0) - (-d >= 3 ? 1 : 0) : 0;
+    if (mask & (1 << F_TR5)) out[F_TR5] = closed ? (d >= 5 ? 1 : 0) - (-d >= 5 ? 1 : 0) : 0;
+    if (mask & (1 << F_TR7)) out[F_TR7] = closed ? (d >= 7 ? 1 : 0) - (-d >= 7 ? 1 : 0) : 0;
+  }
   if (mask & (1 << F_WING)) out[F_WING] = Math.abs(WINGS[0] - WINGS[1]) - Math.abs(WINGS[2] - WINGS[3]);
   if (needCnt !== 0) {
     const nM0 = CNT[1], nM1 = CNT[2], nK0 = CNT[3], nK1 = CNT[4];
@@ -300,7 +348,7 @@ export function tablesToPlain(tables) {
 
 // Valeur d'une pièce selon son code fastboard (0 vide, 1 pion blanc, 2 pion noir, 3 dame blanche, 4 dame noire)
 // et sa case : V[code * 50 + case]. Une pièce noire en i = l'opposé de la pièce blanche en 49 − i.
-function pieceValueTable(ph) {
+export function pieceValueTable(ph) {
   const V = new Int32Array(5 * TABLE_SIZE);
   for (let i = 0; i < TABLE_SIZE; i++) {
     V[1 * TABLE_SIZE + i] = ph.man[i];
