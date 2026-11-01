@@ -190,6 +190,10 @@ async function main() {
       : null,
     maxPlies: num(args, 'max-plies', DEFAULT_MAX_PLIES, { min: 10, int: true }),
     verify: !args['no-verify'],
+    // Variété d'ouverture (P19) : --variety-a / --variety-b <marge en cp> (absent = désactivée), --variety-plies <n> (défaut 10 demi-coups
+    // après l'ouverture imposée). Ajoutée à la configuration (donc à l'identité du run) SEULEMENT si demandée.
+    ...(args['variety-a'] !== undefined ? { varietyA: { margin: num(args, 'variety-a', 30, { min: 1 }), plies: num(args, 'variety-plies', 10, { min: 1, int: true }) } } : {}),
+    ...(args['variety-b'] !== undefined ? { varietyB: { margin: num(args, 'variety-b', 30, { min: 1 }), plies: num(args, 'variety-plies', 10, { min: 1, int: true }) } } : {}),
   };
   // « Identité » du run : tout ce qui change les parties. Le nombre total, les workers, la verbosité n'en font pas partie.
   const identity = {
@@ -198,6 +202,7 @@ async function main() {
     // Règles de nulle appliquées aux parties (limites de finale 6.3 / 6.4) : un run commencé avec d'autres règles ne se
     // reprend pas (et verify.mjs sait quelles règles appliquer à des parties anciennes, sans ce champ).
     endgameRules: ENDGAME_RULES_ID,
+    ...(cfg.varietyA ? { varietyA: cfg.varietyA } : {}), ...(cfg.varietyB ? { varietyB: cfg.varietyB } : {}),
   };
 
   const out = path.resolve(args.out);

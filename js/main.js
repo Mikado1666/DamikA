@@ -3,13 +3,13 @@ import {
 } from './engine/rules.js';
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { createAnalysisController } from './ai/analysis-controller.js';
-import { ENGINES, DEFAULT_ENGINE, isEngineId } from './ai/engines.js';
+import { ENGINES, DEFAULT_ENGINE, OPENING_VARIETY, isEngineId } from './ai/engines.js';
 import { applyTool, emptyBoard, startBoard, cloneBoard, validatePosition, buildGameFromPosition } from './position-editor.js';
 import { libraryVisibleOrder } from './library-view.js';
 import { lookupInTable, manualPhotoKeys, nameTokens } from './photo-match.js';
 import {
   barFraction, formatHeadline, formatMeta, formatLine, formatScore, moveSquares, shouldShowMove,
-  advantageTier, analysisHistory, isBigSwing, tickFractions, equalZoneFractions,
+  advantageTier, analysisHistory, isBigSwing, tickFractions, equalZoneFractions, positionKey,
 } from './ai/analysis-format.js';
 import { parsePdn } from './pdn/parser.js';
 import { loadGameFromPdn } from './pdn/loader.js';
@@ -26,6 +26,9 @@ if (uiTheme === 'light') document.documentElement.dataset.theme = 'light';
 else delete document.documentElement.dataset.theme;
 
 let game = new DraughtsGame();
+// Variété d'ouverture (P19) : seule la partie « jouée en direct » (nouvelle partie, ou page fraîche) en bénéficie ; une partie
+// importée, ouverte depuis la Bibliothèque, restaurée ou éditée garde l'analyse d'avant (le meilleur coup, toujours le même).
+let liveGame = game;
 const canvas = document.getElementById('board-canvas');
 const renderer = new BoardRenderer(canvas);
 
@@ -442,6 +445,7 @@ const el = {
   pieceStyleOptions: document.getElementById('piece-style-options'),
   pieceSizeOptions: document.getElementById('piece-size-options'),
   analysisEngineOptions: document.getElementById('analysis-engine-options'),
+  openingVarietyOptions: document.getElementById('opening-variety-options'),
   boardWrap: document.querySelector('.board-wrap'),
   playersRail: document.querySelector('.players-rail'),
   panelTabs: document.querySelector('.panel-tabs'),
@@ -572,6 +576,7 @@ function renderAnalysis({ phase, result, error }) {
     return;
   }
   analysisHasText = true;
+  if (phase === 'done' && result.variety) varietyChoices.set(varietyKey(), result.variety.picked);
   const fraction = barFraction(result);
   el.evalBar.style.setProperty('--fill', (fraction * 100).toFixed(1));
   // Gros changement de score : impulsion lumineuse (classe retirée à la fin de l'animation).
@@ -635,9 +640,24 @@ function fallbackToDefaultEngine(reason) {
   showToast(`Le moteur ${failed} n'a pas pu démarrer : retour au moteur ${ENGINES[DEFAULT_ENGINE].short}.`, 'error');
 }
 
+// Variété d'ouverture (P19) : réglage mémorisé comme les autres (absent ou localStorage indisponible = ACTIVÉ ; ne joue que
+// pour V2b : le contrôleur et le Worker l'ignorent avec V0 et V1b). Graine tirée à chaque nouvelle partie ; `varietyChoices`
+// retient le coup déjà proposé pour une position de CETTE partie (le « Meilleur » ne change pas à la réanalyse).
+const OPENING_VARIETY_KEY = 'damika:opening-variety';
+let openingVarietyOn = (() => { try { return localStorage.getItem(OPENING_VARIETY_KEY) !== '0'; } catch { return true; } })();
+const newGameSeed = () => (crypto.getRandomValues(new Uint32Array(1))[0] | 0);
+let gameSeed = newGameSeed();
+const varietyChoices = new Map();
+const varietyKey = () => `${gameSeed}|${positionKey(game.board, game.sideToMove)}`;
+function varietyForCurrentPosition() {
+  if (!openingVarietyOn || editor || game !== liveGame || game.history.length >= OPENING_VARIETY.plies) return null;
+  const prefer = varietyChoices.get(varietyKey());
+  return { margin: OPENING_VARIETY.margin, seed: gameSeed, ...(prefer ? { prefer } : {}) };
+}
+
 function requestAnalysis() {
   if (analysisController.enabled) {
-    analysisController.request({ board: game.board, side: game.sideToMove }, analysisHistory(game.history, game.board));
+    analysisController.request({ board: game.board, side: game.sideToMove }, analysisHistory(game.history, game.board), varietyForCurrentPosition());
   }
 }
 
@@ -2394,6 +2414,8 @@ async function startNewGame() {
   }
   stopAutoplay();
   game = new DraughtsGame();
+  liveGame = game;
+  gameSeed = newGameSeed();
   headers = { Event: 'Partie libre' };
   selectedSquare = null;
   // Sans ça, l'entrée de bibliothèque précédemment active restait marquée "active" (mise en
@@ -3654,6 +3676,14 @@ function refreshThemeMenuOptions() {
   renderThemeOptions(el.analysisEngineOptions, ENGINES, analysisController.engine, (v) => {
     analysisController.setEngine(v);
     try { localStorage.setItem(ANALYSIS_ENGINE_KEY, v); } catch { /* pas de mémorisation */ }
+  });
+  renderThemeOptions(el.openingVarietyOptions, {
+    on: { label: 'Activée (V2b)', hint: "Premiers coups d'une partie jouée en direct : coup tiré au hasard parmi les coups presque aussi bons" },
+    off: { label: 'Désactivée', hint: 'Toujours le meilleur coup' },
+  }, openingVarietyOn ? 'on' : 'off', (v) => {
+    openingVarietyOn = v === 'on';
+    try { localStorage.setItem(OPENING_VARIETY_KEY, openingVarietyOn ? '1' : '0'); } catch { /* pas de mémorisation */ }
+    requestAnalysis();
   });
 }
 refreshThemeMenuOptions();

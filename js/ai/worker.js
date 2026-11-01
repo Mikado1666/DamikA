@@ -83,11 +83,13 @@ async function runAnalyse(msg, post, load) {
   try {
     if (!msg.position || !msg.position.board) throw new Error('position manquante ou invalide');
     // Moteur choisi : V0 (défaut) = aucun évaluateur injecté, donc exactement la recherche d'avant l'étape 4.1.
-    const { engine, ...options } = msg.options || {};
+    // `variety` (variété d'ouverture, P19, voir search.js) n'est honorée que pour V2b : V0 et V1b ne changent jamais.
+    const { engine, variety, ...options } = msg.options || {};
     const evaluator = await load(engine);
     const result = await analyse(msg.position, {
       ...options,
       ...(evaluator ? { evaluator } : {}),
+      ...(engine === 'v2b' && variety ? { variety } : {}),
       history: msg.history ?? undefined,
       onProgress: (p) => post({ id: msg.id, type: 'progress', ok: true, result: p }),
       shouldStop: () => job.stop,

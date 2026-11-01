@@ -116,9 +116,11 @@ export function resolveEvaluator(spec) {
 }
 
 // player = { name, kind?, weights | tables, depth, maxNodes?, maxTimeMs? } → ajoute `evaluate` (fonction evalWhite).
-export function makePlayer({ name, kind = 'weights', weights, tables, depth, maxNodes = Infinity, maxTimeMs = 1e9 }) {
+// `variety` (P19) : { margin, plies } = variété d'ouverture du joueur (js/ai/search.js) pendant les `plies` premiers demi-coups APRÈS
+// l'ouverture imposée ; absent = le meilleur coup toujours.
+export function makePlayer({ name, kind = 'weights', weights, tables, depth, maxNodes = Infinity, maxTimeMs = 1e9, variety = null }) {
   const evaluate = kind === 'tables' ? (tables.patterns ? createModelEvaluator(tables) : createTableEvaluator(tables)) : createEvaluator(weights);
-  return { name, kind, weights, tables, depth, maxNodes, maxTimeMs, evaluate };
+  return { name, kind, weights, tables, depth, maxNodes, maxTimeMs, evaluate, variety };
 }
 
 // --- Coups : notation et retrouvailles --------------------------------------------------------------------
@@ -235,7 +237,7 @@ export function makeOpening(rng, { plies = 8, thresholdCp = 50, probeDepth = 4, 
 // --- Une partie -------------------------------------------------------------------------------------------------------
 // opening : coups en notation (joués sans recherche) ; white / black : joueurs (makePlayer) ;
 // explore : { prob, margin } ou null (match) avec `rng` ; record : enregistre les positions (selfplay).
-export function playGame({ opening = [], white, black, explore = null, rng = null, record = false, maxPlies = DEFAULT_MAX_PLIES, start = null }) {
+export function playGame({ opening = [], white, black, explore = null, rng = null, record = false, maxPlies = DEFAULT_MAX_PLIES, start = null, varietySeed = 0 }) {
   const st = new GameState(start);
   const moves = [];
   for (const str of opening) {
@@ -261,6 +263,7 @@ export function playGame({ opening = [], white, black, explore = null, rng = nul
     const r = analyseSync(pos, {
       maxDepth: player.depth, maxTimeMs: player.maxTimeMs, maxNodes: player.maxNodes,
       evaluator: player.evaluate, history: st.history(),
+      ...(player.variety && st.plies - k < player.variety.plies ? { variety: { margin: player.variety.margin, seed: varietySeed } } : {}),
     });
     nodes += r.nodes; searches++;
     // Coup de la recherche (retrouvé dans la liste légale par sa forme « interface »).

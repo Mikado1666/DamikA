@@ -357,6 +357,79 @@ function describeScore(scoreStm, side) {
   return { score: whitePov, mate: null };
 }
 
+// --- Variété d'ouverture (P19) -------------------------------------------------------------------------------------------
+// opts.variety = { margin, seed, prefer? } (centipions) : au lieu du seul meilleur coup, la recherche renvoie un coup tiré
+// au hasard parmi ceux dont le score est à moins de `margin` du meilleur. Réservé aux premiers coups d'une partie ; l'appelant
+// décide quand l'activer (main.js : seulement pour V2b, partie jouée en direct, premiers demi-coups).
+//   - Les scores des autres coups de la racine ne sont pas connus d'une recherche alpha-bêta (seul le meilleur est exact) :
+//     après la recherche normale, chaque coup est re-testé à la même profondeur avec la fenêtre [meilleur − margin − 1, +∞[
+//     (un coup plus faible coupe tout de suite). Un coup dont le test n'a pas fini dans le temps est EXCLU : on ne joue jamais
+//     un coup non vérifié.
+//   - Temps : la recherche normale utilise VARIETY_SEARCH_SHARE du budget, les tests le reste (le budget total est respecté).
+//   - Tirage REPRODUCTIBLE : il ne dépend que de (graine, position), jamais du temps ni de l'ordre des appels ; `prefer` (coup
+//     déjà proposé dans cette partie pour cette position) l'emporte s'il est encore candidat, pour qu'une réanalyse ne change pas
+//     le coup proposé même si la profondeur atteinte varie un peu.
+//   - Poids : 1 pour tous, sauf 32-27 dans la position de départ (VARIETY_START_WEIGHTS) : jouable mais rare.
+//   - Pendant la recherche (onProgress) le meilleur coup n'est pas communiqué (il changerait à la fin) ; score et profondeur oui.
+export const VARIETY_SEARCH_SHARE = 0.6;
+// Les autres coups sont testés une profondeur plus bas que la recherche (VARIETY_DEPTH_LAG) et comparés au meilleur de CETTE
+// profondeur : à pleine profondeur, le temps réservé ne suffisait pas à tester tous les coups, et les coups non testés (toujours
+// les mêmes, ceux générés en dernier) auraient été exclus : moins de diversité et un biais.
+export const VARIETY_DEPTH_LAG = 1;
+export const VARIETY_START_WEIGHTS = { '32-27': 0.3 };
+const MIN_VARIETY_DEPTH = 3;
+const START_BOARD_KEY = FastBoard.initial().board.join('');
+
+function varietyDraw(seed, lo, hi) {
+  let a = (seed ^ lo ^ Math.imul(hi, 0x9E3779B1)) | 0;
+  a = (a + 0x6D2B79F5) | 0;
+  let x = Math.imul(a ^ (a >>> 15), 1 | a);
+  x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+  return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+}
+
+// Retourne { candidates: [{ m, v, weight }], picked, forced } ou null (variété non applicable). `v` = score du point de vue du
+// camp au trait. Voir l'en-tête de la section.
+function pickVariedMove(s, fb, rootMoves, lastBest, lastScore, depth, variety, h) {
+  let done = 0; // coups (autres que le meilleur) dont le test est allé au bout
+  const lo = lastScore - variety.margin - 1;
+  const bestStr = moveToString(lastBest);
+  const scored = [{ m: rootMoves.find((m) => moveToString(m) === bestStr), v: lastScore }];
+  if (!scored[0].m) return null;
+  s.stopped = false;
+  s.timeCheck = true;
+  for (const m of rootMoves) {
+    if (moveToString(m) === bestStr) continue;
+    hashAfterMove(fb, m, h.lo, h.hi, s.tmp);
+    s.hLo[1] = s.tmp.lo; s.hHi[1] = s.tmp.hi;
+    fb.makeMove(m);
+    const c = s.search(depth - 1, -INF, -lo, 1, false);
+    fb.unmakeMove();
+    if (s.stopped) break; // temps épuisé : ce coup et les suivants ne sont pas vérifiés, donc exclus
+    done++;
+    if (-c > lo) scored.push({ m, v: -c });
+  }
+  const top = Math.max(...scored.map((x) => x.v));
+  const atStart = fb.board.join('') === START_BOARD_KEY && fb.side === WHITE;
+  const candidates = scored.filter((x) => x.v >= top - variety.margin)
+    .map((x) => ({ ...x, str: moveToString(x.m) }))
+    .sort((a, b) => (a.str < b.str ? -1 : a.str > b.str ? 1 : 0));
+  for (const c of candidates) c.weight = atStart && VARIETY_START_WEIGHTS[c.str] !== undefined ? VARIETY_START_WEIGHTS[c.str] : 1;
+  let picked = variety.prefer ? candidates.find((c) => c.str === variety.prefer) : null;
+  const forced = !!picked;
+  if (!picked) picked = drawVaried(candidates, variety.seed | 0, h.lo, h.hi);
+  return { candidates, picked, forced, unverified: rootMoves.length - 1 - done };
+}
+
+// Tirage pondéré parmi les candidats (triés par notation) : ne dépend que de (graine, hash de la position). Exporté pour les
+// mesures de diversité (training/variety-diversity.mjs) : mêmes candidats + autre graine = ce que ferait une autre partie.
+export function drawVaried(candidates, seed, lo, hi) {
+  const total = candidates.reduce((p, c) => p + c.weight, 0);
+  let u = varietyDraw(seed, lo, hi) * total;
+  for (const c of candidates) { if (u < c.weight) return c; u -= c.weight; }
+  return candidates[candidates.length - 1];
+}
+
 // Générateur : un `yield` après chaque profondeur terminée (valeur = progression) ; le pilote peut
 // répondre `true` à ce yield pour demander l'arrêt. `return` = résultat final.
 function* analyseSteps(position, opts) {
@@ -368,11 +441,12 @@ function* analyseSteps(position, opts) {
   const side = fb.side;
   const t0 = performance.now();
 
+  const variety = opts.variety && opts.variety.margin > 0 ? opts.variety : null;
   const s = new Searcher(fb, {
     useTT, prune: true, shouldStop: opts.shouldStop ?? null, history,
     evaluator: opts.evaluator ?? null, maxNodes: opts.maxNodes ?? Infinity,
   });
-  s.deadline = t0 + maxTimeMs;
+  s.deadline = t0 + maxTimeMs * (variety ? VARIETY_SEARCH_SHARE : 1);
   if (useTT) clearTT();
   const h = zobristHash(fb);
   s.hLo[0] = h.lo; s.hHi[0] = h.hi;
@@ -406,6 +480,8 @@ function* analyseSteps(position, opts) {
     return finish();
   }
 
+  let lastBest = null, lastScore = 0;
+  const bestAt = [], scoreAt = []; // meilleur coup et score de chaque profondeur terminée
   for (let depth = 1; depth <= maxDepth; depth++) {
     s.timeCheck = depth > 1; // la profondeur 1 est toujours terminée
     s.rootBest = null;
@@ -420,13 +496,38 @@ function* analyseSteps(position, opts) {
     result.bestMoveNotation = moveToString(s.rootBest);
     result.pv = pv.map(moveToUi);
     result.pvNotation = pv.map(moveToString);
+    lastBest = s.rootBest; lastScore = score;
+    bestAt[depth] = s.rootBest; scoreAt[depth] = score;
     finish();
-    if (opts.onProgress) opts.onProgress({ ...result });
+    if (opts.onProgress) {
+      // Variété active : le coup final peut différer du meilleur de cette profondeur, on ne le montre pas avant la fin.
+      opts.onProgress(variety ? { ...result, bestMove: null, bestMoveNotation: null, pv: [], pvNotation: [] } : { ...result });
+    }
 
     // Mat trouvé et entièrement vu : une profondeur de plus ne peut rien changer.
     if (Math.abs(score) > MATE_BOUND && depth >= MATE - Math.abs(score)) break;
     if (performance.now() >= s.deadline || s.nodes >= s.nodeLimit) { result.stopped = true; break; }
     if (depth < maxDepth && (yield { ...result }) === true) { result.stopped = true; break; }
+  }
+  if (variety && lastBest && result.drawRule === null && rootMoves.length > 1 && result.depth >= MIN_VARIETY_DEPTH
+      && Math.abs(lastScore) <= MATE_BOUND && !(opts.shouldStop && opts.shouldStop() === true)) {
+    s.deadline = t0 + maxTimeMs; // le reste du budget : tests des autres coups
+    const vd = Math.max(MIN_VARIETY_DEPTH - 1, result.depth - VARIETY_DEPTH_LAG); // profondeur de test des coups
+    const v = pickVariedMove(s, fb, rootMoves, bestAt[vd], scoreAt[vd], vd, variety, h);
+    if (v) {
+      const sign = side === WHITE ? 1 : -1;
+      if (moveToString(v.picked.m) !== moveToString(lastBest)) {
+        Object.assign(result, describeScore(v.picked.v, side));
+        result.bestMove = moveToUi(v.picked.m);
+        result.bestMoveNotation = v.picked.str;
+        result.pv = [moveToUi(v.picked.m)];
+        result.pvNotation = [v.picked.str];
+      }
+      result.variety = {
+        margin: variety.margin, depth: vd, picked: v.picked.str, forced: v.forced, unverified: v.unverified,
+        candidates: v.candidates.map((c) => ({ move: c.str, score: sign * c.v, weight: c.weight })),
+      };
+    }
   }
   return finish();
 }

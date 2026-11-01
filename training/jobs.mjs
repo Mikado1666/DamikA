@@ -22,12 +22,12 @@ export function runJob(cfg, index) {
   };
 
   if (cfg.mode === 'match') {
-    const A = makePlayer({ ...cfg.a, depth: cfg.depthA, ...budget });
-    const B = makePlayer({ ...cfg.b, depth: cfg.depthB, ...budget });
+    const A = makePlayer({ ...cfg.a, depth: cfg.depthA, ...budget, variety: cfg.varietyA ?? null });
+    const B = makePlayer({ ...cfg.b, depth: cfg.depthB, ...budget, variety: cfg.varietyB ?? null });
     const lines = [];
     // Même ouverture, couleurs inversées : supprime le biais de couleur et d'ouverture.
     for (const aWhite of [true, false]) {
-      const rec = playGame({ opening, white: aWhite ? A : B, black: aWhite ? B : A, maxPlies: cfg.maxPlies });
+      const rec = playGame({ opening, white: aWhite ? A : B, black: aWhite ? B : A, maxPlies: cfg.maxPlies, varietySeed: seedOf(cfg.seed, 'variety', index * 2 + (aWhite ? 0 : 1)) | 0 });
       check(rec, `paire ${index}, A ${aWhite ? 'blancs' : 'noirs'}`);
       lines.push({ mode: 'match', pair: index, g: aWhite ? 0 : 1, a: aPoints(rec, aWhite), aWhite, ...rec });
     }

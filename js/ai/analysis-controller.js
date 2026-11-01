@@ -94,7 +94,7 @@ export function createAnalysisController({
   function send() {
     timer = null;
     if (!enabled || !pending) return;
-    const { history, ...position } = pending;
+    const { history, variety, ...position } = pending;
     pending = null;
     let w;
     try {
@@ -111,7 +111,7 @@ export function createAnalysisController({
       type: 'analyse',
       position,
       ...(history ? { history } : {}),
-      options: { maxTimeMs, maxDepth, ...(engine !== DEFAULT_ENGINE ? { engine } : {}) },
+      options: { maxTimeMs, maxDepth, ...(engine !== DEFAULT_ENGINE ? { engine } : {}), ...(variety && engine === 'v2b' ? { variety } : {}) },
     });
   }
 
@@ -119,14 +119,17 @@ export function createAnalysisController({
   // history (facultatif) = { positions: [{ board, side }], quiet, endgame? } : cf. analysisHistory() dans
   // analysis-format.js. Absent, ou quiet = 0 sans `endgame` : rien n'est transmis (comportement d'avant). `endgame` =
   // état de la finale (limites 6.3 / 6.4) : transmis même quand quiet = 0 (les coups de pion comptent dans une finale).
-  function request(position, history = null) {
+  // variety (facultatif, P19) = { margin, seed, prefer? } : variété d'ouverture, transmise seulement avec V2b ; elle fait partie de
+  // la clé de déduplication (autre graine ou autre marge = nouvelle analyse).
+  function request(position, history = null, variety = null) {
     if (!enabled) return;
     const hasWindow = history && history.quiet > 0 && history.positions && history.positions.length > 0;
     const endgame = history && history.endgame ? history.endgame : null;
     const hist = hasWindow || endgame ? history : null;
     const key = positionKey(position.board, position.side)
       + (hasWindow ? `|${hist.quiet}|${hist.positions.map((p) => positionKey(p.board, p.side)).join(',')}` : '')
-      + (endgame ? `|eg${endgame.plies}.${endgame.limit}.${endgame.diag}` : '');
+      + (endgame ? `|eg${endgame.plies}.${endgame.limit}.${endgame.diag}` : '')
+      + (variety && engine === 'v2b' ? `|v${variety.margin}.${variety.seed}.${variety.prefer || ''}` : '');
     if (key === currentKey) return; // même position : rien à refaire
     currentKey = key;
     if (timer !== null) { clearTimer(timer); timer = null; }
@@ -134,6 +137,7 @@ export function createAnalysisController({
     currentId = 0;
     // Copie : la position reste figée jusqu'à l'envoi, même si l'appelant remplace son plateau.
     pending = {
+      variety: variety ? { margin: variety.margin, seed: variety.seed, ...(variety.prefer ? { prefer: variety.prefer } : {}) } : null,
       board: position.board.map((p) => (p ? { color: p.color, king: !!p.king } : null)),
       side: position.side,
       history: hist ? {
@@ -182,7 +186,7 @@ export function createAnalysisController({
       if (id === engine) return;
       engine = id;
       currentKey = null; // même position, autre moteur : à refaire
-      if (enabled && last) request({ board: last.board, side: last.side }, last.history);
+      if (enabled && last) request({ board: last.board, side: last.side }, last.history, last.variety);
     },
   };
 }

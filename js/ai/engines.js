@@ -24,6 +24,9 @@ export const ENGINES = {
   v2b: { short: 'V2b', label: 'V2b (motifs)', hint: "Évaluation apprise par motifs de cases sur parties réelles (expérimental)" },
 };
 export const DEFAULT_ENGINE = 'v0';
+// Variété d'ouverture de V2b (P19, js/ai/search.js) : marge (centipions) sous le meilleur coup et nombre de demi-coups de la
+// partie pendant lesquels elle s'applique. UNE seule définition, lue par main.js (et les mesures de training/).
+export const OPENING_VARIETY = { margin: 10, plies: 10 };
 export const V1B_MODEL_PATH = 'data/models/v1b-l0.json';
 // Modèle par motifs (P18) : COPIE de training/models/p17-B-l025.json (tests/engine-select.mjs vérifie l'identité).
 export const B_MODEL_PATH = 'data/models/p17-B-l025.json';
