@@ -1505,3 +1505,394 @@ Aperçu sans rien lancer : `node training/chain-nuit4.mjs --dry-run --start 19:4
 - **Reste à faire** : (1) finir M = 10 (actuelle) et mesurer M = 20 ; garder la plus grande marge dont la perte est < 10 Elo (sinon réduire) ; (2) régénérer le tableau de diversité avec la marge finale, dont celui des Noirs sur 100 parties ; (3) décider si on réduit le nombre de coups non testés (plus de temps de test ou profondeur de test plus basse) ; (4) test visuel du réglage dans l'interface (menu 🎨, partie neuve) : non fait ; (5) transformer cette section provisoire en section finale.
 - **Comment désactiver** : menu 🎨 → « Variété d'ouverture » → Désactivée (mémorisé). Dans le code : `openingVarietyOn` dans `js/main.js`, ou `OPENING_VARIETY.plies = 0` dans `js/ai/engines.js`. V0 et V1b ne sont jamais concernés.
 - Aucun push ni déploiement ; `data/models/` inchangé ; aucun calcul lourd lancé depuis la pause.
+
+## Clôture de session du 01/11/2026
+
+- **État** : P17 et P18 validés (commit `11b6b2d`). P19 (variété d'ouverture) en PAUSE (commits `c663d66`, `d739ddb`) : M = 10 provisoire, section P19 ci-dessus. Prochain numéro de prompt : **P20**.
+- **Mesures P19 restantes** (une seule à la fois, la même commande reprend depuis les `games.jsonl`) :
+  1. M = 10, code actuel, jusqu'à 400 paires (275 faites) : `node training/arena.mjs match --a learned:training/models/p17-B-l025.json --b learned:training/models/p17-B-l025.json --variety-a 10 --variety-plies 10 --depth 30 --time 100 --pairs 400 --seed 5151 --workers 7 --out training/data/p19b-var10-vs-plain-t100-s5151`
+  2. M = 20 : même commande avec `--variety-a 20 --out training/data/p19b-var20-vs-plain-t100-s5151`
+  3. Diversité avec la marge finale : `node training/variety-diversity.mjs --margin 10 --games 100 --out training/data/p19-diversity-m10.json` (puis `--margin 20 … p19-diversity-m20.json`)
+  Lecture : `node training/pool.mjs <dossier>`.
+- **Non commité** : rien de suivi n'est modifié ; restent seulement des fichiers non suivis (modèles, données d'entraînement, `tests/nada-vs-damika.mjs`, `Claude outputs/`).
+- **Parties contre Scan niveau 7 (01/11)** : 3 parties, 3 défaites ; thèmes : centre non disputé, pas de portes de sortie, horizon, pion isolé en 24 trop tôt.
+
+## P20 — Scan est-il pilotable en local ? (06/11/2026, diagnostic seul)
+
+**Verdict : OUI, pilotable.** Aucun code d'arène écrit, rien commité, rien dans `data/` ni `training/`.
+- **Exécutable** : `C:\Users\micka\Documents\Turbo Dambase\Engines\Scan 3.1\scan.exe` (254 976 octets, Scan 3.1 de Fabien Letouzey, livré avec Turbo Dambase), avec `scan.ini`, `data\` (book 1,9 Mo, eval 8,5 Mo, tables de finale `bb\` 2 à 6 pièces), `msvcp140.dll`, `vcruntime140.dll`. Pas de fork RoepStoep trouvé. Rien téléchargé. Aucun blocage antivirus/système.
+- **Lancement** : `scan.exe hub` avec le dossier de Scan comme répertoire courant (sinon `data\` introuvable), stdin/stdout en texte.
+- **Échange Hub vérifié** (`>` envoyé, `<` reçu) :
+  ```
+  > hub
+  < id name=Scan version=3.1 author="Fabien Letouzey" country=France
+  < param name=book value=false type=bool / book-ply (0-20) / book-margin (0-100) / threads (1-16) / tt-size (16-30) / bb-size (0-7) ...
+  < wait
+  > init
+  < init eval        < ready
+  > pos pos=Wbbbbbbbbbbebbbbbbeeeeebweeweeeeweeeewwwwwwwwwwwwww
+  > level depth=11 move-time=0.5
+  > go think
+  < info depth=… score=… nodes=… pv="…"   (plusieurs lignes)
+  < done move=39-33 ponder=14-19
+  ```
+  Format `pos` : 1 lettre du camp au trait (`W`/`B`) + 50 caractères (cases 1 à 50 : `e` vide, `w`/`b` pion, `W`/`B` dame). **Piège** : une chaîne de mauvaise longueur donne `error message="bad position"` mais Scan RÉPOND quand même (il garde la position précédente) : toujours valider la longueur (51). Coups au format FMJD (`39-33`, `27x18`), comme rules.js.
+- **Tests** : position initiale → `34-30` ; position de la partie 3 après 6...18-23 (rejouée avec rules.js, Blancs au trait) → `39-33`, **légal selon `generateLegalMoves`**.
+- **Niveau 7 de Lidraughts** : reproductible par `level depth=11 move-time=0.5` (profondeur max 11, 500 ms) ; livre : `set-param name=book value=true`, `book-ply=8`, `book-margin=…` (60 demandé : le paramètre existe, plage 0-100, unité à confirmer sur le texte du livre). `threads=1` (défaut), `tt-size`, `bb-size` (tables de finale 0-7). **Non reproductible avec certitude** : le réglage exact de Lidraughts (fork, éventuelle limite de nœuds, tables de finale, version de l'évaluation) ; à valider en comparant avec les coups des 3 parties perdues.
+- **Mesures** : démarrage ≈ 320 ms (handshake + `init`, évaluation chargée). Coup à `depth=11` : 16 à 27 ms la première fois, ≈ 0-1 ms ensuite (table de transposition conservée entre deux coups identiques) : la limite de 500 ms n'est donc jamais atteinte, c'est la profondeur 11 qui borne. Moyenne ≈ 8 ms sur 6 coups (non représentatif : à refaire sur une partie entière). Parallélisme : `threads=1` par processus, 8 cœurs logiques → 7 processus Scan simultanés (cœurs − 1) sans problème prévisible ; mémoire non mesurée (tt-size 24).
+- **Blocages** : aucun. Point d'attention : le fichier PDN des parties est `Downloads\Damika - Scan - 3.pdn` (le chemin `claude/scan7-parties.pdn` du prompt n'existe pas) ; la partie 3 y compte 14 coups seulement (0-2 après 14...23-29).
+- **Suite proposée** : écrire `training/scan-arena` (processus Scan via `child_process`, validation de longueur de `pos`, rejeu des coups avec rules.js, 7 en parallèle) ; plan B (positions extraites) inutile.
+
+## P21 — Arène DamikA contre Scan (06/11/2026, mesure seulement)
+
+Rien de modifié dans le moteur, l'évaluation, l'appli, `data/` ; rien commité (nouveaux fichiers : `training/scan-arena/{scan-player,calibrate,arena,analyse-losses}.mjs`, ligne `training/scan-arena/out/` ajoutée à `.gitignore`, vérifiée par `git check-ignore`).
+
+**Commandes** (le chemin de Scan est passé par `SCAN_EXE` ou `--scan`, jamais en dur) :
+```
+export SCAN_EXE="C:/Users/micka/Documents/Turbo Dambase/Engines/Scan 3.1/scan.exe"
+node training/scan-arena/calibrate.mjs "<Downloads>/Damika - Scan - 1.pdn" "…- 2.pdn" "…- 3.pdn"        # calage
+node training/scan-arena/arena.mjs --pairs 10 --engine v0 --depth 8 --out training/scan-arena/out/s1    # série (--engine v2b possible)
+node training/scan-arena/analyse-losses.mjs training/scan-arena/out/s1                                    # bascules
+```
+Module `scan-player.mjs` : `ScanPlayer.start({exe, params})`, `best({board, side}, {depth, moveTime})`. Position Hub construite depuis rules.js (51 caractères validés avant envoi), coup de Scan vérifié avec `generateLegalMoves` (sinon erreur).
+**Format Hub des rafles (nouveau, à connaître)** : `départ x arrivée x pièces-prises…` (ex. `20x29x24` : de 20 à 29 en prenant 24 ; `31x11x17x27`), PAS le chemin. **Les paramètres (livre, bb-size, tt-size) doivent être envoyés AVANT `init`** : `set-param book=true` après `init` fait planter Scan 3.1 (violation d'accès, code 3221225477). Un coup forcé (prise unique) n'a pas de ligne `info` (pas de score).
+
+**Calage du niveau 7** (95 positions où Lidraughts a joué dans les 3 parties ; coup identique = même départ et même arrivée ; résultats : `training/scan-arena/out/calage.txt`) :
+- sans livre, depth 11 : **87,4 %** (83/95) ; avec `bb-size 6` ou `tt-size 28` : identique (87,4 %, mêmes écarts) ;
+- livre ply 8 marge 60 : 83,2 % ; marge 4 : 84,0 % ; marge 60 + bb 6 : 83,6 % (livre aléatoire, moyenne de 5 essais) ; le livre fait baisser l'accord.
+- **Retenu : sans livre, `depth=11`, `move-time=0.5`** (les 500 ms ne sont jamais atteintes). Aucun réglage ne donne 100 % : Lidraughts niveau 7 n'est pas exactement reproduit (fork et réglages internes inconnus, probable part d'aléatoire) ; l'adversaire mesuré est « un Scan 3.1 de profondeur 11 », proche mais pas identique. Écarts surtout au 1er–6e coup et dans le milieu de partie.
+
+**Arène** : ouvertures = `makeOpening()` existant (8 demi-coups aléatoires équilibrés, graine `seedOf(seed,'scan-open',paire)`), jouée des deux côtés ; DamikA via `analyseSync` à profondeur fixe (défaut `--depth 8`, déterministe, comme l'arène d'entraînement ; `--time` possible), évaluation V0 ; règles de fin = `GameState` (répétition, 25 coups, 6.3/6.4, 300 demi-coups) ; Scan ne reçoit pas l'historique de répétition (position seule). 7 parties en parallèle (worker_thread + un `scan.exe` chacune). PDN dans `out/<série>/NN-DamikA-blancs|noirs.pdn`, `games.jsonl` (coups + score de Scan à chaque coup), `summary.json`. **Vérification** : chaque PDN est relu depuis le disque et rejoué avec rules.js (`verifyGame`) : 20/20 OK, aucune partie en échec.
+
+**Série 1 (V0, profondeur 8, 10 paires, graine 1)** : **1 victoire, 1 nulle, 18 défaites** ; score de DamikA 7,5 % (IC 95 % 0 à 18 %), **Elo −436 (IC 95 % −∞ à −264)** par rapport à Scan depth 11 ; durée **48 s** (la série est déterministe : relancée, mêmes résultats). Échantillon faible (10 paires). Défaites de 99 à 135 demi-coups, toutes par « plus de coups » ; la nulle (paire 8, DamikA blancs) par répétition à 161 demi-coups ; la victoire : paire 7, DamikA blancs.
+
+**Positions de bascule** (détail complet avec chaîne Hub de chaque position : `out/s1/bascules.txt`). Bascule = 1er coup de Scan avec score ≥ +1,0 restant ≥ +0,5 ; « faute » = coup de DamikA, avant la bascule, qui perd le plus selon Scan (valeur du meilleur coup − valeur du coup joué, en pions ; bruit ≈ 0,2). Notation FMJD, numéro de coup = numéro de la paire de demi-coups (`.` Blancs, `...` Noirs). Fichier–couleur de DamikA :
+```
+01 B  bascule 21. 28-23   faute 12. 33-29 (−0,27, Scan 46-41)        11 B  bascule 31. 49-44   faute 31. 49-44 (−0,50, Scan 46-41)
+02 N  bascule 14... 23-29 faute 14... 23-29 (−0,61, Scan 1-6)        12 N  bascule 18... 3-9   faute 14... 10-15 (−0,38, Scan 16-21)
+03 B  bascule 23. 35-30   faute 16. 35x24 (−0,45, Scan 34x25)        13 B  bascule 23. 45-40   faute 21. 42-37 (−0,72, Scan 27-22)
+04 N  bascule 23... 22-27 faute 23... 22-27 (−0,75, Scan 11-16)      14 N  bascule 33... 23x34 faute 30... 18-23 (−0,36, Scan 2-8)
+05 B  bascule 32. 44-39   faute 22. 27-22 (−1,63, Scan 46-41)        16 N  bascule 16... 19x30 faute 14... 9-14 (−0,15, Scan 5-10)
+06 N  bascule 23... 9x20  faute 12... 19-23 (−0,05 : aucune faute nette)  18 N  bascule 20... 16-21 faute 20... 16-21 (−0,62, Scan 5-10)
+07 B  bascule 14. 33x22   faute 14. 33x22 (−0,21, Scan 32x23)        19 B  bascule 27. 37-31   faute 15. 35-30 (−0,22, Scan 49-43)
+08 N  bascule 20... 16x27 faute 16... 15-20 (−0,32, Scan 9-13)       20 N  bascule 22... 22-28 faute 15... 1-6 (−0,26, Scan 10-15)
+09 B  bascule 26. 28-22   faute 26. 28-22 (−0,59, Scan 30-24)
+10 N  bascule 18... 16x27 faute 9... 18-23 (−0,13 : aucune faute nette)
+```
+Lecture (indicative, 18 parties) : les pertes ne viennent pas d'une seule gaffe tactique : dans la plupart des cas DamikA (profondeur 8, évaluation ≈ 0) joue un coup « calme » du milieu de partie (coups 12 à 31) que Scan à profondeur 11 juge 0,4 à 0,75 pion moins bon ; 3 parties ont une perte unique plus grosse (05 : 27-22, −1,63 ; 13 : 42-37, −0,72 ; 04 : 22-27, −0,75). Coups de remplacement de Scan récurrents : 46-41 (Blancs, parties 01, 03, 05, 11) et 5-10 / 1-6 (Noirs) : développement des pièces de dernière rangée, cohérent avec « pas de portes de sortie » du bilan du 01/11. Limite : DamikA est ici à profondeur 8 fixe, pas à son budget réel (1,5 s) ; à refaire avec `--depth 30 --time 1500` (plus lent) et avec `--engine v2b`.
+
+## P22 — Série contre Scan au vrai budget de DamikA (06/11/2026, mesure seulement)
+
+Rien de modifié (moteur, évaluation, appli, `data/`), rien commité. Seul changement : `arena.mjs` enregistre désormais le temps réel de chaque coup de DamikA (`ms`) et en affiche moyenne / médiane / max.
+**Durée estimée** : ≈ 55 coups de DamikA × 1,5 s ≈ 85 s par partie, 20 parties ÷ 7 ≈ 4 à 5 min par série (< 45 min, lancé sans accord préalable). **Réelle** : 292 s (V0) et 374 s (V2b). Charge machine avant lancement : 8 %.
+**Commandes** (`SCAN_EXE` défini comme en P21) :
+```
+node training/scan-arena/arena.mjs --pairs 10 --seed 1 --engine v0  --depth 30 --time 1500 --out training/scan-arena/out/s2-v0
+node training/scan-arena/arena.mjs --pairs 10 --seed 1 --engine v2b --depth 30 --time 1500 --out training/scan-arena/out/s2-v2b
+node training/scan-arena/analyse-losses.mjs training/scan-arena/out/<série>      # > <série>/bascules.txt
+```
+**Temps par coup** (7 parties en parallèle conservées : max 1538 ms < 1650 ms, donc pas de réduction) : V0 moyenne 1392 ms, médiane 1501, max 1532 (1252 coups) ; V2b moyenne 1401, médiane 1501, max 1538 (1381 coups). **Relecture rules.js (verifyGame) : 40/40 PDN OK**, 0 échec de partie.
+
+| Série (mêmes 10 ouvertures, graine 1) | V / N / D | Score | Elo vs Scan depth 11 (IC 95 %) | Durée |
+|---|---|---|---|---|
+| P21 : V0, profondeur 8 fixe | 1 / 1 / 18 | 7,5 % | −436 (−∞ à −264) | 48 s |
+| P22-A : V0, 1,5 s (`--depth 30 --time 1500`) | 0 / 4 / 16 | 10,0 % (2,0–18,0) | −382 (−676 à −263) | 292 s |
+| P22-B : V2b, 1,5 s | 1 / 5 / 14 | 17,5 % (7,0–28,0) | −269 (−448 à −164) | 374 s |
+
+10 paires seulement : intervalles larges, les trois séries ne se distinguent pas statistiquement entre elles (V2b vs V0 au vrai budget : les intervalles se recouvrent). Nulles de V2b : 5, dont une par règle des 25 coups (248 demi-coups).
+
+**Bascules** (même définition qu'en P21 ; [ ] = coup de plus grosse perte). Fichier NN = même ouverture et même couleur dans les 3 séries. Détails : `out/s2-v0/bascules.txt`, `out/s2-v2b/bascules.txt` ; « — » = partie non perdue.
+```
+NN  P21 (V0 prof. 8)          P22-A (V0 1,5 s)            P22-B (V2b 1,5 s)
+01  21. 28-23 [12. 33-29]     23. 47x36 [17. 33-28]       30. 35-30 [30. 35-30]
+02  14... 23-29 [14... 23-29] 17... 6-11 [17... 6-11]     35... 18-22 [35... 18-22]
+03  23. 35-30 [16. 35x24]     29. 49-44 [29. 49-44]       —
+04  23... 22-27 [23... 22-27] 10... 3-9 [7... 15-20]      14... 21-27 [14... 21-27]
+05  32. 44-39 [22. 27-22]     —                           24. 28-23 [23. 32-28]
+06  23... 9x20 [12... 19-23]  25... 14-20 [20... 10-14]   —
+07  14. 33x22 [14. 33x22]     38. 47-41 [25. 33-28]       37. 37-32 [37. 37-32]
+08  20... 16x27 [16... 15-20] —                           34... 11-17 [26... 26x37]
+09  26. 28-22 [26. 28-22]     20. 39-33 [20. 39-33]       —
+10  18... 16x27 [9... 18-23]  9... 11-17 [9... 11-17]     22... 11x22 [21... 17-22]
+11  31. 49-44 [31. 49-44]     26. 44-39 [8. 49-44]        —
+12  18... 3-9 [14... 10-15]   —                           42... 4-9 [42... 4-9]
+13  23. 45-40 [21. 42-37]     36. 30-25 [21. 47-42]       38. 49-43 [38. 49-43]
+14  33... 23x34 [30... 18-23] —                           34... 12-17 [34... 12-17]
+15  —                         28. 30-25 [28. 30-25]       —
+16  16... 19x30 [14... 9-14]  25... 19-24 [18... 13-19]   45... 11-16 [16... 20-24]
+17  —                         22. 48-43 [22. 48-43]       27. 31-27 [27. 31-27]
+18  20... 16-21 [20... 16-21] 30... 15-20 [30... 15-20]   —
+19  27. 37-31 [15. 35-30]     18. 41x32 [16. 47-42]       10. 38-33 [8. 30-25]
+20  22... 22-28 [15... 1-6]   30... 23-28 [30... 23-28]   47... 16-21 [34... 15-20]
+```
+**Bascule au même coup d'une série à l'autre : 0 partie sur 20** (P21/P22-A, P21/P22-B, P22-A/P22-B). Les parties divergent dès que DamikA change de coup (budget ou évaluation différents), donc les positions de bascule ne sont pas comparables coup à coup ; seules les ouvertures sont communes.
+**Coups de Scan proposés à la place du coup de plus grosse perte** (les plus fréquents ; nombre de parties perdues entre parenthèses) :
+- P21 (18) : 46-41 ×3, 5-10 ×3, 10-14 ×1, 16-21 ×1, 27-22 ×1, 2-8 ×1
+- P22-A (16) : 5-10 ×2, 49-43 ×2, 39-33 ×2, 42-37 ×1, 47-42 ×1, 4-9 ×1
+- P22-B (14) : tous différents (8-13, 7-11, 38-33, 3-8, 19-23, 48-43 ×1 chacun)
+(Comptage sur le seul coup de plus grosse perte de chaque défaite ; liste complète dans les `bascules.txt`.)
+
+## P23 — Grande série contre Scan : V0 contre V2b, 50 paires chacun (06/11/2026, mesure seulement)
+
+Rien de modifié (moteur, évaluation, appli, `data/`), rien commité. Nouveau : `training/scan-arena/compare.mjs` (comparaison, appariement, cumul, bascules). Sorties : `out/s3-v0`, `out/s3-v2b`, `out/p23-compare.txt`.
+**Commandes** (`SCAN_EXE` défini ; mêmes 50 ouvertures, graine 2, 7 parties en parallèle) :
+```
+node training/scan-arena/arena.mjs --pairs 50 --seed 2 --engine v0  --depth 30 --time 1500 --out training/scan-arena/out/s3-v0
+node training/scan-arena/arena.mjs --pairs 50 --seed 2 --engine v2b --depth 30 --time 1500 --out training/scan-arena/out/s3-v2b
+node training/scan-arena/analyse-losses.mjs training/scan-arena/out/<série> > <série>/bascules.txt
+node training/scan-arena/compare.mjs out/s3-v0 out/s3-v2b out/s2-v0 out/s2-v2b
+```
+**Durée réelle** : V0 1238 s (20,6 min, estimé 25), V2b 1375 s (22,9 min, estimé 31). 0 échec de partie ; **200/200 PDN relus avec rules.js (verifyGame) sans anomalie**.
+**Temps par coup de DamikA** : V0 moyenne 1380 ms, médiane 1502, **max 2732** (6006 coups, **8 au-dessus de 1650 ms**, dont 3 > 2000) ; V2b moyenne 1399, médiane 1502, **max 1714** (6479 coups, **5 > 1650**). Le seuil du prompt (max ≤ 1650 ms) est donc dépassé dans les deux séries, par 0,13 % et 0,08 % des coups ; **séries NON relancées** (décision laissée à Mickaël : relancer avec moins de parties en parallèle coûterait ≈ 45 min).
+
+| Série (50 paires, graine 2) | V / N / D | Score (IC 95 %) | Elo vs Scan depth 11 (IC 95 %) |
+|---|---|---|---|
+| V0, 1,5 s | 5 / 14 / 81 | 12,0 % (6,9–17,1) | −346 (−452 à −274) |
+| V2b, 1,5 s | 6 / 33 / 61 | 22,5 % (16,9–28,1) | −215 (−277 à −163) |
+
+**Comparaison appariée par ouverture (50)** : V2b fait mieux sur 24 ouvertures, pareil sur 16, moins bien sur 10. Différence moyenne du score de paire (V2b − V0) : +0,105 (IC 95 % +0,020 à +0,190) ; test des signes (34 paires non égales) p = 0,024. **Différence significative au seuil de 5 %.** Écart d'Elo V2b − V0 : +131 (IC 95 % ≈ +24 à +207, déduit de l'intervalle du score apparié).
+
+**Cumul avec P22 (graine 1) : 60 paires par moteur**
+
+| Moteur | V / N / D | Score (IC 95 %) | Elo vs Scan (IC 95 %) |
+|---|---|---|---|
+| V0 | 5 / 18 / 97 | 11,7 % (7,2–16,1) | −352 (−443 à −287) |
+| V2b | 7 / 38 / 75 | 21,7 % (16,7–26,7) | −223 (−280 à −176) |
+
+Apparié sur 60 ouvertures : mieux 28, pareil 20, moins bien 12 ; différence moyenne +0,100 (IC 95 % +0,025 à +0,175).
+
+**Bascules (parties perdues ; définition de P21)** :
+| | V0 | V2b |
+|---|---|---|
+| Défaites analysées / avec bascule | 81 / 81 | 61 / 61 |
+| Coup médian de la bascule | 24 | 31 |
+| Perte moyenne du coup de plus grosse perte (pions, estimation Scan) | 1,77 (79 parties) | 2,10 (59 parties) |
+
+**Coups de Scan proposés à la place du coup de plus grosse perte** (10 premiers, camp de DamikA ; une occurrence par défaite) :
+- V0 : 50-44 (Blancs) ×8, 1-7 (Noirs) ×4, 9-13 (N) ×3, 4-9 (N) ×3, 5-10 (N) ×3, 46-41 (B) ×3, 50-45 (B) ×2, 14-19 (N) ×2, 12-17 (N) ×2, 24-29 (N) ×2.
+- V2b : 24-30 (Noirs) ×3, 38-33 (Blancs) ×3, 5-10 (N) ×3, 7-12 (N) ×2, 13-19 (N) ×2, 17-22 (N) ×2, 42-37 (B) ×2, 13-18 (N) ×2, 14-19 (N) ×2, 45-40 (B) ×2.
+- **Communs aux deux listes de 10 (même coup, même camp) : 5-10 (Noirs) et 14-19 (Noirs).** (Sur toutes les défaites, 25 coups de remplacement apparaissent chez les deux moteurs ; liste dans `out/p23-compare.txt`.)
+
+
+## P24 — Intégrer Scan dans DamikA : vérifications avant de coder (07/11/2026, diagnostic seul)
+
+Rien modifié dans l'appli, le moteur actuel, `data/`, `js/` ni `CLAUDE.md` ; rien commité. Tout ce qui a été téléchargé ou écrit est dans le dossier temporaire de la session (dépôt `scan-wasm` cloné, paquet npm `scan3.1.js`, binaires WebAssembly de Lidraughts, scripts de mesure `bench/`, `pw/`). Seul Scan a été exécuté (natif et WebAssembly), plus un petit serveur de test local écrit pour le point 4. **Playwright n'était pas installé** sur la machine (contrairement à l'énoncé) : j'ai installé `playwright-core` (sans téléchargement de navigateur) dans le dossier temporaire et piloté le Chrome 156 déjà présent, en mode sans interface. (Des fichiers `training/scan-arena/p24-*.mjs` datés du 06/11 existent déjà dans le dépôt, hors suivi : ils appartiennent à un autre travail nommé « P24 » et n'ont pas été touchés.)
+
+### 1. Paquet WebAssembly
+
+**Deux sources, à ne pas confondre.**
+- `github.com/RoepStoep/scan-wasm` (dernier commit `cbb251e`, 30/08/2023) : **uniquement les sources C++** (Scan 3.1 modifié pour Lidraughts), AUCUN binaire compilé, ni évaluation, ni tables. Licence : `LICENSE` = texte intégral GPL-3.0 (GitHub : `GPL-3.0`). Modification clé : la recherche ne tourne plus dans une boucle bloquante mais par itérations rendues au navigateur (`emscripten_async_call` dans `search.cpp`), et `std::thread` est retiré : **le moteur est mono-thread par construction**.
+- Paquet npm **`scan3.1.js` 1.1.0** (17/05/2022, auteur « TheYoBots ») : **ce n'est pas du WebAssembly** : des `.js` asm.js (≈ 658 Ko × 4 variantes) + les sources C++, **sans** `.wasm`, **sans** fichier d'évaluation (« Excludes bitbases/eval files »). **Incohérence de licence** : `package.json` annonce `MIT` mais le `LICENSE` du paquet est le texte GPL-3.0 et le code est celui de Scan (GPL-3.0) : ne pas se fier au champ MIT. Inutilisable tel quel.
+- **Les vrais binaires** (`.wasm` + évaluation) sont dans le dépôt `RoepStoep/lidraughts`, dossier `public/vendor/scan/` (c'est ce que fait tourner Lidraughts) ; le dépôt Lidraughts est en **AGPL-3.0**, le moteur Scan en **GPL-3.0**. Le dépôt n'indique pas à quel commit de `scan-wasm` correspond chaque binaire (provenance à fixer : voir §5, recommandation de recompiler). Ce sont ces binaires (variante `normal`) que j'ai testés.
+
+| Élément | Valeur |
+|---|---|
+| Version du moteur | **Scan 3.1** (copyright 2015-2019 Fabien Letouzey ; `id name=Scan version=3.1`) |
+| Licence | **GPL-3.0** (Scan et scan-wasm) ; fichiers : `LICENSE` de `scan-wasm` et du paquet npm (même texte) ; `license.txt` cité par le README de Scan |
+| `scan_normal.wasm.js` (chargeur Worker + colle emscripten, version WebAssembly) | 133 044 o |
+| `scan_normal.wasm` | 230 579 o |
+| `scan_normal.data` (évaluation `data/eval` 8 503 280 o + tables de finale 2 et 3 pièces) | 8 551 540 o |
+| `scan_normal.js` (repli asm.js, inutile si WebAssembly) | 659 685 o |
+| **Total nécessaire (wasm.js + wasm + data)** | **8 915 163 o ≈ 8,5 Mio** (le repli asm.js ajouterait 0,63 Mio) |
+| Évaluation | **identique au natif** : SHA-256 des 8 503 280 premiers octets de `scan_normal.data` = `data\eval` de Scan natif (`0e7161c3…58abba`) |
+| Livre d'ouvertures | **absent** (non empaqueté ; natif : `data\book` 1,9 Mo) |
+| Tables de finale | **2 et 3 pièces seulement** (16 fichiers : 4 + 12), `bb-size=3` comme Lidraughts. Natif : 2 à 6 pièces (`bb\6` = 1,9 Go ; 5 pièces 72 Mo ; 4 pièces 2,6 Mo). |
+| API | **Protocole Hub** (celui du natif, `protocol.txt` du paquet), par messages : `worker.postMessage("ligne")` envoie une commande, `onmessage` reçoit chaque ligne de sortie. Séquence : `hub` → (`id…`, `param…`, `wait`) → `set-param …` → `init` → `ready` → `pos pos=<51 car.>` → `level depth=N` (ou `move-time=s`, `nodes=N`, `infinite`) → `go think` (ou `go analyze`) → lignes `info depth=… score=… nodes=… time=… pv="…"` → `done move=… ponder=…` ; `stop` interrompt. Mêmes pièges qu'en natif : paramètres AVANT `init` ; format de rafle `départ x arrivée x pièces-prises`. |
+| Paramètres exposés (build WebAssembly) | `variant`, `eval` (`pst`/`pattern`), `ponder`, `tt-size` (16-30), `bb-size` (0-7, utile jusqu'à 3). **Pas de `book`, `book-ply`, `book-margin`, ni `threads`** (inconnus du build : ignorés sans erreur). Profondeur / nœuds / temps par `level`. |
+| Threads | **Aucun** (mono-thread ; pas de `SharedArrayBuffer`, pas de pthreads dans le build). Vérifié dans les sources et en test (`typeof SharedArrayBuffer === "undefined"`, `crossOriginIsolated === false`, tout fonctionne). **Donc COOP/COEP NON requis.** Des threads exigeraient de recompiler Scan avec pthreads (travail non trivial : l'architecture a été réécrite pour le navigateur) ET les en-têtes COOP/COEP. |
+
+### 2. Hébergement actuel et en-têtes
+
+- **Publié** : Cloudflare Workers + assets statiques, `https://damika.shell-green.workers.dev` (compte « Shell Green »). Dossier `C:\Users\micka\DamikA-deploy` : `wrangler.toml` (`name = "damika"`, `[assets] directory = "./site"`), sous-dossier `site/` (copie du dépôt faite par `deploy.ps1` : `css js assets data icons index.html manifest.json sw.js`). Copie locale actuelle un peu ancienne (27/10) : normal, `deploy.ps1` la rafraîchit. En production : aucun COOP/COEP, `Cache-Control: public, max-age=0, must-revalidate`, `ETag`.
+- **Peut-on ajouter des en-têtes ? Oui.** Cloudflare (doc « Workers static assets / Headers », lue le 07/11/2026) : un fichier texte `_headers`, sans extension, à la RACINE du dossier d'assets, ajoute / remplace des en-têtes par motif d'URL (ne s'applique pas aux réponses générées par un code Worker, sans importance ici : pas de Worker devant les assets). Attention : **`deploy.ps1` ne copie que les dossiers et fichiers listés** ; il faudrait ajouter `_headers` à `$files`.
+- **Threads WebAssembly utilisables ? Pas nécessaire et pas disponible** : le build existant n'a pas de threads. Si on en voulait un jour : COOP `same-origin` + COEP `require-corp` seraient possibles côté Cloudflare, mais COEP casserait les photos de joueurs chargées depuis des URL externes (Toernooibase) sauf `credentialless` ; sujet à rouvrir seulement si on compile Scan avec threads.
+- **Poids et mode hors ligne** : limites Workers Static Assets (page Limits, 07/11/2026) : 25 Mio par fichier, 20 000 fichiers (gratuit) : le plus gros fichier (`.data`, 8,5 Mio) passe. Une PWA peut sans problème mettre 9 Mio en cache (Cache Storage : quota de plusieurs centaines de Mo à plusieurs Go selon navigateur ; Safari peut vider le cache d'un site non installé après une semaine sans visite). Le Service Worker est aujourd'hui désactivé : à sa réactivation, mettre en cache ces 3 fichiers **à la première utilisation du moteur** (pas à l'installation, pour ne pas imposer 9 Mio à chaque visiteur), en comparant les URL sans la chaîne `?v=…` ajoutée par `locateFile`. Le site entier pèse aujourd'hui ≈ 1 Mo : il passerait à ≈ 10 Mo. La limite de 100 000 requêtes/jour du palier gratuit compte les fichiers servis : 3 fichiers de plus par visiteur ayant lancé le moteur, négligeable.
+
+### 3. Test de performance (Chrome 156 sans interface, processeur i7-9700 8 cœurs, 07/11/2026)
+
+Même réglage partout : `book=false`, `tt-size=22`, `bb-size=3`, `go think`, **processus (ou Worker) NEUF à chaque mesure** (table de transposition vide), médiane de 3 répétitions, temps de `go` à `done` (initialisation exclue). Natif = `Turbo Dambase\Engines\Scan 3.1\scan.exe` (3.1). Positions : **départ** ; **partie 3** après 6…18-23 (Blancs au trait ; `Wbbbbbbbbbbebbbbbbeeeeebweeweeeeweeeewwwwwwwwwwwwww`) ; **milieu de partie** des arènes : position de `out/p24/positions.jsonl`, demi-coup 30, Blancs au trait (`Wbbbbbbbeeebbeebbbbbeeeebeeeweewewweewwwwewwewwwwwe`, 30 pièces, meilleur coup de l'étiquetage 28-23).
+
+**Temps (ms, médiane) · coup · score (en pions, point de vue des Blancs, qui ont le trait)**
+
+| Position | Prof. | WebAssembly | Natif 1 thread | Natif 4 threads |
+|---|---|---|---|---|
+| Départ | 11 | 45 · 34-30 · 0,00 | 16 · 34-30 · −0,01 | 14 · 31-26 ou 34-30 · 0,00 |
+| Départ | 16 | 353 · 34-30 · 0,00 | 199 · 34-30 · 0,00 | 123 · 34-30 ou 32-28 · 0,00 |
+| Départ | 20 | 2 280 · 32-28 · 0,00 | 1 823 · 32-28 · 0,00 | 869 · 34-30 ou 32-28 · −0,01 |
+| Partie 3 | 11 | 55 · **40-34** · −0,78 | 27 · **39-33** · −0,78 | 13 · 40-34 ou 39-33 · −0,69 |
+| Partie 3 | 16 | 396 · **40-34** · −0,83 | 268 · **39-33** · −0,72 | 100 · 39-33 · −0,78 |
+| Partie 3 | 20 | 2 847 · 40-34 · −0,78 | 2 700 · 40-34 · −0,82 | 893 · 40-34 · −0,84 |
+| Milieu | 11 | 50 · 28-23 · 0,46 | 20 · 28-23 · 0,41 | 16 · 28-23 · 0,46 |
+| Milieu | 16 | 344 · **46-41** · 0,35 | 283 · **28-23** · 0,33 | 93 · 28-23 · 0,34 |
+| Milieu | 20 | 1 570 · 46-41 · 0,36 | 2 110 · 46-41 · 0,33 | 680 · 46-41 · 0,34 |
+
+(Initialisation WebAssembly mesurée : 330 à 430 ms depuis un serveur local, chargement de l'évaluation compris ; en ligne s'y ajoute le téléchargement de 8,5 Mio, une seule fois grâce au cache.)
+
+**Lecture**
+- **Vitesse brute** (nœuds par seconde à la profondeur 20) : WebAssembly 6,4 / 6,4 / 5,5 millions/s contre natif 1 thread 7,0 / 6,7 / 6,8 : **le WebAssembly tient ≈ 82 à 97 % du natif mono-thread.** Aux faibles profondeurs il paraît 2 à 3 fois plus lent (45-55 ms contre 16-27 ms à la profondeur 11) : coût fixe des itérations rendues au navigateur, sans importance (< 60 ms). Le temps total à profondeur égale dépend surtout du nombre de nœuds (le milieu de partie à la profondeur 20 est plus rapide en WebAssembly : 8,7 M de nœuds contre 14,3 M).
+- **Natif 4 threads** : gain de 2,1 à 3,1 en temps à la profondeur 20 (869 / 893 / 680 ms contre 1 823 / 2 700 / 2 110) ; **non déterministe** (le coup change d'une répétition à l'autre, colonnes « ou »), comme attendu en recherche parallèle.
+- **Coups identiques au natif ?** WebAssembly contre natif 1 thread : **6 positions sur 9 identiques** (départ 3/3, milieu 2/3, partie 3 1/3). Les écarts (partie 3 aux profondeurs 11 et 16 : 40-34 contre 39-33 ; milieu à la profondeur 16 : 46-41 contre 28-23) ont des scores quasi égaux (−0,78 / −0,78 ; 0,35 / 0,33), et les nombres de nœuds diffèrent un peu (ex. partie 3, profondeur 11 : 188 235 contre 224 397) : **ce n'est pas un clone exact du natif** (build `scan-wasm` modifié, parcours d'itérations différent), bien que l'évaluation soit octet pour octet la même. À la profondeur 20 les coups sont les mêmes partout, sauf le départ à 4 threads (coups équivalents). Conclusion : même force, pas la même séquence de coups ; pour reproduire exactement un coup du natif, il faut le natif.
+- **Limites du test** : Chrome 156 sans interface seulement (Edge, Firefox, Safari, téléphone non testés) ; 3 positions ; profondeur fixe (pas de budget en secondes) ; natif réglé en `bb-size=3` pour comparer (le natif complet utilise 6, plus fort en finale) ; 4 threads natifs = 4 sur 8 cœurs physiques.
+
+### 4. Pont local pour le mode natif (architecture proposée, rien implémenté)
+
+**Composants**
+- `bridge/damika-bridge.mjs`, Node ≥ 18, **sans dépendance**, lancé à la main ou par un raccourci. Il écoute **uniquement `127.0.0.1`** (jamais `0.0.0.0`), port fixe **47831** (hors plages usuelles) ; l'appli essaie 47831 à 47835 si occupé. Chemin de `scan.exe` : option `--scan`, variable `SCAN_EXE` ou fichier de config à côté du pont ; détection du dossier Turbo Dambase proposée au premier lancement. Le pont pilote `scan.exe hub` exactement comme `training/scan-arena/scan-player.mjs` (`spawn` avec tableau d'arguments, jamais un shell ; répertoire courant = dossier de Scan ; paramètres envoyés AVANT `init` ; validation `^[WB][ewbWB]{50}$` de `pos` ; coup vérifié côté appli avec rules.js).
+- **API** : `GET /v1/ping` → `{ name:"damika-bridge", version, engine:{ name:"Scan", version:"3.1" }, maxThreads, bb:[2..6] }` ; `POST /v1/analyse` avec `{ pos, moves?, level:{ depth | moveTime | infinite }, params:{ threads, ttSize, bbSize, book, bookPly, bookMargin } }` → réponse en **flux NDJSON** (une ligne JSON par `info`, puis `done`) ; l'appli annule avec `AbortController`, le pont envoie `stop`. Un seul processus Scan gardé vivant entre deux requêtes (la table de transposition sert d'une analyse à l'autre) ; il est relancé seulement si `params` change (les paramètres ne peuvent pas être changés après `init` : un `set-param` tardif fait planter Scan, constaté en P21). Paramètres validés par liste blanche et bornes (`threads` 1 à nombre de cœurs − 1, `tt-size` 16-30, `bb-size` 0-6).
+- Pourquoi `fetch` en flux plutôt que WebSocket : les deux sont soumis à la même autorisation du navigateur (voir ci-dessous ; WebSocket testé : même échec sans autorisation) ; `fetch` + NDJSON donne l'annulation propre et le contrôle CORS sans bibliothèque.
+
+**CORS et sécurité (en local, mais joignable depuis des pages web : à verrouiller)**
+- Liste blanche d'origines : `https://damika.shell-green.workers.dev`, `http://localhost:*`, `http://127.0.0.1:*` ; toute autre origine = 403 (un site quelconque ne doit pas pouvoir lancer Scan sur le PC). Réponse avec `Access-Control-Allow-Origin: <origine exacte>`, `Vary: Origin`, `Access-Control-Allow-Private-Network: true`, réponse `204` aux préliminaires `OPTIONS`.
+- Contrôle de l'en-tête `Host` (`127.0.0.1:<port>` ou `localhost:<port>` seulement) contre le « DNS rebinding ». Pas d'accès fichier, pas de commande arbitraire, un seul processus Scan.
+- **Arrêt propre** : `SIGINT`/`SIGTERM`, fermeture de la console et fermeture de l'entrée standard → envoi de `quit` à Scan, `kill` du processus après 1 s, fermeture du serveur ; pas de route « arrêt » accessible depuis une page web.
+
+**Détection côté appli** : au premier passage en mode « Scan » (pas au chargement de la page), `fetch('http://127.0.0.1:47831/v1/ping')` avec délai de 600 ms ; réponse valide → mode natif ; sinon → WebAssembly. Re-sondage à chaque ouverture du réglage et toutes les 30 s tant que le moteur est actif ; si le pont tombe en cours d'analyse, repli automatique sur WebAssembly avec un message (comme le repli existant vers V0). Réglage mémorisé `auto | wasm | natif` (clé à ajouter à la liste localStorage le moment venu).
+
+**Blocages du navigateur — MESURÉS (Chrome 156)** : depuis `https://damika.shell-green.workers.dev`, `fetch('http://127.0.0.1:8765/…')` vers un petit serveur de test avec en-têtes CORS corrects et `Access-Control-Allow-Private-Network: true` :
+- **Contenu mixte : pas un blocage** pour `127.0.0.1` dans Chrome (adresse de bouclage jugée fiable) : la requête passe jusqu'au serveur quand l'autre contrôle est levé.
+- **Accès réseau local (Local Network Access, Chrome récent) : BLOQUE par défaut.** Message exact : « blocked by CORS policy: Permission was denied for this request to access the `loopback` address space », et **la requête n'atteint même pas le pont** ; des en-têtes CORS parfaits n'y changent rien. Dans un Chrome avec interface, Chrome doit afficher une invite d'autorisation la première fois, puis retenir le choix **par site** ; en mode sans interface elle est refusée d'office, donc **je n'ai pas pu vérifier l'invite elle-même**. En désactivant le contrôle (drapeau de test `--disable-features=LocalNetworkAccessChecks,…`), la requête passe et reçoit `pong`. Piège : un refus d'autorisation et un pont éteint donnent le MÊME échec (`Failed to fetch`) : l'appli doit afficher un message explicite au premier essai (« autorisez l'accès au réseau local pour DamikA ») et ne pas conclure « pas de pont » trop vite.
+- Autres navigateurs (Firefox, Safari, Edge) : non testés. Safari bloquait historiquement les requêtes `http://` depuis une page `https://` même vers le bouclage ; à vérifier avant de promettre le mode natif hors Chrome.
+- **Solution retenue** : pont + autorisation Chrome accordée une fois ; en secours, **le pont peut aussi servir lui-même les fichiers de DamikA** sur `http://127.0.0.1:47831/` : page et pont sont alors de la même origine, sans CORS, sans contenu mixte, sans invite (fonctionne aussi hors Chrome), au prix d'une copie locale du site à maintenir. Si on active un jour COOP/COEP sur le site, le pont devra aussi répondre `Cross-Origin-Resource-Policy: cross-origin`.
+
+### 5. Licence et mentions
+
+**Licence actuelle du dépôt DamikA** (`github.com/Mikado1666/DamikA`, public) : **aucune**. Pas de fichier `LICENSE` / `COPYING` / `NOTICE` / `README` à la racine (GitHub : `licenseInfo: null`). Sans licence, le code est « tous droits réservés » par défaut : le dépôt est lisible mais pas réutilisable. Seul `assets/sounds/LICENSE.txt` existe (Kenney, CC0, pour `game-start.mp3`). Bibliothèques embarquées dans `js/vendor/` : jsPDF, qrcode, lz-string (licences à relire une par une avant d'écrire un `NOTICE`).
+
+**Ce que la GPL-3.0 impose si DamikA distribue Scan en WebAssembly** (envoyer le `.wasm` et son évaluation au navigateur = « transmettre » le programme) :
+1. **Code source correspondant** de Scan tel que distribué : proposer le source exact du binaire (scan-wasm, commit précis, + Scan d'origine `github.com/rhalbersma/scan`), au même endroit que le téléchargement ou par offre écrite (art. 6). Le dépôt public DamikA peut contenir un dossier de sources ou un lien vers un commit figé.
+2. **Texte de la licence** GPL-3.0 joint (fichier `LICENSE` ou `COPYING`) et **avis de copyright conservé** : « Scan 3.1 Copyright (C) 2015-2019 Fabien Letouzey, distribué sous GNU GPL version 3 » ; mention des modifications de scan-wasm (art. 5a) : elles sont déjà dans l'historique de `scan-wasm`.
+3. **Pas de restriction supplémentaire** sur ce qui est distribué de Scan (pas d'interdiction de réutilisation, pas de licence propriétaire sur le binaire).
+4. **Portée sur le reste de DamikA** : Scan tourne dans son propre Worker et ne parle à l'appli que par messages texte (protocole Hub) : on peut défendre qu'il s'agit de deux programmes distincts (agrégat), donc que le code de DamikA n'est pas contraint par la GPL. **Mais c'est une interprétation, pas une certitude** (à faire confirmer si la question compte) ; le plus simple, sans risque, est de placer tout DamikA sous une licence GPL-compatible. Le pont natif ne distribue pas Scan (Scan est déjà sur le PC de Mickaël) : pas d'obligation GPL propre, mais le citer reste correct.
+5. **Provenance des binaires** : les `.wasm` viennent du dépôt Lidraughts (AGPL-3.0) sans commit de `scan-wasm` indiqué. **Recommandation** : recompiler soi-même depuis `scan-wasm` (emscripten) au commit `cbb251e`, pour que « source correspondant » = ce commit, vérifiable ; l'AGPL de Lidraughts concerne son propre code (interface), pas forcément la colle emscripten du moteur : point à confirmer.
+
+**Licence recommandée (sans la modifier ici)** : **GPL-3.0-or-later pour tout le code de DamikA** : compatible avec Scan (GPL-3.0), avec jsPDF / lz-string / qrcode (licences permissives, à confirmer pour chacune) et avec les sons CC0 ; c'est la seule option qui ne laisse aucun doute en distribuant Scan. À décider par Mickaël (titulaire des droits sur son code). Alternative : garder DamikA sous droits réservés et défendre l'agrégat (point 4) : plus risqué. Fichiers à créer le moment venu : `LICENSE` (GPL-3.0), `NOTICE` (Scan, jsPDF, lz-string, qrcode, Kenney, avec versions et liens), `README.md`.
+
+**Où afficher la mention de Scan** (aucun de ces endroits n'existe aujourd'hui : il n'y a ni écran « À propos », ni `README`, ni `NOTICE`) :
+1. **Écran « À propos »** (à créer, accessible depuis le menu 🎨 ou la touche `?`, modale `.confirm-overlay` comme l'aide) : « DamikA analyse avec **Scan 3.1**, moteur de dames de **Fabien Letouzey** (GPL-3.0) », liens vers Scan, scan-wasm, le texte de licence, le source de DamikA ; version WebAssembly adaptée de scan-wasm (RoepStoep / Lidraughts).
+2. **Écran d'analyse** : la ligne de `formatMeta()` (`js/ai/analysis-format.js`, aujourd'hui « Évaluation indicative · profondeur N · moteur V1b ») devient « **Moteur : Scan 3.1 par Fabien Letouzey** · profondeur N · WebAssembly / natif » ; la section « Moteur d'analyse » du menu 🎨 (`#analysis-engine-options`, `index.html`) porte le nom complet de Scan.
+3. **README.md** à la racine : phrase de crédit en tête, section Licences.
+4. **`LICENSE`** (GPL-3.0) et **`NOTICE`** (avis de copyright de Scan, de scan-wasm, de Lidraughts pour la colle, des bibliothèques et des sons).
+5. **Dossier des binaires** (`README.txt` + copie de `LICENSE` + lien vers le source exact), exports PDF / PNG si l'analyse y figure (« Analyse : Scan 3.1 »), et au moment de l'intégration `CLAUDE.md` et la `description` de `manifest.json`.
+
+### Verdict
+
+**Faisable : oui pour chaque mode, blocages éventuels :**
+- **Mode A, Scan WebAssembly dans le navigateur : OUI.** Force équivalente au natif, vitesse ≈ 80 à 97 % du natif mono-thread, 8,5 Mio à charger une fois (cache), aucun en-tête spécial (mono-thread, pas de COOP/COEP). Limites assumées : **pas de threads, pas de livre d'ouvertures, tables de finale seulement jusqu'à 3 pièces** ; pas de séquence de coups strictement identique au natif ; binaires à recompiler depuis `scan-wasm` pour une provenance propre ; licence à choisir (GPL-3.0-or-later recommandée) avant de distribuer.
+- **Mode B, Scan natif via un pont local : OUI, sous une condition vérifiée.** Chrome récent **bloque** par défaut un site `https` qui contacte `127.0.0.1` (autorisation « réseau local » à accorder une fois ; l'invite elle-même n'a pas pu être testée en mode sans interface) ; le contenu mixte, lui, ne bloque pas. Autres navigateurs non testés. Repli : le pont sert aussi l'appli en local (même origine). Gains : 2 à 3 fois plus rapide à 4 threads, livre et tables jusqu'à 6 pièces ; coût : un programme à lancer, coups non déterministes à plusieurs threads.
+
+
+## P25 — Scan 3.1 (WebAssembly) dans DamikA, avec licence et mentions (07/11/2026)
+
+**Rien commité, rien poussé, `deploy.ps1` non lancé, rien écrit dans `data/`.** DamikA analyse désormais avec Scan 3.1 par défaut ; V0, V1b, V2b restent dans le code et dans le menu.
+
+### Provenance et empreintes des binaires
+
+- **Compilés par nous** (pas les binaires de Lidraughts) : `github.com/RoepStoep/scan-wasm` au commit `cbb251eff7051252ad0617fc03089bb51ce1be10`, variante « normal », Emscripten **7.0.0** (`emcc` 7.0.0, `777e6e5db7b4990bcaeb1b9998ed642cc84e6629`), installé avec ton accord dans un dossier temporaire hors dépôt (`emsdk` tag 7.0.0 ; `wasm-binaries.zip` 748 527 107 octets, plus Python 3.13.3 et Node d'emsdk). Aucun fichier source modifié : `<atomic>`, que le code de 2023 n'incluait pas, est forcé par `-include atomic`. Commande exacte : `third_party/scan/BUILD.txt`.
+- **Données empaquetées** : `data/eval` + tables de finale 2 et 3 pièces (`bb-size 3`) de la distribution de Scan 3.1 (installation Turbo Dambase). **Évaluation vérifiée octet par octet** : SHA-256 de `data/eval` retrouvé dans `scan.data` (offset 48 260) = SHA-256 de `data\eval` de Scan natif = `0e7161c38af605f5e367f3f8fe17525d1c40db722714c68921971b386e58abba` (identique aussi à celle de Lidraughts, P24). Pas de livre ni de `scan.ini` (le build n'en charge pas).
+
+| Fichier (`assets/engines/scan/`) | Octets | SHA-256 |
+|---|---|---|
+| `scan.js` (module ES, colle Emscripten) | 69 699 | `1a9e0e2b2969bbf63968db6d457be8e4509523dc238d76ce04e21b05f2aa64e5` |
+| `scan.wasm` | 218 541 | `f35dfa46f3d1474716deb29efc2ee8528a5cf4e6068ccb26eeab036adee05747` |
+| `scan.data` | 8 551 540 | `9563377bcf2b14dcf368388a641468ba1a3d1f3c1829c4daa405cbc692a4b8e2` |
+
+Total à télécharger ≈ 8,5 Mio. Même recherche que le binaire de Lidraughts : mêmes nombres de nœuds sur le départ (116 439) et la partie 3 (188 235) à la profondeur 11. Le moteur s'annonce « Scan 3.1b » (`common.hpp` de scan-wasm) ; l'interface affiche « Scan 3.1 » comme demandé.
+
+### Fichiers créés
+
+- Moteur : `assets/engines/scan/{scan.js, scan.wasm, scan.data, README.txt, LICENSE}`.
+- Source correspondant (GPL-3.0) : `third_party/scan/` (49 fichiers : les sources de scan-wasm au commit exact, `LICENSE`, `BUILD.txt` ; sans le `.gitignore` d'origine).
+- Code : `js/ai/scan-worker.js` (Worker), `js/ai/scan-protocol.js` (fonctions pures du protocole Hub), `tests/scan-protocol.mjs` (71 vérifications).
+- Licence et mentions : `LICENSE` (texte GPL-3.0, copie de celui de scan-wasm, vérifiée identique), `NOTICE`, `README.md`, `_headers` (types MIME de `LICENSE` / `NOTICE` sur Cloudflare).
+- Captures et exports de vérification (ignorés par git, `training/scan-arena/out/` est dans `.gitignore`) : `training/scan-arena/out/p25/`.
+
+### Fichiers modifiés
+
+`CLAUDE.md`, `css/style.css` (styles « À propos »), `index.html` (entrée de menu, lien dans l'aide, modale « À propos »), `js/ai/analysis-controller.js` (Worker par moteur, `stop` au lieu de `terminate`, phase `loading`), `js/ai/analysis-format.js` (`SCAN_CREDIT`, `formatMeta`), `js/ai/engines.js` (moteur `scan`, `DEFAULT_ANALYSIS_ENGINE`), `js/main.js` (chargement, repli, À propos, légende PNG), `manifest.json` (description), `tests/engine-select.mjs` (liste des moteurs), `docs/SESSION_DERNIERE.md` (cette section), et `deploy.ps1` (ajout de `third_party`, `LICENSE`, `NOTICE`, `_headers` à la liste copiée ; **ce fichier est ignoré par git**, la modification n'apparaît donc pas dans `git status`). Le `.gitignore` modifié dans `git status` l'était avant cette session.
+
+### Ce qui a été fait, en bref
+
+- **Chargement** : à la première activation de l'analyse seulement (jamais au chargement de la page), dans son Worker module ; l'interface affiche « Chargement de Scan (8,5 Mo)… » ; le réglage est le moteur par défaut (clé `damika:analysis-engine` absente = Scan).
+- **Protocole Hub** : paramètres (`tt-size 22`, `bb-size 3`) AVANT `init` ; position validée (51 caractères, pièce invalide refusée) ; partie terminée jamais soumise à Scan ; coup de Scan converti (rafle `départ x arrivée x pièces-prises` → séquence de `rules.js`) et **vérifié avec `generateLegalMoves`** (un coup non reconnu n'est jamais affiché, la ligne principale est tronquée au premier coup douteux) ; historique de coups de dame transmis par `moves=` pour les répétitions ; `go analyze` ; annulation par `stop`.
+- **Niveau** : le réglage existant (1,5 s, profondeur 24 maximum) est conservé. **Le build scan-wasm n'applique AUCUNE limite de temps** (`move-time` ignoré, constaté : une recherche à 1,5 s a duré 8 s, profondeur 23) et ne lit `stop` qu'au début d'une itération. Le Worker applique donc le temps lui-même : `stop` dès que le temps est écoulé ou que la prochaine itération (≈ 2,5 × la dernière) dépasserait 1,25 × le temps, à chaque ligne `info`, avec un filet par minuterie. Mesuré sur la partie 3 : 1,43 s pour la profondeur 19.
+- **Score** : point de vue du camp au trait ramené à celui des Blancs, en centipions ; ≥ 98 pions = mat « en N coups » ; 80 à 98 = finale gagnée des tables, plafonnée à ±15 pions (sinon « +89,6 » s'afficherait). Même format de résultat que `search.js` : barre, plaque, palier, flèche et ligne principale inchangés.
+- **Contrôleur** : une nouvelle position pendant une analyse de Scan envoie `stop` (Scan reste chargé, sa table de transposition aussi) au lieu de détruire le Worker ; la dernière demande gagne.
+- **Repli** : échec de chargement (fichiers absents, WebAssembly absent, erreur du moteur) = retour automatique sur V0 + message « Le moteur Scan 3.1 n'a pas pu démarrer (WebAssembly ou fichiers du moteur indisponibles) : retour au moteur V0. » ; le choix mémorisé n'est pas modifié.
+- **Mentions** : (a) écran « À propos » (menu 🎨, « À propos de DamikA et de Scan », et lien dans l'aide ouverte par `?`) ; (b) ligne d'analyse ; (c) nom complet dans le menu des moteurs ; (d) légende « Analyse : Scan 3.1 » dans l'export PNG quand la flèche du meilleur coup est dessinée (l'export PDF ne contient aucune analyse : diagrammes de positions seulement, rien à ajouter).
+- **Service Worker** : toujours désactivé, `sw.js` non touché. **À sa réactivation** : mettre en cache `assets/engines/scan/scan.js`, `scan.wasm` et `scan.data` (à la première utilisation du moteur, pas à l'installation ; comparer les URL sans chaîne `?v=`), plus `js/ai/scan-worker.js` et `js/ai/scan-protocol.js` dans `ASSETS`.
+
+### Phrase exacte affichée dans « À propos »
+
+**« DamikA analyse avec Scan 3.1, moteur de dames de Fabien Letouzey (GPL-3.0). »**
+(en gras : « Scan 3.1 » et « Fabien Letouzey » ; suivie de : « DamikA est une application de visuel et d'analyse pour les dames internationales (10×10). Le moteur Scan tourne dans votre navigateur (WebAssembly), compilé à partir de l'adaptation scan-wasm de RoepStoep. DamikA est publié sous licence GPL-3.0 ou ultérieure. », puis les liens : Scan 3.1 (github.com/rhalbersma/scan), scan-wasm (github.com/RoepStoep/scan-wasm), `LICENSE`, `NOTICE`, code de DamikA (github.com/Mikado1666/DamikA), `third_party/scan/BUILD.txt`.)
+Ligne d'analyse : « Moteur : Scan 3.1 par Fabien Letouzey · profondeur N · WebAssembly ». Légende PNG : « Analyse : Scan 3.1 ».
+
+### Vérifications (Chrome 156 sans interface, serveur local `python -m http.server`, 07/11/2026)
+
+| Vérification | Résultat |
+|---|---|
+| Scan charge et répond sur le **départ** | OK : `34-30`, profondeur 11, score 0,0, 116 439 nœuds ; 423 ms du premier message au résultat (chargement compris, serveur local) |
+| **Partie 3 après 6…18-23** (`Wbbbbbbbbbbebbbbbbeeeeebweeweeeeweeeewwwwwwwwwwwwww`) | OK : `40-34`, −0,78, profondeur 11 ; **coup légal selon `generateLegalMoves`** (test dans la page) ; ligne principale de 24 coups convertie et rejouée sans coup illégal |
+| Temps réel 1,5 s / profondeur 24 | OK : profondeur 19 en 1,43 s (avant l'ajout du contrôle du temps : 8 s) |
+| Remplacement d'une analyse en cours | OK : la dernière demande gagne, résultat en 137 ms, l'ancienne est jetée |
+| Interface : analyse (touche A) | OK : « Chargement de Scan (8,5 Mo)… » puis « Moteur : Scan 3.1 par Fabien Letouzey · profondeur N · WebAssembly » (profondeur 18 à 21), score, « Meilleur : 32-28 · … », flèche verte, jauge ; 4 coups suivants de la partie importée : l'analyse suit sans recharger ; aucune erreur console ; clé `damika:analysis-engine` absente |
+| Menu des moteurs | OK : « Scan 3.1 (Fabien Letouzey) », « V0 (ancien moteur) », « V1b (appris) », « V2b (motifs) » |
+| **Repli** : fichiers du moteur absents (serveur de test qui renvoie 404 sur `assets/engines/scan/`) | OK : message affiché, V0 coché dans le menu, analyse V0 qui tourne (« Évaluation indicative · profondeur N »), choix mémorisé inchangé ; seul le chemin « fichiers absents » a été testé, pas un navigateur sans WebAssembly (le code correspondant, `typeof WebAssembly`, est simple mais non exécuté) |
+| « À propos » : menu, aide (`?` puis lien), fermeture par Échap | OK ; phrase exacte vérifiée dans la page ; thèmes sombre et clair lisibles |
+| Export PNG avec analyse | OK : légende « Analyse : Scan 3.1 » sous « Coup 0 » (sans analyse : pas de ligne) |
+| Tests Node | `tests/scan-protocol.mjs` (71 vérifications), `analysis-controller`, `analysis-format`, `engine-select`, `worker-analyse`, `repetition` : tout concorde |
+| Chemins et liens ajoutés | 21 fichiers locaux présents ; liens externes (Scan, scan-wasm, DamikA, Emscripten, emsdk, jsPDF, qrcodejs, lz-string, Lidraughts) répondent 200 ; liens relatifs de l'écran « À propos » répondent 200 en local |
+
+Captures (`training/scan-arena/out/p25/`) :
+- `C:\Users\micka\damika\training\scan-arena\out\p25\analyse.png` (analyse avec Scan)
+- `C:\Users\micka\damika\training\scan-arena\out\p25\a-propos.png` (écran « À propos », thème sombre)
+- aussi : `a-propos-clair.png` (thème clair), `repli.png` (repli sur V0), `export-avec-analyse.png` et `export-sans-analyse.png` (légende PNG).
+
+### Licences relues (`js/vendor/` et sons)
+
+- **jsPDF 2.5.1** : MIT (en-tête du fichier). **qrcodejs 1.0.0** et **lz-string 1.5.0** : MIT ; ces deux fichiers n'ont pas d'en-tête, version et origine établies par comparaison d'empreinte SHA-256 avec les fichiers publiés (jsDelivr, cdnjs, dépôts GitHub, octets identiques). **Les trois sont compatibles avec la GPL-3.0.**
+- **Kenney « Impact Sounds » (`game-start.mp3`)** : CC0, compatible.
+- **À signaler sans trancher : `move.mp3`, `capture.mp3`, `game-end.mp3`** viennent du dépôt Lidraughts (AGPL-3.0, `assets/sounds/SOURCES.txt`) ; le dépôt n'indique pas de licence propre aux fichiers de sons. La GPL-3.0 (article 13) autorise de combiner un ouvrage AGPL-3.0 avec un ouvrage GPL-3.0, les termes de l'AGPL restant applicables à la partie AGPL (source offert aux utilisateurs du site : c'est le cas avec le dépôt public) ; mais la licence réelle de ces trois fichiers est à confirmer, ou ils sont à remplacer par des sons sous licence claire.
+
+### Points ouverts (ce qui a échoué ou reste à décider)
+
+1. **Rien n'est commité ni déployé.** `deploy.ps1` fait `git pull` dans un AUTRE dossier (`C:\Users\micka\DamikA`, pas ce dépôt-ci `C:\Users\micka\damika`) puis copie : il faut donc commiter et pousser avant de le lancer. Le dépôt GitHub étant public, `LICENSE`, `NOTICE`, 8,5 Mo de binaires et le source de Scan y deviendront visibles : ton accord est attendu.
+2. **Choix de moteur déjà mémorisé** : Scan est le défaut quand la clé `damika:analysis-engine` est absente. Si ton navigateur a déjà mémorisé V0, V1b ou V2b, ce choix est respecté et tu devras choisir « Scan 3.1 » une fois dans le menu 🎨. À toi de dire si l'on doit forcer Scan pour tout le monde.
+3. **Titulaire du droit d'auteur** : `LICENSE`/`NOTICE`/`README.md` indiquent « Copyright (C) 2026 Mickaël Callegari » (nom du compte git) : à confirmer. Aucun en-tête de licence n'a été ajouté fichier par fichier dans le code de DamikA (facultatif).
+4. **Écart avec la consigne** : la colle JavaScript n'est pas celle de Lidraughts (leurs binaires ne sont pas utilisés) mais celle générée par Emscripten 7.0.0 (MIT / UIUC) ; `NOTICE` cite donc Emscripten, et Lidraughts pour l'origine de l'adaptation et du protocole.
+5. **Sons Lidraughts** (voir ci-dessus) : licence à confirmer.
+6. **`_headers`** (types MIME de `LICENSE` et `NOTICE`, fichiers sans extension) : écrit d'après la documentation Cloudflare lue en P24, non vérifié en ligne tant que le site n'est pas publié. Sans lui, ces deux liens se téléchargeraient au lieu de s'afficher (constaté en local : `application/octet-stream`).
+7. **Limites de Scan dans le navigateur** (déjà vues en P24) : pas de livre d'ouvertures, pas de threads, tables de finale jusqu'à 3 pièces ; une itération longue ne peut pas être interrompue (un arrêt demandé en profondeur 22 attend la fin de l'itération, jusqu'à quelques secondes sur une position très ouverte) ; le temps est approximatif (un peu plus de 1,5 s possible). Le mode B (pont vers Scan natif) n'est pas dans P25.
+8. L'invite d'autorisation du « réseau local » de Chrome n'a toujours pas pu être testée en mode sans interface (sans objet pour le mode A).
+
+
+## P26 — Commit, push et déploiement de l'intégration de Scan (07/11/2026)
+
+- **Commit d'intégration** : `43fefdd06e2763d572120de0b2d5f60483646c84`, branche `main`, poussé sur `origin/main` (`24f72b5..43fefdd`, sans push forcé). Le push a aussi publié 3 commits locaux antérieurs non encore poussés (`11b6b2d` P17-P18, `c663d66` P19, `d739ddb` docs P19). Phrase du commit : « P25-P26 : Scan 3.1 de Fabien Letouzey (WebAssembly) devient le moteur d'analyse par défaut, DamikA passe sous GPL-3.0-or-later ».
+- **Migration unique** (`migrateAnalysisEngine`, `js/ai/engines.js`, appelée avant la création du contrôleur) : si `damika:analysis-engine` existe (V0, V1b, V2b), elle devient `scan` et le drapeau `damika:analysis-engine-migrated` est posé ; ensuite le choix du menu est respecté. Test : `tests/analysis-engine-migration.mjs` (clé absente, 3 anciennes clés, drapeau déjà posé, choix ultérieur, stockage indisponible).
+- **NOTICE** : les 3 sons Lidraughts y figurent, avec « Licence propre au fichier non précisée par le dépôt d'origine » (dépôt AGPL-3.0).
+- **Tests** : tous les tests de `tests/` verts (analysis-*, migration, scan-protocol, diff, endgame-rules, engine-select, eval-*, library-order, match, mate, opening-variety, perft + perft-positions, photo-match, position-editor, repetition, search-consistency, tactics, worker*, arena, fit, fit-struct, oracle). Non lancés : outils de mesure et de génération (bench, bench-engines, gauge-calibration, mine-positions, td-positions, endgame-demo, nada-vs-damika).
+- **Contenu commité** : 72 fichiers (moteur, `third_party/scan`, js, index.html, css, tests, LICENSE, NOTICE, README.md, _headers, manifest.json, CLAUDE.md, `.gitignore` dont le seul changement est `training/scan-arena/out/`). Non commités : `training/scan-arena/` (dont les `p24-*.mjs`), `tests/nada-vs-damika.mjs`, `Claude outputs/`, `training/models/*` non suivis. Recherche de « C:\Users », « token », « key » : seul un chemin personnel trouvé, **dans `scan.js`** (identifiant de fichier de données écrit par Emscripten). **`scan.js` a été recompilé** depuis un dossier neutre (`C:\scandata`) : `scan.wasm` et `scan.data` sont octet pour octet identiques, nouvelle empreinte de `scan.js` : `1a9e0e2b2969bbf63968db6d457be8e4509523dc238d76ce04e21b05f2aa64e5` (69 699 octets), mise à jour dans `assets/engines/scan/README.txt` et la section P25. Le reste n'a que des faux positifs (« token » dans le code C++ de Scan) et le nom du titulaire du copyright.
+- **Déploiement** : `deploy.ps1` fait `git pull` dans `C:\Users\micka\DamikA`, copie `css js assets data icons third_party` et `index.html manifest.json sw.js LICENSE NOTICE _headers` vers `C:\Users\micka\DamikA-deploy\site`, puis `npx wrangler versions upload` (qui n'active pas la version). `DamikA` et `damika` sont le MÊME dossier (même identifiant de fichier NTFS `0x…12891`). Script lancé : version `e061b735-9734-43c6-8370-86e31c2ac21e` (69 fichiers, 26 déjà présents) ; puis activée : `npx wrangler versions deploy e061b735-9734-43c6-8370-86e31c2ac21e@100% -y` → **SUCCESS, 100 % du trafic**.
+
+### Vérifications en ligne (https://damika.shell-green.workers.dev, Chrome sans interface)
+
+| Vérification | Résultat |
+|---|---|
+| (a) page sans erreur console | OK : aucun message d'erreur ni d'avertissement |
+| (b) fichiers du moteur | `scan.js` 200 `text/javascript` 69 699 o ; `scan.wasm` 200 `application/wasm` 218 541 o ; `scan.data` 200, 8 551 540 o, **sans en-tête Content-Type** (le moteur le lit sans problème) |
+| (c) `/LICENSE`, `/NOTICE` | 200 `text/plain; charset=utf-8`, affichés dans le navigateur, **aucun téléchargement** : `_headers` fonctionne (aussi pour `/third_party/scan/LICENSE`) |
+| (d) analyse en ligne, départ | OK : « Moteur : Scan 3.1 par Fabien Letouzey · profondeur 18 · WebAssembly », 0,0, « Meilleur : 32-28 » |
+| (d) partie 3 après 6…18-23 (Blancs au trait) | OK : profondeur 19, −0,8, « Meilleur : 39-33 » (coup légal : le Worker ne montre un coup qu'après vérification avec `generateLegalMoves`) |
+| (e) « À propos » | s'ouvre, phrase exacte affichée ; ses 6 liens répondent 200 (3 sur le site, 3 vers GitHub) |
+| (f) migration | `damika:analysis-engine = v0` posé avant le chargement → après : `scan`, drapeau `1`, « Scan 3.1 (Fabien Letouzey) » coché dans le menu |
+
+Capture : `C:\Users\micka\damika\training\scan-arena\out\p26\analyse-en-ligne.png` (et `analyse-en-ligne-partie3.png`).
+
+### Points ouverts
+
+1. **Dossier temporaire d'Emscripten, à supprimer par toi si tu veux** (je n'y ai pas touché) : `C:\Users\micka\AppData\Local\Temp\claude\cc6d58d0e96b0292\68931124-adce-4d2b-bd71-d4a759b11e18\scratchpad\emsdk-work`, **2,2 Go** (le reste du dossier de session : 64 Mo ; plus `C:\scandata`, 17 Mo, dossier neutre créé pour la recompilation).
+2. Les sons Lidraughts sont conservés avec la mention dans NOTICE ; leur licence réelle reste non précisée.
+3. `scan.data` est servi sans type de contenu ; sans conséquence aujourd'hui, mais ajoutable dans `_headers` (`Content-Type: application/octet-stream`) si on le souhaite.
+4. Le Service Worker reste désactivé (voir P25 : fichiers de Scan à y mettre en cache).
+5. Reste hors suivi git : `training/scan-arena/` (scripts P21-P24, hors intégration), `tests/nada-vs-damika.mjs`, `Claude outputs/`.
