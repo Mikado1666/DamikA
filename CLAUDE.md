@@ -2,6 +2,11 @@
 
 ## 1. Projet et stack
 
+**Orientation (décision de Mickaël, 07/11/2026) : DamikA est une application de VISUEL et d'ANALYSE construite autour de
+Scan 3.1 (Fabien Letouzey, GPL-3.0), cité et mis en avant. L'ambition « moteur fort maison » est ABANDONNÉE : plus
+d'arène, plus d'entraînement, plus de chantier d'évaluation ou de recherche maison. Les moteurs V0, V1b et V2b restent dans le
+code et dans le menu (sans être supprimés, sans être développés). Tout DamikA est sous GPL-3.0-or-later.**
+
 PWA de dames internationales 10x10 (FMJD), vanilla JS (ES modules natifs, pas de build
 step, pas de framework), rendu plateau en Canvas 2D. Prod : https://damika.shell-green.workers.dev
 (Cloudflare Workers + assets statiques). Un seul backend : un Worker Cloudflare pour la
@@ -18,7 +23,12 @@ js/ai/search.js       recherche alpha-bêta + quiescence + TT : analyse(position
 js/ai/worker.js       Web Worker (moves, perft, analyse, stop), branché à l'UI par l'analyse (2b)
 js/ai/analysis-format.js  fonctions PURES d'affichage de l'analyse (barre, score, mat, coups)
 js/ai/analysis-controller.js  cycle de vie du Worker d'analyse (debounce, terminate, ids)
-js/ai/engines.js      choix du moteur d'analyse V0 / V1b : liste, constante du chemin du modèle V1b, chargement de l'évaluateur (4.1)
+js/ai/engines.js      choix du moteur d'analyse Scan / V0 / V1b / V2b : liste, DEFAULT_ANALYSIS_ENGINE = 'scan', repli V0 (DEFAULT_ENGINE), chemins des modèles
+js/ai/scan-worker.js  Worker de Scan 3.1 (WebAssembly) : protocole Hub, temps géré en JS (le build ignore move-time), même protocole de messages que worker.js (P25)
+js/ai/scan-protocol.js  fonctions PURES du protocole Hub de Scan : position 51 car., rafle → coup rules.js, score, mat, historique (P25)
+assets/engines/scan/  scan.js + scan.wasm + scan.data (≈ 8,5 Mo) + README.txt (provenance, SHA-256) + LICENSE : binaires de Scan compilés par nous (P25)
+third_party/scan/     source CORRESPONDANT au binaire (scan-wasm, commit cbb251e) + LICENSE + BUILD.txt (obligation GPL-3.0)
+LICENSE  NOTICE  README.md  _headers   licence GPL-3.0, mentions des composants, présentation ; _headers = types MIME de LICENSE / NOTICE sur Cloudflare
 data/models/          v1b-l0.json = COPIE de training/models/v1b-l0.json, chargée par le Worker pour V1b
 js/library-view.js    ordre d'affichage de la Bibliothèque (fonction pure : Toutes / Récentes / Favoris + recherche)
 js/photo-match.js     correspondance nom → photo (fonctions pures), aussi utilisée par « Retirer la photo »
@@ -48,6 +58,8 @@ sw.js                 service worker (désactivé côté client)
   `node tests/bench.mjs`. Étage 2a (IA) : `node tests/eval-symmetry.mjs`,
   `node tests/search-consistency.mjs` (~1 min), `node tests/tactics.mjs`, `node tests/mate.mjs`,
   `node tests/match.mjs` (~70 s), `node tests/search-perf.mjs`, `node tests/worker-analyse.mjs`, `node tests/analysis-format.mjs`, `node tests/analysis-controller.mjs`.
+  Scan (P25) : `node tests/scan-protocol.mjs` (protocole Hub, Worker avec faux moteur, contrôleur, mentions ; le vrai WebAssembly ne se teste que dans un
+  navigateur : voir section P25 de `docs/SESSION_DERNIERE.md`).
   Étape 4.1 : `node tests/engine-select.mjs` (V0 / V1b, ≈ 8 s) ; OUTILS de mesure (pas des tests) : `node tests/gauge-calibration.mjs`
   (jauge V0 contre V1b, ≈ 2,5 min), `node tests/bench-engines.mjs` (temps V0 / V1b dans le Worker, ≈ 3 min).
   Fonctions pures de l'interface : `node tests/library-order.mjs` (ordre Toutes / Récentes / Favoris), `node tests/photo-match.mjs` (nom → photo, « Retirer la photo »).
@@ -178,7 +190,7 @@ sw.js                 service worker (désactivé côté client)
   `damika:piece-size`, `damika:speed` (curseur 1-10, partagé animation + lecture auto),
   `damika:arrow-visible` (`1`/`0`, flèche du dernier coup), `damika:arrow-duration`,
   `damika:sound-muted`, `damika:sound-volume`, `damika:side-tab` (`moves` ou `library`),
-  `damika:analysis-engine` (`v0` ou `v1b`, moteur de l'analyse ; défaut `v0`).
+  `damika:analysis-engine` (`scan`, `v0`, `v1b` ou `v2b`, moteur de l'analyse ; défaut `scan` depuis P25 ; migration unique P26 : un ancien choix est remplacé par Scan, drapeau `damika:analysis-engine-migrated`, puis le choix du menu est respecté).
   Mécanisme commun des réglages : valeur lue AVANT le premier rendu, absente/invalide = défaut,
   accès dans un `try/catch` (`Object.hasOwn` pour valider un nom de thème/style). `scheduleSave()`
   débattue 400 ms + flush sur `beforeunload`.
@@ -308,7 +320,7 @@ photos, Toernooibase) ; partage lien + QR ; sons + volume/mute ; identité visue
    voir « Mise en page en colonne » plus bas) mais reste à valider sur un VRAI téléphone ; reste le peaufinage (barre du haut sur 3 rangées, cartes joueurs
    hautes, `touch-action: none` du damier qui gêne le défilement, jauge d'évaluation masquée).
 3. Réactiver le Service Worker (mode hors-ligne), en dernier.
-Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
+IA : voir « Orientation » en tête (Scan ; plus d'arène ni d'entraînement). Plus tard : style de pion "Toernooibase" (en pause, voir ci-dessus), export en lot,
 conformité FMJD approfondie (les limites de finale FMJD 6.3 « 16 coups » et 6.4 « 5 coups » sont implémentées
 fusionnées dans `main` : voir « Chantier règles 6.3 / 6.4 » plus bas), puis IA (bloc C de `RETOURS_SESSION_2026-09-16.md`) : les étages 1
 (moteur rapide), 2a (recherche + évaluation) et 2b (analyse dans la liseuse) sont LIVRÉS, voir
@@ -537,7 +549,7 @@ chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 3.3 »). Aucun changeme
 
 **Chantier IA, Étage 4, étape 4.1 « choix du moteur d'analyse V0 / V1b » (20/10/2026) : commité (`2be67c2`), validé à l'œil par Mickaël ; le lot de corrections du même jour (mise en page en colonne, « Récentes », « Retirer la photo ») est commité aussi (`c5313b2`).**
 Détail et chiffres : `docs/SESSION_DERNIERE.md` (section « Étape 4.1 », avec « Comment tester en 3 minutes »).
-- **Réglage** : menu 🎨, section « Moteur d'analyse » (V0 (actuel) par défaut, V1b (appris)), clé `damika:analysis-engine`, mécanisme commun des réglages (lue AVANT
+- **Réglage** : menu 🎨, section « Moteur d'analyse » (depuis P25 : Scan 3.1 par défaut ; V0, V1b, V2b choisissables ; à l'étape 4.1 : V0 par défaut, V1b), clé `damika:analysis-engine`, mécanisme commun des réglages (lue AVANT
   la création du contrôleur ; absente ou invalide = V0). L'interrupteur d'analyse (bouton / touche A) reste non persisté. Avec V1b, la ligne de l'analyse
   devient « Évaluation indicative · profondeur N · moteur V1b » (V0 : texte inchangé, `formatMeta(result, engineName)`).
 - **Code** : `js/ai/engines.js` (`ENGINES`, `DEFAULT_ENGINE`, **`V1B_MODEL_PATH = 'data/models/v1b-l0.json'` = l'UNIQUE constante du chemin du modèle**, `isEngineId`,
@@ -572,6 +584,27 @@ Détail, sources, points d'interprétation, effets sur le fichier de référence
   `arena.mjs` écrit `endgameRules` (`ENDGAME_RULES_ID`) dans l'identité du run, `verify.mjs` l'y lit (absent = anciennes règles).
 - **Effets** : `tests/data/golden-scores.json` inchangé (60/60 positions identiques en score, mat, coup et variante ; 7 nombres de nœuds bougent à cause de la clé de table) ;
   perft inchangé (même nombre de nœuds, même vitesse) ; l'interface n'arrête pas la partie sur ces nulles (comme pour la répétition et les 25 coups).
+
+**Chantier P25 « Scan (WebAssembly) dans DamikA » (07/11/2026) : réalisé, NON commité, NON déployé.** Détail et vérifications : `docs/SESSION_DERNIERE.md` (section P25).
+- **Moteur** : Scan 3.1 est le moteur d'analyse PAR DÉFAUT (`DEFAULT_ANALYSIS_ENGINE`, `js/ai/engines.js`) ; V0, V1b, V2b restent choisissables. Chargé dans son
+  Worker (`js/ai/scan-worker.js`) à la PREMIÈRE utilisation de l'analyse (message « Chargement de Scan (8,5 Mo)… »), jamais au chargement de la page. Même protocole de
+  messages que `js/ai/worker.js` : le contrôleur choisit le script par moteur (`createWorker(engine)`) ; nouvelle position = `{ type: 'stop' }` (Scan reste chargé), pas
+  de `terminate()`. Échec (WebAssembly absent, fichiers manquants) = repli automatique sur V0 + message, réglage mémorisé inchangé.
+- **Pièges du build scan-wasm** : (1) AUCUNE limite de temps (le `move-time` du Hub est ignoré, une recherche demandée à 1,5 s a duré 8 s) : le temps est géré par le
+  Worker (`stop` entre deux itérations, `shouldStopForTime`) ; (2) `stop` n'est lu qu'au DÉBUT d'une itération, jamais en plein milieu ; (3) pas de livre, pas de threads, tables de
+  finale 2-3 pièces ; (4) score Hub en pions du point de vue du camp AU TRAIT, ≥ 98 = mat, 80-98 = finale gagnée des tables (plafonnée à ±15 pions) ; (5) un coup de
+  Scan n'est montré qu'après vérification avec `generateLegalMoves` (jamais un coup illégal) ; (6) paramètres AVANT `init` ; (7) `move-time` n'existe pas, seule la profondeur est envoyée.
+- **Binaires** : `assets/engines/scan/` (provenance, commande de compilation et SHA-256 dans son `README.txt` et `third_party/scan/BUILD.txt`). Pour les refaire : emsdk 7.0.0 et la
+  commande de `BUILD.txt` ; l'évaluation doit rester identique à `data\eval` de Scan 3.1 (SHA-256 `0e7161c3…58abba`).
+- **Mentions et licence (règles permanentes)** : le crédit « Scan 3.1, moteur de Fabien Letouzey (GPL-3.0) » doit rester visible : écran « À propos » (menu 🎨 ou aide `?`),
+  ligne d'analyse (`SCAN_CREDIT`, `formatMeta()`), menu des moteurs, légende de l'export PNG quand une analyse y figure, `README.md`, `NOTICE`. Ne jamais les retirer. Toute
+  nouvelle bibliothèque ou ressource tierce : vérifier la compatibilité GPL-3.0, l'ajouter à `NOTICE` (version, licence, lien) AVANT de la livrer. `third_party/scan/` doit rester le
+  source EXACT du binaire distribué (si on recompile, mettre à jour les deux et le `README.txt`). Dépôt public : ne rien y publier sans accord de Mickaël.
+- **Déploiement** : `deploy.ps1` (non suivi par git) copie désormais aussi `third_party/`, `LICENSE`, `NOTICE`, `_headers` ; `assets/` contient le moteur. **Service Worker toujours
+  désactivé** : à sa réactivation, mettre en cache `assets/engines/scan/scan.js`, `scan.wasm` et `scan.data` (à la première utilisation du moteur, pas à l'installation ; les URL du
+  moteur portent parfois une chaîne `?v=`), ainsi que `js/ai/scan-worker.js` et `js/ai/scan-protocol.js` dans `ASSETS` de `sw.js`.
+
+**État au 01/11/2026 :** 3 parties jouées contre Scan niveau 7 le 01/11, 3 défaites ; thèmes : centre non disputé, pas de portes de sortie, horizon, pion isolé en 24 trop tôt. P19 (variété d'ouverture) en pause ; prochain prompt : P20.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
 pas validé par Mickaël, commité et poussé. Pas de test automatisé : un test ciblé par chantier.

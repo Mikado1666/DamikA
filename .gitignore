@@ -19,3 +19,6 @@ tests/pdn-local/
 # Étage 3 (apprentissage) : parties, positions et journaux, volumineux, jamais suivis
 training/data/
 training/logs/
+
+# P21 : parties contre Scan (PDN de mesure), jamais suivies
+training/scan-arena/out/

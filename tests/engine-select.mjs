@@ -77,7 +77,7 @@ const modelJson = JSON.parse(fs.readFileSync(trainingModelUrl, 'utf8'));
   for (const bad of ['v2', 'toString', '__proto__', 'V1B', '', null, 42]) msgs.push(await rejects(loadEvaluator(bad)));
   check('B2 moteur inconnu (v2, toString, __proto__, V1B, vide, null, 42) : refusé', msgs.every((m) => m && m.includes('inconnu')), msgs.map(String).join(' | ').slice(0, 120));
   check("B2 isEngineId n'accepte que v0 et v1b", ['v0', 'v1b', 'v2b'].every(isEngineId) && ['toString', '__proto__', 'V0', ' v0', null, undefined, 0].every((x) => !isEngineId(x)));
-  check('B2 chaque moteur a un libellé de menu et un nom court', Object.keys(ENGINES).join() === 'v0,v1b,v2b' && Object.values(ENGINES).every((e) => e.label && e.short));
+  check('B2 chaque moteur a un libellé de menu et un nom court', Object.keys(ENGINES).join() === 'scan,v0,v1b,v2b' && Object.values(ENGINES).every((e) => e.label && e.short));
 
   const garbage = await rejects(loadEvaluator('v1b', async () => ({ man: [1, 2, 3] })));
   check('B3 modèle illisible (tables incomplètes) : refusé avec un message', !!garbage, String(garbage).slice(0, 90));

@@ -11,6 +11,10 @@
 //   - Chaque requête porte un identifiant ; toute réponse d'une requête périmée est ignorée.
 //   - Une position identique à la précédente (plateau + trait + historique transmis) ne relance rien.
 //   - Le contrôleur ne lit que la position qu'on lui donne : il ne touche ni à la partie ni à la sauvegarde.
+//   - Scan (P25, js/ai/scan-worker.js) : le moteur 'scan' tourne dans SON Worker (createWorker(engine) choisit le script).
+//     Ce Worker lit ses messages pendant une analyse : une nouvelle position lui envoie { type: 'stop' } au lieu de le
+//     détruire (le moteur et sa table de transposition restent chargés, 8,5 Mo ne sont pas rechargés à chaque coup).
+//     Il annonce { type: 'status', status: 'loading' | 'ready' } : phase 'loading' tant que Scan n'est pas prêt.
 //   - Moteur d'analyse (étape 4.1, js/ai/engines.js) : 'v0' par défaut, 'v1b' (évaluation apprise). Le moteur
 //     est transmis au Worker dans options.engine, SEULEMENT s'il n'est pas V0 (message identique à celui d'avant
 //     l'étape 4.1 pour V0). setEngine() relance l'analyse de la dernière position demandée avec le nouveau moteur.
@@ -18,6 +22,7 @@
 // Rappel onChange({ phase, result, error? }) :
 //   phase 'off'      : désactivé (result = null)
 //   phase 'waiting'  : nouvelle position, analyse pas encore démarrée / en cours de démarrage
+//   phase 'loading'  : (Scan) le moteur WebAssembly se charge pour la première fois ; result = null
 //   phase 'thinking' : au moins une profondeur terminée, la recherche continue (result = dernière profondeur)
 //   phase 'done'     : recherche terminée (result = résultat final)
 //   phase 'error'    : le Worker a échoué (result = null ; error = message du Worker s'il en a donné un)
@@ -49,6 +54,9 @@ export function createAnalysisController({
   let pending = null;     // position en attente de l'expiration du debounce
   let last = null;        // dernière position demandée (copie), pour la relancer quand le moteur change
   let engine = isEngineId(initialEngine) ? initialEngine : DEFAULT_ENGINE;
+  let workerKind = null;  // 'scan' ou 'js' : type du Worker actuel (changer de moteur entre les deux = autre script)
+  let loadingEngine = false; // le Worker a annoncé 'loading' et pas encore 'ready'
+  const kindOf = (id) => (id === 'scan' ? 'scan' : 'js');
 
   const emit = (phase, result = null, error = null) => onChange({ phase, result, ...(error ? { error } : {}) });
 
@@ -61,15 +69,23 @@ export function createAnalysisController({
     }
     running = false;
     currentId = 0;
+    workerKind = null;
+    loadingEngine = false;
   }
 
   function ensureWorker() {
     if (worker) return worker;
-    worker = createWorker();
+    worker = createWorker(engine);
+    workerKind = kindOf(engine);
     const mine = worker;
     mine.onmessage = (e) => {
       if (mine !== worker) return;
       const msg = e.data;
+      if (msg && msg.type === 'status') { // messages d'état du Worker de Scan (sans identifiant)
+        if (msg.status === 'loading') { loadingEngine = true; emit('loading'); }
+        else if (msg.status === 'ready') { loadingEngine = false; if (enabled && (pending || running)) emit('waiting'); }
+        return;
+      }
       if (!msg || msg.id !== currentId) return; // réponse d'une requête périmée
       if (msg.ok === false) {
         running = false;
@@ -133,7 +149,10 @@ export function createAnalysisController({
     if (key === currentKey) return; // même position : rien à refaire
     currentKey = key;
     if (timer !== null) { clearTimer(timer); timer = null; }
-    if (running) killWorker(); // analyse en cours : arrêt immédiat (recréé au prochain envoi)
+    if (running) {
+      if (workerKind === 'scan' && worker) { worker.postMessage({ type: 'stop' }); running = false; } // Scan reste chargé
+      else killWorker(); // analyse en cours : arrêt immédiat (recréé au prochain envoi)
+    }
     currentId = 0;
     // Copie : la position reste figée jusqu'à l'envoi, même si l'appelant remplace son plateau.
     pending = {
@@ -150,7 +169,7 @@ export function createAnalysisController({
       } : null,
     };
     last = pending;
-    emit('waiting');
+    emit(loadingEngine ? 'loading' : 'waiting');
     timer = setTimer(send, debounceMs);
   }
 
@@ -185,6 +204,7 @@ export function createAnalysisController({
       if (!isEngineId(id)) throw new Error(`moteur d'analyse inconnu : ${String(id)}`);
       if (id === engine) return;
       engine = id;
+      if (worker && workerKind !== kindOf(id)) killWorker(); // Scan et moteurs JS n'ont pas le même Worker
       currentKey = null; // même position, autre moteur : à refaire
       if (enabled && last) request({ board: last.board, side: last.side }, last.history, last.variety);
     },

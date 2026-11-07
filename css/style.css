@@ -721,6 +721,33 @@ body {
   border-radius: var(--radius-sm);
 }
 .help-close-x:hover { background: var(--gold-soft); color: var(--gold-text); }
+/* ---------- Écran « À propos » (P25) : même overlay .confirm-overlay et même boîte que l'aide. Le crédit de Scan
+   (GPL-3.0) y est la première chose lisible. Couleurs : variables sémantiques seulement (thèmes sombre et clair). */
+.about-box { max-width: 520px; }
+.about-credit {
+  color: var(--text-0);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+.about-credit strong { color: var(--gold-text); }
+.about-text { color: var(--text-1); font-size: 13.5px; line-height: 1.55; margin: 0 0 12px; }
+.about-links { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
+.about-links a { color: var(--gold-text); text-decoration: underline; text-underline-offset: 2px; }
+.about-links a:hover { text-decoration-thickness: 2px; }
+.about-links li { font-size: 13.5px; color: var(--text-1); line-height: 1.4; }
+.help-about-link {
+  margin-top: 14px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--gold-text);
+  font: inherit;
+  font-size: 13.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 /* Grille à 2 colonnes réelles : `.help-row` en `display: contents` efface son propre niveau
    (il n'existe plus pour la mise en page, seuls ses 2 enfants — `.help-keys` et `span` —
    comptent) pour que TOUTES les lignes retombent dans la MÊME grille à 2 colonnes portée par

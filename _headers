@@ -1,0 +1,10 @@
+# En-têtes des fichiers publiés par Cloudflare Workers (assets statiques). Les fichiers sans extension (LICENSE, NOTICE)
+# seraient servis en application/octet-stream et TÉLÉCHARGÉS au lieu de s'afficher : on les déclare en texte (P25).
+/LICENSE
+  Content-Type: text/plain; charset=utf-8
+/NOTICE
+  Content-Type: text/plain; charset=utf-8
+/assets/engines/scan/LICENSE
+  Content-Type: text/plain; charset=utf-8
+/third_party/scan/LICENSE
+  Content-Type: text/plain; charset=utf-8

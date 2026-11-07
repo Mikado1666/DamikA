@@ -1,7 +1,7 @@
 {
   "name": "DAMIKA — Dames Internationales",
   "short_name": "DAMIKA",
-  "description": "Application de jeu de dames internationales 10x10 (FMJD)",
+  "description": "Visuel et analyse pour les dames internationales 10x10 (FMJD), avec Scan 3.1 de Fabien Letouzey",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

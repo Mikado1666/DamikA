@@ -1,0 +1,45 @@
+Scan 3.1 (adaptation navigateur « scan-wasm ») — SOURCE CORRESPONDANT au binaire de assets/engines/scan/
+=======================================================================================================
+
+Ce dossier contient, sans aucune modification, les fichiers du dépôt
+  https://github.com/RoepStoep/scan-wasm   au commit cbb251eff7051252ad0617fc03089bb51ce1be10 (30/08/2023)
+extraits par `git archive cbb251e` (seul le fichier .gitignore du dépôt d'origine n'a pas été recopié).
+C'est la version de Scan 3.1 (Fabien Letouzey, https://github.com/rhalbersma/scan) modifiée par RoepStoep pour
+Lidraughts : recherche par itérations rendues au navigateur (emscripten_async_call), pas de threads, point d'entrée
+scan_command(). Licence : GNU GPL version 3 (fichier LICENSE de ce dossier). Copyright (C) 2015-2019 Fabien Letouzey
+pour Scan ; les modifications de scan-wasm sont de RoepStoep.
+Le texte « version 3.1b » affiché par le moteur (id du protocole Hub) vient de common.hpp de ce dépôt.
+
+Compilation du binaire distribué (P25, 07/11/2026)
+--------------------------------------------------
+Outil : Emscripten 7.0.0 (emcc 7.0.0, 777e6e5db7b4990bcaeb1b9998ed642cc84e6629), installé par
+  git clone --branch 7.0.0 https://github.com/emscripten-core/emsdk && ./emsdk install 7.0.0 && ./emsdk activate 7.0.0
+Les sources de scan-wasm n'incluent pas <atomic> (un ancien compilateur l'incluait indirectement) : il est forcé en
+ligne de commande (-include atomic), les fichiers ne sont donc PAS modifiés. Commande (depuis ce dossier) :
+
+  em++ -O3 -std=c++17 -DNDEBUG -include atomic \
+    bb_base.cpp bb_comp.cpp bb_index.cpp bit.cpp common.cpp eval.cpp fen.cpp game.cpp gen.cpp hash.cpp hub.cpp \
+    libmy.cpp list.cpp main.cpp move.cpp pos.cpp score.cpp search.cpp sort.cpp thread.cpp tt.cpp util.cpp var.cpp \
+    -o scan.js -sWASM=1 -sENVIRONMENT=worker -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createScan \
+    -sEXPORTED_FUNCTIONS=_main,_scan_command -sEXPORTED_RUNTIME_METHODS=ccall -sALLOW_MEMORY_GROWTH=1 \
+    -sINITIAL_MEMORY=134217728 -sMAXIMUM_MEMORY=1073741824 -sSTACK_SIZE=5242880 \
+    --preload-file <dossier-data>@/data
+
+<dossier-data> = un dossier « data » contenant, tels quels, les fichiers de la distribution de Scan 3.1 :
+  data/eval              8 503 280 octets, SHA-256 0e7161c38af605f5e367f3f8fe17525d1c40db722714c68921971b386e58abba
+  data/bb/2/*  (4 fichiers) et data/bb/3/* (12 fichiers) : tables de finale de 2 et 3 pièces (« bb-size 3 »)
+(pris dans l'installation de Scan 3.1 livrée avec Turbo Dambase ; l'évaluation est identique, octet pour octet, à celle
+du paquet WebAssembly de Lidraughts). Pas de livre d'ouvertures, pas de scan.ini (le moteur utilise ses valeurs par défaut).
+Astuce de reproductibilité : Emscripten écrit dans scan.js le chemin ABSOLU du dossier de données et de sortie (identifiant
+« datafile_… ») ; pour obtenir un scan.js sans chemin personnel, placer le dossier data et la sortie dans un dossier neutre
+(le binaire distribué a été produit avec C:\scandata\data et -o C:\scandata\out\scan.js). scan.wasm et scan.data ne
+dépendent pas de ces chemins (octets identiques d'un dossier à l'autre).
+Résultat : scan.js (module ES), scan.wasm, scan.data ; leurs empreintes SHA-256 sont dans assets/engines/scan/README.txt.
+
+Vérifier que scan.data contient bien l'évaluation de Scan 3.1 (Python 3 ; `eval` = le fichier data/eval de Scan 3.1) :
+  import hashlib
+  d = open('assets/engines/scan/scan.data', 'rb').read()
+  e = open('<chemin>/Scan 3.1/data/eval', 'rb').read()
+  k = d.find(e[:64])
+  print(hashlib.sha256(d[k:k + len(e)]).hexdigest())      # doit afficher 0e7161c3…58abba
+Le dépôt ne redistribue pas data/eval en double : il est dans scan.data (tel quel, à l'offset trouvé ci-dessus).

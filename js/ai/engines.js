@@ -1,6 +1,8 @@
 // DAMIKA — Choix du moteur d'analyse (étape 4.1). Aucun accès au DOM : utilisable dans le Worker, dans
 // l'interface (liste des moteurs, validation du réglage mémorisé) et sous Node (tests).
 //
+//   scan Scan 3.1 de Fabien Letouzey (GPL-3.0), compilé en WebAssembly (P25) : moteur d'analyse PAR DÉFAUT. Il a son propre
+//        Worker (js/ai/scan-worker.js, binaires dans assets/engines/scan/), n'utilise ni evaluator ni modèle ici.
 //   v0   évaluation à formules de js/ai/eval.js : le moteur historique, celui que js/ai/search.js utilise quand
 //        aucun évaluateur ne lui est donné.
 //   v1b  évaluation APPRISE (js/ai/eval-learned.js) : tables par phase de jeu apprises sur des parties d'auto-jeu
@@ -19,11 +21,16 @@ import { createModelEvaluator } from './eval-patterns.js';
 // `label` : texte (court) du menu de réglages ; `hint` : infobulle ; `short` : nom court (ligne « Évaluation
 // indicative… », messages).
 export const ENGINES = {
-  v0: { short: 'V0', label: 'V0 (actuel)', hint: "Évaluation à formules : le moteur d'analyse historique" },
+  scan: { short: 'Scan 3.1', label: 'Scan 3.1 (Fabien Letouzey)', hint: "Scan 3.1, moteur de dames de Fabien Letouzey (GPL-3.0), en WebAssembly : moteur d'analyse par défaut" },
+  v0: { short: 'V0', label: 'V0 (ancien moteur)', hint: "Évaluation à formules : le moteur d'analyse historique" },
   v1b: { short: 'V1b', label: 'V1b (appris)', hint: "Évaluation apprise sur 8 000 parties d'auto-jeu (expérimental)" },
   v2b: { short: 'V2b', label: 'V2b (motifs)', hint: "Évaluation apprise par motifs de cases sur parties réelles (expérimental)" },
 };
+// DEFAULT_ENGINE = le moteur JS « de base » : celui que le Worker js/ai/worker.js utilise quand aucun moteur n'est nommé
+// (message identique à celui d'avant l'étape 4.1) et le MOTIF DE REPLI quand un autre moteur échoue. Le moteur d'analyse
+// PROPOSÉ PAR DÉFAUT à l'utilisateur est DEFAULT_ANALYSIS_ENGINE (Scan, depuis P25).
 export const DEFAULT_ENGINE = 'v0';
+export const DEFAULT_ANALYSIS_ENGINE = 'scan';
 // Variété d'ouverture de V2b (P19, js/ai/search.js) : marge (centipions) sous le meilleur coup et nombre de demi-coups de la
 // partie pendant lesquels elle s'applique. UNE seule définition, lue par main.js (et les mesures de training/).
 export const OPENING_VARIETY = { margin: 10, plies: 10 };
@@ -40,6 +47,26 @@ const MODELS = {
 
 // Valide un identifiant venant d'ailleurs (réglage mémorisé, message du fil principal). Object.hasOwn : 'toString' ou
 // '__proto__' ne sont pas des moteurs.
+// Migration UNIQUE (P26) : Scan est imposé une fois à tous. Au premier chargement après la mise à jour, un choix de moteur
+// déjà mémorisé (V0, V1b, V2b) est remplacé par Scan et un drapeau est posé pour ne plus jamais recommencer ; ensuite le
+// choix fait dans le menu est respecté. `storage` : localStorage (ou un faux, tests/analysis-engine-migration.mjs).
+// Ne lève jamais (stockage indisponible = rien à migrer). Retourne true si une valeur a été remplacée.
+export const ANALYSIS_ENGINE_KEY = 'damika:analysis-engine';
+export const ANALYSIS_ENGINE_MIGRATED_KEY = 'damika:analysis-engine-migrated';
+export function migrateAnalysisEngine(storage) {
+  try {
+    if (storage.getItem(ANALYSIS_ENGINE_MIGRATED_KEY) !== null) return false;
+    const had = storage.getItem(ANALYSIS_ENGINE_KEY) !== null;
+    if (had) storage.setItem(ANALYSIS_ENGINE_KEY, DEFAULT_ANALYSIS_ENGINE);
+    storage.setItem(ANALYSIS_ENGINE_MIGRATED_KEY, '1');
+    return had;
+  } catch {
+    return false;
+  }
+}
+
+// Moteurs qui ont leur propre Worker (hors js/ai/worker.js) : leur chargement n'est pas celui d'un modèle JSON.
+export const isScanEngine = (id) => id === 'scan';
 export const isEngineId = (id) => typeof id === 'string' && Object.hasOwn(ENGINES, id);
 
 // js/ai/engines.js → racine du site : deux dossiers plus haut.
@@ -67,7 +94,7 @@ const cache = new Map();
 // injectable (tests).
 export function loadEvaluator(engine = DEFAULT_ENGINE, reader = readJson) {
   if (!isEngineId(engine)) return Promise.reject(new Error(`moteur d'analyse inconnu : ${String(engine)}`));
-  if (engine === 'v0') return Promise.resolve(null);
+  if (engine === 'v0' || engine === 'scan') return Promise.resolve(null); // scan : Worker à part, rien à charger ici
   if (reader === readJson && cache.has(engine)) return cache.get(engine);
   const { path, make } = MODELS[engine];
   const loading = reader(modelUrl(path)).then((model) => make(model));

@@ -3,7 +3,7 @@ import {
 } from './engine/rules.js';
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
 import { createAnalysisController } from './ai/analysis-controller.js';
-import { ENGINES, DEFAULT_ENGINE, OPENING_VARIETY, isEngineId } from './ai/engines.js';
+import { ENGINES, DEFAULT_ENGINE, DEFAULT_ANALYSIS_ENGINE, OPENING_VARIETY, isEngineId, isScanEngine, migrateAnalysisEngine } from './ai/engines.js';
 import { applyTool, emptyBoard, startBoard, cloneBoard, validatePosition, buildGameFromPosition } from './position-editor.js';
 import { libraryVisibleOrder } from './library-view.js';
 import { lookupInTable, manualPhotoKeys, nameTokens } from './photo-match.js';
@@ -407,6 +407,10 @@ const el = {
   btnHelp: document.getElementById('btn-help'),
   helpOverlay: document.getElementById('help-overlay'),
   helpCloseX: document.getElementById('help-close-x'),
+  aboutOverlay: document.getElementById('about-overlay'),
+  aboutCloseX: document.getElementById('about-close-x'),
+  btnAbout: document.getElementById('btn-about'),
+  helpAboutLink: document.getElementById('help-about-link'),
   tabMoves: document.getElementById('tab-moves'),
   tabLibrary: document.getElementById('tab-library'),
   panelMoves: document.getElementById('panel-moves'),
@@ -552,10 +556,10 @@ function renderAnalysis({ phase, result, error }) {
   // Pendant l'analyse, le rail joueurs réserve 18 px à sa droite pour la jauge élargie (les largeurs
   // du rail, du damier et les formules de layout ne changent pas, cf. CLAUDE.md).
   el.layoutRoot.classList.add('analysis-on');
-  const stale = phase === 'waiting' || phase === 'error';
+  const stale = phase === 'waiting' || phase === 'loading' || phase === 'error';
   el.evalBar.classList.toggle('stale', stale);
   el.analysisStrip.classList.toggle('stale', stale);
-  if (phase === 'waiting' || phase === 'error' || !result) {
+  if (phase === 'waiting' || phase === 'loading' || phase === 'error' || !result) {
     renderer.setBestMove(null);
     el.analysisBest.hidden = true;
     if (phase === 'error') {
@@ -569,6 +573,10 @@ function renderAnalysis({ phase, result, error }) {
       // Un moteur autre que V0 n'a pas pu tourner (modèle V1b introuvable…) : retour à V0 (dernière instruction, car
       // setEngine() relance l'analyse et rappelle ce rendu).
       if (analysisController.engine !== DEFAULT_ENGINE) fallbackToDefaultEngine(error);
+    } else if (phase === 'loading') {
+      // Scan se charge pour la première fois (assets/engines/scan : ≈ 8,5 Mo, mis en cache par le navigateur ensuite).
+      if (!analysisHasText) el.analysisScore.textContent = '…';
+      el.analysisMeta.textContent = SCAN_LOADING_TEXT;
     } else if (!analysisHasText) {
       el.analysisScore.textContent = '…';
       el.analysisMeta.textContent = '';
@@ -596,7 +604,7 @@ function renderAnalysis({ phase, result, error }) {
   el.evalBar.style.setProperty('--lit', String(tier.light));
   el.analysisPlate.style.setProperty('--lit', String(tier.light));
   setAnalysisScoreText(result);
-  el.analysisMeta.textContent = formatMeta(result, analysisController.engine === DEFAULT_ENGINE ? null : ENGINES[analysisController.engine].short);
+  el.analysisMeta.textContent = formatMeta(result, analysisController.engine === DEFAULT_ENGINE ? null : ENGINES[analysisController.engine].short, analysisController.engine);
   // Flèche et ligne « Meilleur » seulement à partir de MIN_DEPTH_FOR_MOVE : avant, le coup change
   // à chaque itération et la flèche clignoterait. La barre et le score, eux, vivent dès la profondeur 1.
   if (shouldShowMove(result)) {
@@ -612,32 +620,44 @@ function renderAnalysis({ phase, result, error }) {
 }
 el.evalBar.addEventListener('animationend', () => el.evalBar.classList.remove('pulse'));
 
-// Moteur d'analyse (étape 4.1) : V0 par défaut, V1b = évaluation apprise (js/ai/engines.js). Réglage mémorisé comme le
-// thème du damier : lu AVANT la création du contrôleur ; absent, invalide (moteur qui n'existe plus) ou localStorage
-// indisponible = V0. Choisi dans le menu 🎨 (refreshThemeMenuOptions) ; sans effet tant que l'analyse est coupée.
+// Moteur d'analyse : Scan 3.1 par défaut (P25) ; V0, V1b, V2b restent choisissables (js/ai/engines.js). Réglage mémorisé
+// comme le thème du damier : lu AVANT la création du contrôleur ; absent, invalide (moteur qui n'existe plus) ou
+// localStorage indisponible = Scan. Un choix mémorisé avant P26 est remplacé par Scan UNE fois (migrationAnalysisEngine), puis respecté. Choisi dans le menu 🎨 (refreshThemeMenuOptions) ; sans effet tant que l'analyse est coupée.
 const ANALYSIS_ENGINE_KEY = 'damika:analysis-engine';
 function loadSavedAnalysisEngine() {
+  try { migrateAnalysisEngine(localStorage); } catch { /* localStorage indisponible */ } // Scan imposé UNE fois (P26)
   try {
     const saved = localStorage.getItem(ANALYSIS_ENGINE_KEY);
     if (saved && isEngineId(saved)) return saved;
-  } catch { /* localStorage indisponible : V0 */ }
-  return DEFAULT_ENGINE;
+  } catch { /* localStorage indisponible : moteur par défaut */ }
+  return DEFAULT_ANALYSIS_ENGINE;
 }
 
+const SCAN_LOADING_TEXT = 'Chargement de Scan (8,5 Mo)…';
+
 const analysisController = createAnalysisController({
-  createWorker: () => new Worker(new URL('./ai/worker.js', import.meta.url), { type: 'module' }),
+  createWorker: (engine) => {
+    if (isScanEngine(engine)) {
+      if (typeof WebAssembly !== 'object') throw new Error('WebAssembly indisponible sur ce navigateur');
+      return new Worker(new URL('./ai/scan-worker.js', import.meta.url), { type: 'module' });
+    }
+    return new Worker(new URL('./ai/worker.js', import.meta.url), { type: 'module' });
+  },
   onChange: renderAnalysis,
   engine: loadSavedAnalysisEngine(),
 });
 
-// Le moteur choisi n'a pas pu tourner : retour à V0 pour cette session. Le réglage MÉMORISÉ n'est pas modifié : un échec
-// passager (réseau, fichier du modèle absent) ne doit pas faire perdre son choix à l'utilisateur.
+// Le moteur choisi n'a pas pu tourner : retour à V0 (le moteur d'avant Scan) pour cette session. Le réglage MÉMORISÉ n'est
+// pas modifié : un échec passager (réseau, fichier du moteur ou du modèle absent) ne doit pas faire perdre son choix à
+// l'utilisateur.
 function fallbackToDefaultEngine(reason) {
-  const failed = ENGINES[analysisController.engine].short;
+  const failedId = analysisController.engine;
+  const failed = ENGINES[failedId].short;
   console.warn(`Moteur d'analyse ${failed} indisponible :`, reason);
   analysisController.setEngine(DEFAULT_ENGINE);
   refreshThemeMenuOptions();
-  showToast(`Le moteur ${failed} n'a pas pu démarrer : retour au moteur ${ENGINES[DEFAULT_ENGINE].short}.`, 'error');
+  const why = isScanEngine(failedId) ? ' (WebAssembly ou fichiers du moteur indisponibles)' : '';
+  showToast(`Le moteur ${failed} n'a pas pu démarrer${why} : retour au moteur ${ENGINES[DEFAULT_ENGINE].short}.`, 'error');
 }
 
 // Variété d'ouverture (P19) : réglage mémorisé comme les autres (absent ou localStorage indisponible = ACTIVÉ ; ne joue que
@@ -671,6 +691,11 @@ function toggleAnalysis() {
     analysisController.enable();
     requestAnalysis();
   } catch (err) {
+    // Scan (WebAssembly) impossible à créer : repli sur V0, puis nouvelle tentative avec lui.
+    if (analysisController.engine !== DEFAULT_ENGINE) {
+      fallbackToDefaultEngine(err);
+      try { requestAnalysis(); return; } catch { /* repli lui-même impossible : message ci-dessous */ }
+    }
     analysisController.disable();
     showToast("L'analyse n'a pas pu démarrer sur ce navigateur", 'error');
   }
@@ -1396,7 +1421,10 @@ window.addEventListener('keydown', (e) => {
       toggleAnalysis();
       break;
     case '?': openHelpOverlay(); break;
-    case 'Escape': if (!el.helpOverlay.hidden) closeHelpOverlay(); break;
+    case 'Escape':
+      if (!el.helpOverlay.hidden) closeHelpOverlay();
+      if (!el.aboutOverlay.hidden) closeAboutOverlay();
+      break;
     default: break;
   }
 });
@@ -1420,6 +1448,15 @@ el.btnHelp.addEventListener('click', openHelpOverlay);
 el.helpCloseX.addEventListener('click', closeHelpOverlay);
 // Clic sur le fond assombri (pas sur la boîte elle-même) : même geste que fermer par la croix.
 el.helpOverlay.addEventListener('click', (e) => { if (e.target === el.helpOverlay) closeHelpOverlay(); });
+
+// --- À propos (P25) : crédit de Scan, licence, code source. Même mécanique que l'aide. Ouvert depuis le menu 🎨 ou depuis
+// l'aide (touche ?) ; Échap ou clic sur le fond le ferme. Aucun lien avec la partie, la Bibliothèque ou la sauvegarde.
+function openAboutOverlay() { el.themeMenu.hidden = true; closeHelpOverlay(); el.aboutOverlay.hidden = false; }
+function closeAboutOverlay() { el.aboutOverlay.hidden = true; }
+el.btnAbout.addEventListener('click', openAboutOverlay);
+el.helpAboutLink.addEventListener('click', openAboutOverlay);
+el.aboutCloseX.addEventListener('click', closeAboutOverlay);
+el.aboutOverlay.addEventListener('click', (e) => { if (e.target === el.aboutOverlay) closeAboutOverlay(); });
 
 // --- toast (notifications discrètes) -------------------------------------------------
 let toastTimer = null;
@@ -3048,6 +3085,11 @@ async function exportBoardImage(format = 'png') {
   const sub = [meta.tournamentLine, meta.scoreLine].filter(Boolean).join('   ·   ');
   if (sub) lines.push(sub);
   lines.push(`Coup ${game.history.length}`);
+  // L'image contient une analyse quand la flèche du meilleur coup est dessinée (analyse active, profondeur suffisante) :
+  // on cite alors le moteur (P25). Le PDF ne contient aucune analyse (diagrammes vectoriels de positions seulement).
+  if (analysisController.enabled && renderer.bestMove) {
+    lines.push(isScanEngine(analysisController.engine) ? 'Analyse : Scan 3.1' : `Analyse : moteur ${ENGINES[analysisController.engine].short}`);
+  }
 
   const padding = 16 * dpr;
   const lineHeight = 24 * dpr;

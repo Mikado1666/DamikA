@@ -71,6 +71,8 @@
             <div id="analysis-engine-options"></div>
             <div class="dropdown-section-label" title="Premiers coups d'une partie jouée en direct : coup tiré au hasard parmi les coups presque aussi bons (moteur V2b seulement)">Variété d'ouverture</div>
             <div id="opening-variety-options"></div>
+            <div class="dropdown-section-label">DamikA</div>
+            <button id="btn-about" class="dropdown-item" title="Crédits, licence et code source">À propos de DamikA et de Scan</button>
           </div>
         </div>
         <button id="btn-ui-theme" class="icon-btn" title="Basculer thème sombre/clair">🌙</button>
@@ -387,6 +389,25 @@
         <div class="help-row"><div class="help-keys"><kbd>Échap</kbd></div><span>Fermer la fenêtre ouverte (commentaire, photo, cette aide...)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>?</kbd></div><span>Afficher cette aide</span></div>
       </div>
+      <button type="button" class="help-about-link" id="help-about-link">À propos de DamikA et de Scan…</button>
+    </div>
+  </div>
+  <!-- Écran « À propos » (P25) : crédit de Scan (GPL-3.0), liens vers le code et les licences. Ouvert depuis le menu 🎨
+       ou depuis l'aide (touche ?). Les liens relatifs pointent des fichiers publiés avec le site (deploy.ps1). -->
+  <div class="confirm-overlay" id="about-overlay" hidden>
+    <div class="confirm-box help-box about-box" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <div class="help-header">
+        <div class="help-title" id="about-title">À propos de DamikA</div>
+        <button type="button" class="help-close-x" id="about-close-x" title="Fermer" aria-label="Fermer">✕</button>
+      </div>
+      <p class="about-credit" id="about-credit">DamikA analyse avec <strong>Scan 3.1</strong>, moteur de dames de <strong>Fabien Letouzey</strong> (GPL-3.0).</p>
+      <p class="about-text">DamikA est une application de visuel et d'analyse pour les dames internationales (10×10). Le moteur Scan tourne dans votre navigateur (WebAssembly), compilé à partir de l'adaptation <em>scan-wasm</em> de RoepStoep. DamikA est publié sous licence GPL-3.0 ou ultérieure.</p>
+      <ul class="about-links">
+        <li><a href="https://github.com/rhalbersma/scan" target="_blank" rel="noopener">Scan 3.1</a> — le moteur de Fabien Letouzey (code d'origine)</li>
+        <li><a href="https://github.com/RoepStoep/scan-wasm" target="_blank" rel="noopener">scan-wasm</a> — l'adaptation pour navigateur (RoepStoep), source du binaire utilisé</li>
+        <li><a href="LICENSE" target="_blank" rel="noopener">Licence GPL-3.0</a> (texte complet) · <a href="NOTICE" target="_blank" rel="noopener">NOTICE</a> (autres composants)</li>
+        <li><a href="https://github.com/Mikado1666/DamikA" target="_blank" rel="noopener">Code de DamikA</a> · <a href="third_party/scan/BUILD.txt" target="_blank" rel="noopener">source exact du binaire de Scan</a></li>
+      </ul>
     </div>
   </div>
 </div>

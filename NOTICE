@@ -1,0 +1,56 @@
+DamikA — avis sur les composants et les licences
+=================================================
+
+DamikA : Copyright (C) 2026 Mickaël Callegari. Distribué sous la GNU General Public License, version 3 ou (à votre choix)
+toute version ultérieure (GPL-3.0-or-later) : texte complet dans le fichier LICENSE.
+
+DamikA analyse avec Scan 3.1, moteur de dames de Fabien Letouzey (GPL-3.0).
+
+Composants de tiers distribués avec DamikA
+------------------------------------------
+
+1. Scan 3.1 — moteur de dames de Fabien Letouzey
+   Copyright (C) 2015-2019 Fabien Letouzey. Licence : GNU GPL version 3.
+   https://github.com/rhalbersma/scan
+   Fichiers : assets/engines/scan/ (scan.wasm, scan.data, scan.js) ; évaluation (data/eval) et tables de finale de
+   2 et 3 pièces de la distribution de Scan 3.1, dans scan.data.
+
+2. scan-wasm — adaptation de Scan 3.1 pour navigateur (WebAssembly), par RoepStoep (projet Lidraughts)
+   https://github.com/RoepStoep/scan-wasm, commit cbb251eff7051252ad0617fc03089bb51ce1be10. Licence : GPL-3.0.
+   Code source correspondant au binaire distribué : third_party/scan/ (copie exacte du commit, avec LICENSE et la
+   commande de compilation dans BUILD.txt).
+   Lidraughts (https://github.com/RoepStoep/lidraughts, AGPL-3.0) : DamikA ne reprend pas ses binaires ; le moteur est
+   recompilé depuis scan-wasm. Lidraughts est cité pour l'origine de l'adaptation et du protocole d'appel du moteur.
+
+3. Emscripten 7.0.0 (https://emscripten.org) — chaîne de compilation ; le fichier assets/engines/scan/scan.js est
+   la colle JavaScript qu'il génère (licence MIT / University of Illinois-NCSA de l'Emscripten Core, qui autorise
+   cette redistribution). Compilé avec LLVM / clang et Binaryen (Apache-2.0 avec exceptions LLVM) : aucun de ces
+   outils n'est redistribué.
+
+4. jsPDF 2.5.1 (js/vendor/jspdf.umd.min.js) — création du PDF. Copyright (c) 2010-2021 James Hall et contributeurs
+   (liste dans l'en-tête du fichier). Licence MIT. https://github.com/parallax/jsPDF
+   Version et licence lues dans l'en-tête du fichier ; il embarque des composants à licences permissives dont les
+   mentions figurent dans ce même en-tête.
+
+5. qrcodejs 1.0.0 (js/vendor/qrcode.min.js) — QR code du partage par lien. Licence MIT.
+   https://github.com/davidshimjs/qrcodejs. Le fichier n'a pas d'en-tête : version et origine établies par
+   comparaison d'empreinte SHA-256 avec qrcodejs 1.0.0 (jsDelivr, cdnjs, dépôt GitHub : octets identiques).
+
+6. lz-string 1.5.0 (js/vendor/lz-string.min.js) — compression des liens de partage. Copyright (c) pieroxy. Licence MIT.
+   https://github.com/pieroxy/lz-string. Le fichier n'a pas d'en-tête : version établie par empreinte SHA-256
+   (octets identiques à libs/lz-string.min.js de lz-string 1.5.0 sur jsDelivr).
+
+7. Sons (assets/sounds/)
+   - game-start.mp3 : pack « Impact Sounds » de Kenney (www.kenney.nl), licence CC0 (domaine public) :
+     voir assets/sounds/LICENSE.txt.
+   - move.mp3, capture.mp3, game-end.mp3 : thème de sons « standard » du dépôt Lidraughts
+     (https://github.com/RoepStoep/lidraughts, dossier public/sound/standard), dépôt sous AGPL-3.0 ; provenance dans
+     assets/sounds/SOURCES.txt. Licence propre au fichier non précisée par le dépôt d'origine ; ces trois fichiers sont
+     conservés avec cette mention.
+
+Compatibilité : GPL-3.0 et MIT / CC0 sont compatibles (le code MIT peut être inclus dans une œuvre GPL-3.0). Un ouvrage
+AGPL-3.0 peut être combiné avec un ouvrage GPL-3.0 (GPL-3.0, article 13) ; les termes de l'AGPL s'appliquent alors à la
+partie AGPL.
+
+Texte des licences : LICENSE (GPL-3.0). Les licences MIT de jsPDF, qrcodejs et lz-string sont celles de leurs dépôts
+respectifs, liés ci-dessus.

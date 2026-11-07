@@ -55,12 +55,18 @@ export function formatHeadline(result) {
   return result.mate ? formatMate(result.mate) : formatScore(result.score);
 }
 
+// Mention de Scan (P25, obligation de crédit de la GPL-3.0 et choix de Mickaël) : « Moteur : Scan 3.1 par Fabien Letouzey ».
+// UNE seule définition, reprise par l'écran « À propos » et les exports.
+export const SCAN_CREDIT = 'Moteur : Scan 3.1 par Fabien Letouzey';
+
 // Mention discrète sous/à côté du score : « Évaluation indicative · profondeur 9 ». Pas de profondeur pour une
 // partie terminée (rien n'a été cherché). `engineName` (facultatif, étape 4.1) : nom du moteur quand ce n'est pas
-// le moteur par défaut → « … · profondeur 9 · moteur V1b » ; absent = texte d'avant (V0).
-export function formatMeta(result, engineName = null) {
+// le moteur par défaut → « … · profondeur 9 · moteur V1b » ; absent = texte d'avant (V0). `engineId` = 'scan' : « Moteur :
+// Scan 3.1 par Fabien Letouzey · profondeur 9 · WebAssembly » (plus de « Évaluation indicative »).
+export function formatMeta(result, engineName = null, engineId = null) {
   if (!result) return '';
   if (result.mate && result.mate.in === 0) return '';
+  if (engineId === 'scan') return `${SCAN_CREDIT} · profondeur ${result.depth} · WebAssembly`;
   return `Évaluation indicative · profondeur ${result.depth}${engineName ? ` · moteur ${engineName}` : ''}`;
 }
 
