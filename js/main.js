@@ -628,7 +628,8 @@ function loadSavedAnalysisEngine() {
   try { migrateAnalysisEngine(localStorage); } catch { /* localStorage indisponible */ } // Scan imposé UNE fois (P26)
   try {
     const saved = localStorage.getItem(ANALYSIS_ENGINE_KEY);
-    if (saved && isEngineId(saved)) return saved;
+    // P30 : le choix du moteur n'est plus dans l'interface ; une ancienne valeur (v0, v1b, v2b) est ignorée, Scan reste le moteur.
+    if (saved && isEngineId(saved) && isScanEngine(saved)) return saved;
   } catch { /* localStorage indisponible : moteur par défaut */ }
   return DEFAULT_ANALYSIS_ENGINE;
 }
@@ -1454,6 +1455,18 @@ el.helpOverlay.addEventListener('click', (e) => { if (e.target === el.helpOverla
 function openAboutOverlay() { el.themeMenu.hidden = true; closeHelpOverlay(); el.aboutOverlay.hidden = false; }
 function closeAboutOverlay() { el.aboutOverlay.hidden = true; }
 el.btnAbout.addEventListener('click', openAboutOverlay);
+// « Film de la partie » (P31) : au clic, la partie ACTIVE (coups, quelques en-têtes, orientation du damier) est déposée dans
+// sessionStorage (damika:film-current) ; film.html l'analyse avec Scan (WebAssembly). Lecture seule : rien n'est modifié ici.
+function storeFilmGame() {
+  try {
+    const h = {};
+    for (const k of ['White', 'Black', 'Date', 'Result']) if (headers[k]) h[k] = String(headers[k]);
+    const moves = fullMoveList(game).map((m) => moveNotation({ ...m, annotation: null }));
+    sessionStorage.setItem('damika:film-current', JSON.stringify({ v: 1, moves, headers: h, flipped, savedAt: Date.now() }));
+  } catch { /* stockage indisponible : film.html affichera « aucune partie » */ }
+}
+document.getElementById('link-film').addEventListener('click', storeFilmGame);
+document.getElementById('link-film').addEventListener('auxclick', storeFilmGame);
 el.helpAboutLink.addEventListener('click', openAboutOverlay);
 el.aboutCloseX.addEventListener('click', closeAboutOverlay);
 el.aboutOverlay.addEventListener('click', (e) => { if (e.target === el.aboutOverlay) closeAboutOverlay(); });
@@ -3715,11 +3728,11 @@ function refreshThemeMenuOptions() {
   });
   // Moteur d'analyse : la case cochée est le moteur RÉELLEMENT utilisé (après un repli sur V0, ce n'est plus le
   // moteur mémorisé). Un changement relance l'analyse de la position affichée si elle est active.
-  renderThemeOptions(el.analysisEngineOptions, ENGINES, analysisController.engine, (v) => {
+  if (el.analysisEngineOptions) renderThemeOptions(el.analysisEngineOptions, ENGINES, analysisController.engine, (v) => {
     analysisController.setEngine(v);
     try { localStorage.setItem(ANALYSIS_ENGINE_KEY, v); } catch { /* pas de mémorisation */ }
   });
-  renderThemeOptions(el.openingVarietyOptions, {
+  if (el.openingVarietyOptions) renderThemeOptions(el.openingVarietyOptions, {
     on: { label: 'Activée (V2b)', hint: "Premiers coups d'une partie jouée en direct : coup tiré au hasard parmi les coups presque aussi bons" },
     off: { label: 'Désactivée', hint: 'Toujours le meilleur coup' },
   }, openingVarietyOn ? 'on' : 'off', (v) => {
