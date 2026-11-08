@@ -630,6 +630,8 @@ Détail, sources, points d'interprétation, effets sur le fichier de référence
 
 **Chantier P35 « bouton Analyse court, son identique à l'appli » (08/11/2026) : réalisé, NON commité.** Bouton de la barre du bas = « Analyse » (infobulle et aria-label : « Analyse de la partie »). **Règle de son de l'appli (relevée dans `main.js`)** : son SEULEMENT en avançant d'un coup (▶ et →) : `capture` si prise, sinon `move`, puis `game-end` si la position atteinte n'a plus de coup ; AUCUN son au recul (◀, ←), au début, à la fin, au clic sur un coup de la liste (`jumpToPly`) ni au chargement depuis la bibliothèque ; `game-start` à « Nouvelle partie », à l'import et à l'éditeur ; lecture automatique : comme ▶ à chaque coup. L'écran d'analyse (`stepTo()` dans `film.js`) applique la même règle (donc silencieux au recul : correction de P34). Pas de lecture automatique dans l'écran d'analyse.
 
+**P33 à P35 commités et poussés (P36)** : `5bfd908`, `bd74933` ; aperçu https://ddaffa5a-damika.shell-green.workers.dev (version `ddaffa5a`), production non déployée.
+
 **État au 01/11/2026 :** 3 parties jouées contre Scan niveau 7 le 01/11, 3 défaites ; thèmes : centre non disputé, pas de portes de sortie, horizon, pion isolé en 24 trop tôt. P19 (variété d'ouverture) en pause ; prochain prompt : P20.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est
