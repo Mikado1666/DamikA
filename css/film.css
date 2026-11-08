@@ -1,13 +1,9 @@
 /* DAMIKA — écran « Film de la partie » (maquette B) : tout tient à l'écran, aucun défilement. */
-:root {
-  --bg: #17110c; --panel: #211810; --border: #3a2c1e; --gold: #e5c070; --text: #f1e6d2; --muted: #a8977c;
-  --sq-dark: #8a5a2b; --sq-light: #dcc38f;
-  --bad: #e07a5f; --good: #7fb685;
-}
+/* Couleurs, thème clair / sombre et polices : celles de l'appli (css/style.css, chargée avant ce fichier). Aucune couleur propre au Film. */
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+  font-size: 14px;
   overflow: hidden;
 }
 button { font: inherit; color: inherit; }
@@ -19,71 +15,72 @@ button { font: inherit; color: inherit; }
   grid-template-areas: "head head" "board side" "foot foot";
 }
 .film-head { grid-area: head; display: flex; align-items: center; gap: 18px; min-width: 0; }
-.film-back { color: var(--muted); text-decoration: none; font-size: 13px; white-space: nowrap; }
+.film-back { color: var(--text-2); text-decoration: none; font-size: 13px; white-space: nowrap; }
 .film-back:hover { color: var(--gold); }
-.film-title { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 30px; color: var(--gold); margin: 0; line-height: 1; white-space: nowrap; }
+.film-title { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; font-weight: 800; font-size: 26px; color: var(--gold); margin: 0; line-height: 1; white-space: nowrap; }
 .film-games { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; justify-content: flex-end; min-width: 0; }
 .film-games[hidden] { display: none; }
 /* analyse en direct : progression + annulation (à droite du titre) */
-.film-progress { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; font-size: 12.5px; color: var(--muted); }
+.film-progress { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; font-size: 12.5px; color: var(--text-2); }
 .film-progress[hidden] { display: none; }
 .film-progress-label { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.film-progress-bar { display: inline-block; width: 150px; height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; flex: none; }
+.film-progress-bar { display: inline-block; width: 150px; height: 6px; border-radius: 999px; background: var(--panel-border); overflow: hidden; flex: none; }
 .film-progress-fill { display: block; height: 100%; width: 0; background: var(--gold); }
 /* message à la place des panneaux (aucune partie, rien à analyser…) */
 .film-msg { display: none; }
 .film-side[data-state="msg"] { display: flex; align-items: center; }
 .film-side[data-state="msg"] .film-panel { display: none; }
 .film-side[data-state="msg"] .film-msg { display: block; max-width: 520px; padding: 0 8px; }
-.film-msg h2 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 28px; margin: 0 0 8px; color: var(--gold); }
-.film-msg p { margin: 0 0 14px; color: var(--text); line-height: 1.45; }
+.film-msg h2 { font-weight: 700; font-size: 28px; margin: 0 0 8px; color: var(--gold); }
+.film-msg p { margin: 0 0 14px; color: var(--text-0); line-height: 1.45; }
 .film-game-btn {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--muted);
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--text-2);
   font-size: 12.5px; white-space: nowrap;
 }
-.film-game-btn:hover { color: var(--text); }
+.film-game-btn:hover { color: var(--text-0); }
 .film-game-btn.active { border-color: var(--gold); color: var(--gold); }
 .film-game-btn[disabled] { opacity: .45; cursor: default; }
 
 /* colonne du damier : largeur imposée par la hauteur disponible */
 .film-board-col { grid-area: board; display: flex; flex-direction: column; gap: 6px; min-height: 0; --bsz: min(calc(100dvh - 190px), 46vw); width: var(--bsz); }
-.film-board-wrap { width: var(--bsz); height: var(--bsz); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--panel); }
-#film-board { width: 100%; height: 100%; display: block; }
+.film-board-wrap { width: var(--bsz); height: var(--bsz); }
+/* le BoardRenderer de l'appli fixe lui-même la taille en pixels ; flèche du coup joué = rouge de l'appli */
+#film-board { display: block; --arrow-color: #e5392a; /* rouge vif, lisible sur les 4 damiers (le --danger du thème clair est trop sombre sur l'ardoise) */ }
 .film-players { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; min-height: 18px; }
 .film-players .nm { font-weight: 600; }
-.film-players .tag { color: var(--muted); font-size: 12px; }
+.film-players .tag { color: var(--text-2); font-size: 12px; }
 .film-nav { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.film-nav button { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; width: 34px; height: 28px; cursor: pointer; }
+.film-nav button { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 6px; width: 34px; height: 28px; cursor: pointer; }
 .film-nav button:hover { border-color: var(--gold); color: var(--gold); }
-.film-ply { min-width: 150px; text-align: center; color: var(--muted); font-size: 12.5px; }
+.film-ply { min-width: 150px; text-align: center; color: var(--text-2); font-size: 12.5px; }
 
 .film-side { grid-area: side; display: grid; grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; min-height: 0; min-width: 0; }
-.film-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.film-panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 14px; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .film-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-.film-panel h2 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 20px; margin: 0; color: var(--text); }
-.film-hint { color: var(--muted); font-size: 11.5px; }
-.film-legend { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.film-panel h2 { font-weight: 700; font-size: 20px; margin: 0; color: var(--text-0); }
+.film-hint { color: var(--text-2); font-size: 11.5px; }
+.film-legend { color: var(--text-2); font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .lg { display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-left: 8px; }
-.lg-w { background: var(--text); } .lg-b { background: var(--gold); }
+.lg-w { background: var(--text-0); } .lg-b { background: repeating-linear-gradient(90deg, var(--gold) 0 7px, transparent 7px 11px); }
 #film-chart { flex: 1 1 0; min-height: 0; width: 100%; cursor: pointer; }
-.film-note { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+.film-note { margin: 2px 0 0; color: var(--text-2); font-size: 11.5px; line-height: 1.35; }
 
 .film-losses { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; flex: 1; align-content: start; }
-.film-loss-col h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.film-loss-col h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
 .film-loss {
   display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; width: 100%; text-align: left;
-  background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; margin-bottom: 5px; cursor: pointer;
+  background: transparent; border: 1px solid var(--panel-border); border-radius: 6px; padding: 5px 8px; margin-bottom: 5px; cursor: pointer;
 }
-.film-loss:hover, .film-loss.active { border-color: var(--gold); background: rgba(229, 192, 112, .08); }
-.film-loss .rk { color: var(--gold); font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 18px; }
+.film-loss:hover, .film-loss.active { border-color: var(--gold); background: var(--gold-soft); }
+.film-loss .rk { color: var(--gold); font-weight: 700; font-size: 18px; }
 .film-loss .mv { font-weight: 600; }
-.film-loss .mv small { display: block; color: var(--muted); font-weight: 400; font-size: 11.5px; }
-.film-loss .ls { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--bad); text-align: right; }
-.film-loss .ls small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
-.film-loss.gagnant .ls { color: var(--muted); }
-.film-empty { color: var(--muted); font-size: 12.5px; padding: 4px 2px; }
+.film-loss .mv small { display: block; color: var(--text-2); font-weight: 400; font-size: 11.5px; }
+.film-loss .ls { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--danger); text-align: right; }
+.film-loss .ls small { display: block; font-weight: 500; color: var(--text-2); font-size: 11px; }
+.film-loss.gagnant .ls { color: var(--text-2); }
+.film-empty { color: var(--text-2); font-size: 12.5px; padding: 4px 2px; }
 
-.film-foot { grid-area: foot; color: var(--muted); font-size: 11.5px; line-height: 1.35; display: flex; justify-content: space-between; gap: 16px; min-height: 16px; }
+.film-foot { grid-area: foot; color: var(--text-2); font-size: 11.5px; line-height: 1.35; display: flex; justify-content: space-between; gap: 16px; min-height: 16px; }
 
 /* étroit : une seule colonne, toujours sans défilement */
 @media (max-width: 900px) {
