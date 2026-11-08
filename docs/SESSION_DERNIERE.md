@@ -1264,7 +1264,7 @@ Aperçu sans rien lancer : `node training/chain-nuit4.mjs --dry-run --start 19:4
 - **Fonctionnement** : bouton « ✎ Éditer une position » (barre du haut). Palette Pion blanc / Pion noir / Dame blanche / Dame noire / Gomme (reposer la même pièce sur une case l'efface), « Vider », « Position initiale », trait Blancs / Noirs, compteur de pièces en direct. « Analyser » valide (messages en français, listés sous la palette), remplace la partie (historique et futur vides, trait choisi, en-tête « Position éditée », comme « Nouvelle partie ») et ACTIVE l'analyse existante (moteur V0/V1b du menu). « Annuler » ou Échap : la partie précédente n'a jamais été touchée, et l'analyse reprend si elle était active.
 - **Validation** : ≤ 20 pièces par camp, ≥ 1 par camp, pas de pion blanc sur 1-5, pas de pion noir sur 46-50, trait choisi, et camp au trait avec au moins un coup (sinon « partie déjà terminée »). Case claire : impossible à cliquer (numérotation 1-50 seule).
 - **Tests** : `node tests/position-editor.mjs` (30 contrôles, verts). Cas de référence : dame blanche 28, pions noirs 14 et 37, pion blanc 46 → exactement 3 prises (28x5, 28x10, 28x41), un seul pion pris à chaque fois, l'autre reste ; l'analyse propose 28x41. **Navigateur** (127.0.0.1:8934, clics simulés sur le canvas) : pose, validation, Analyser (« Mat en 4 », flèche verte), prise 28x5 jouée (le pion 37 reste), Échap, mise en page à 390 px (aucun débordement horizontal).
-- **Point à décider — pion blanc en 5** : « pions blancs 5 et 46 » de la position de Patrick est REFUSÉ par la règle demandée (5 est sur la rangée de promotion des Blancs). Je l'ai gardé refusé (message clair) ; à confirmer : s'agit-il d'une dame en 5 (acceptée) ou la règle doit-elle être assouplie ?
+- **Point à décider — pion blanc en 5** : « pions blancs 5 et 46 » de la position d'un correspondant est REFUSÉ par la règle demandée (5 est sur la rangée de promotion des Blancs). Je l'ai gardé refusé (message clair) ; à confirmer : s'agit-il d'une dame en 5 (acceptée) ou la règle doit-elle être assouplie ?
 - **Limites** : (1) la partie éditée ne part pas de la position initiale : exporter en PDN/lien/ajouter à la Bibliothèque produirait un fichier SANS la position de départ (pas de balise FEN/Setup) ; après F5 la partie éditée est restaurée depuis la position initiale (le PDN sauvegardé n'a pas de départ) ; (2) pas de glisser-déposer ni de peinture continue, un clic = une case ; (3) pendant l'édition flèches, molette, Espace et A sont désactivés ; « Nouvelle partie » ou un chargement ferment l'éditeur ; (4) le compteur de temps et les limites de finale 6.3/6.4 repartent de la position éditée (pas de coups antérieurs).
 - P5 terminé, commits 1f6cfde et 921f18d, non poussés
 - P6 : version 856ceb5f-2fed-49f4-bfdf-f6df48c823d3 (éditeur de position P4) déployée à 100 % le 27/10/2026. Commits non poussés.
@@ -1540,7 +1540,7 @@ Aperçu sans rien lancer : `node training/chain-nuit4.mjs --dry-run --start 19:4
 - **Tests** : position initiale → `34-30` ; position de la partie 3 après 6...18-23 (rejouée avec rules.js, Blancs au trait) → `39-33`, **légal selon `generateLegalMoves`**.
 - **Niveau 7 de Lidraughts** : reproductible par `level depth=11 move-time=0.5` (profondeur max 11, 500 ms) ; livre : `set-param name=book value=true`, `book-ply=8`, `book-margin=…` (60 demandé : le paramètre existe, plage 0-100, unité à confirmer sur le texte du livre). `threads=1` (défaut), `tt-size`, `bb-size` (tables de finale 0-7). **Non reproductible avec certitude** : le réglage exact de Lidraughts (fork, éventuelle limite de nœuds, tables de finale, version de l'évaluation) ; à valider en comparant avec les coups des 3 parties perdues.
 - **Mesures** : démarrage ≈ 320 ms (handshake + `init`, évaluation chargée). Coup à `depth=11` : 16 à 27 ms la première fois, ≈ 0-1 ms ensuite (table de transposition conservée entre deux coups identiques) : la limite de 500 ms n'est donc jamais atteinte, c'est la profondeur 11 qui borne. Moyenne ≈ 8 ms sur 6 coups (non représentatif : à refaire sur une partie entière). Parallélisme : `threads=1` par processus, 8 cœurs logiques → 7 processus Scan simultanés (cœurs − 1) sans problème prévisible ; mémoire non mesurée (tt-size 24).
-- **Blocages** : aucun. Point d'attention : le fichier PDN des parties est `Downloads\Damika - Scan - 3.pdn` (le chemin `claude/scan7-parties.pdn` du prompt n'existe pas) ; la partie 3 y compte 14 coups seulement (0-2 après 14...23-29).
+- **Blocages** : aucun. Point d'attention : le fichier PDN des parties est le PDN des parties contre Scan (dossier des téléchargements) (le chemin `claude/scan7-parties.pdn` du prompt n'existe pas) ; la partie 3 y compte 14 coups seulement (0-2 après 14...23-29).
 - **Suite proposée** : écrire `training/scan-arena` (processus Scan via `child_process`, validation de longueur de `pos`, rejeu des coups avec rules.js, 7 en parallèle) ; plan B (positions extraites) inutile.
 
 ## P21 — Arène DamikA contre Scan (06/11/2026, mesure seulement)
@@ -1549,8 +1549,8 @@ Rien de modifié dans le moteur, l'évaluation, l'appli, `data/` ; rien commité
 
 **Commandes** (le chemin de Scan est passé par `SCAN_EXE` ou `--scan`, jamais en dur) :
 ```
-export SCAN_EXE="C:/Users/micka/Documents/Turbo Dambase/Engines/Scan 3.1/scan.exe"
-node training/scan-arena/calibrate.mjs "<Downloads>/Damika - Scan - 1.pdn" "…- 2.pdn" "…- 3.pdn"        # calage
+export SCAN_EXE="<dossier de Scan 3.1>/scan.exe"
+node training/scan-arena/calibrate.mjs <partie1.pdn> <partie2.pdn> <partie3.pdn>        # calage
 node training/scan-arena/arena.mjs --pairs 10 --engine v0 --depth 8 --out training/scan-arena/out/s1    # série (--engine v2b possible)
 node training/scan-arena/analyse-losses.mjs training/scan-arena/out/s1                                    # bascules
 ```
@@ -1858,7 +1858,7 @@ Captures (`training/scan-arena/out/p25/`) :
 
 1. **Rien n'est commité ni déployé.** `deploy.ps1` fait `git pull` dans un AUTRE dossier (`C:\Users\micka\DamikA`, pas ce dépôt-ci `C:\Users\micka\damika`) puis copie : il faut donc commiter et pousser avant de le lancer. Le dépôt GitHub étant public, `LICENSE`, `NOTICE`, 8,5 Mo de binaires et le source de Scan y deviendront visibles : ton accord est attendu.
 2. **Choix de moteur déjà mémorisé** : Scan est le défaut quand la clé `damika:analysis-engine` est absente. Si ton navigateur a déjà mémorisé V0, V1b ou V2b, ce choix est respecté et tu devras choisir « Scan 3.1 » une fois dans le menu 🎨. À toi de dire si l'on doit forcer Scan pour tout le monde.
-3. **Titulaire du droit d'auteur** : `LICENSE`/`NOTICE`/`README.md` indiquent « Copyright (C) 2026 Mickaël Callegari » (nom du compte git) : à confirmer. Aucun en-tête de licence n'a été ajouté fichier par fichier dans le code de DamikA (facultatif).
+3. **Titulaire du droit d'auteur** : `LICENSE`/`NOTICE`/`README.md` indiquent « Copyright (C) 2026 » suivi du nom du titulaire (nom du compte git) : à confirmer. Aucun en-tête de licence n'a été ajouté fichier par fichier dans le code de DamikA (facultatif).
 4. **Écart avec la consigne** : la colle JavaScript n'est pas celle de Lidraughts (leurs binaires ne sont pas utilisés) mais celle générée par Emscripten 7.0.0 (MIT / UIUC) ; `NOTICE` cite donc Emscripten, et Lidraughts pour l'origine de l'adaptation et du protocole.
 5. **Sons Lidraughts** (voir ci-dessus) : licence à confirmer.
 6. **`_headers`** (types MIME de `LICENSE` et `NOTICE`, fichiers sans extension) : écrit d'après la documentation Cloudflare lue en P24, non vérifié en ligne tant que le site n'est pas publié. Sans lui, ces deux liens se téléchargeraient au lieu de s'afficher (constaté en local : `application/octet-stream`).
@@ -1896,3 +1896,257 @@ Capture : `C:\Users\micka\damika\training\scan-arena\out\p26\analyse-en-ligne.pn
 3. `scan.data` est servi sans type de contenu ; sans conséquence aujourd'hui, mais ajoutable dans `_headers` (`Content-Type: application/octet-stream`) si on le souhaite.
 4. Le Service Worker reste désactivé (voir P25 : fichiers de Scan à y mettre en cache).
 5. Reste hors suivi git : `training/scan-arena/` (scripts P21-P24, hors intégration), `tests/nada-vs-damika.mjs`, `Claude outputs/`.
+
+## P27 — Latence du danger sur de vraies parties (calcul seulement, 07/11/2026)
+
+Aucune modification de l'appli, du moteur, de `data/` ni de `js/`. Nouveau code dans `training/scan-arena/` : `p27-lib.mjs` (rejeu rules.js, conversion Hub → FMJD, pertes, latence), `p27-run.mjs` (calcul), `p27-report.mjs` (danger.jsonl, PDN annotés, résumé, contrôles). Sorties dans `training/scan-arena/out/p27/` (ignoré par git). Rien commité.
+
+**Durée.** Estimation avant lancement : ≈ 6 s par partie en série (mesuré sur 3 parties), donc ≈ 7 min en série et ≈ 3 min à 7 en parallèle, très en dessous des 40 min : les 61 défaites de (b) ont toutes été gardées (pas de réduction à 30). Durée réelle du calcul principal : **2,66 min** (64 parties, 7 en parallèle) ; contrôle B 0,12 min, contrôle C 0,05 min.
+
+**Commandes** (`SCAN_EXE="<dossier de Scan 3.1>/scan.exe"`) :
+```
+node training/scan-arena/p27-run.mjs --tag A --parallel 7                       # calcul principal (a + b)
+node training/scan-arena/p27-run.mjs --tag B --only a --parallel 3              # même calcul refait
+node training/scan-arena/p27-run.mjs --tag C --only a --parallel 3 --no-newgame --reverse   # TT conservée, ordre inversé
+node training/scan-arena/p27-report.mjs                                         # danger.jsonl, PDN, summary.json, contrôles
+```
+
+**Méthode (et écarts à la consigne).** Scan natif 3.1, 1 thread, sans livre, un processus par partie. Pour chaque coup du côté DamikA : une recherche profondeur 14 sur la position P et une recherche profondeur 13 sur la position après le coup joué ; les lignes `info` de chaque itération donnent le score à chaque profondeur (dernière ligne de chaque profondeur). Perte(d) = score(P, d) + score(après, d−1) (pions, point de vue du camp qui joue) pour d = 1, 3, 5, 7, 9, 11, 13 ; référence = score(P,14) + score(après,13). Faute = perte de référence ≥ 0,5 ; latence = plus petite profondeur testée à partir de laquelle la perte reste ≥ 0,5 pour toutes les profondeurs testées suivantes ; « instable » si la perte apparaît puis disparaît.
+- **Table de transposition vidée (`new-game`) avant chaque recherche** pour le calcul principal : sinon la recherche de P (profondeur 14) laisse dans la table des valeurs profondes que la recherche de la position suivante (profondeur 13 ou moins) réutilise, ce qui rapprocherait faussement les pertes peu profondes de la perte profonde.
+- **Scan n'a pas de profondeur 0** : pour d = 1, la valeur du coup joué est lue à la profondeur 1 de la position suivante (au lieu de 0).
+- Une faute dont la perte est ≥ 0,5 à la référence mais < 0,5 à la profondeur 13 reçoit la latence **14** (« référence seule ») ; classe ajoutée au tableau demandé (≤ 3, 4-6, 7-9, 10-13, instable).
+- Ignorés : coups forcés (un seul plateau d'arrivée) et positions de 6 pièces ou moins au total. Un coup qui laisse l'adversaire sans coup est aussi ignoré (coup gagnant).
+- Sanction : variante de la recherche profondeur 13 de la position suivante, 6 premiers demi-coups convertis en numéros FMJD et vérifiés légaux avec rules.js (aucun coup illégal ; 8 variantes plus courtes que 6 demi-coups, fin de partie). « Pions perdus » = matériel net (pion 1, dame 3) perdu par le camp fautif entre la position avant le coup joué et la fin des 6 demi-coups (négatif = gain). Cases = pièces prises dans la première prise de la variante (coup joué compris), avec le camp de la victime.
+- Vision du joueur : 5 (paramètre `--vision`). Faute de calcul = latence ≤ 5 ; piège profond = latence > 5 (la latence 14 compte donc comme piège profond).
+
+**Étape 1 — parties.** (a) les 3 PDN des parties contre Scan (dossier des téléchargements) (DamikA : blancs, noirs, blancs). (b) 61 défaites de `out/s3-v2b` (DamikA V2b, côté DamikA). **Les 64 parties se rejouent intégralement avec rules.js** (aucune écartée). Les rafles ambiguës (même départ et arrivée, pièces prises différentes) de (b) gardent leur suffixe d'origine pour le rejeu. (c) : liste en fin de section.
+
+**Résumé chiffré** (calcul principal) :
+
+| | (a) 3 parties | (b) 61 défaites | Total |
+|---|---|---|---|
+| Coups du côté DamikA | 94 | 3 991 | 4 085 |
+| Ignorés : forcés / finale ≤ 6 pièces | 21 / 0 | 728 / 289 | 749 / 289 |
+| Coups analysés | 73 | 2 974 | 3 047 |
+| Fautes (perte ≥ 0,5) | 4 | 205 | 209 |
+| Latence ≤ 3 | 0 | 28 | 28 |
+| Latence 4-6 | 0 | 3 | 3 |
+| Latence 7-9 | 0 | 9 | 9 |
+| Latence 10-13 | 2 | 19 | 21 |
+| Latence 14 (référence seule) | 1 | 33 | 34 |
+| Instables | 1 | 113 | 114 |
+| Fautes de calcul (latence ≤ 5) / pièges profonds | 0 / 3 | 31 / 61 | 31 / 64 |
+| Part d'instables | 25 % | 55 % | 55 % |
+| Dont « coup joué = meilleur coup de Scan » (bruit pur) | 1 | 38 | 39 |
+
+Hors ces 39 cas de bruit pur (coup joué identique au meilleur coup à la profondeur 14, mais perte mesurée ≥ 0,5 parce que deux recherches indépendantes ne donnent pas le même score) : 170 fautes, dont 89 instables (52 %), 31 fautes de calcul, 50 pièges profonds (25 de latence 14). Les trois défaites contre Lidraughts niveau 7 ne contiennent que 4 fautes de ce type sur 73 coups analysés : elles se sont perdues par accumulation de petites pertes sous le seuil, pas par fautes isolées.
+
+**Contrôles (3 parties Damika-Scan, 73 coups).**
+- Calcul refait à l'identique (B, table vidée à chaque recherche) : **0 faute dont la latence change**, 0 perte différente : le calcul est reproductible.
+- Table de transposition conservée entre les recherches et coups pris à l'envers (C) : 1 faute sur 4 change de statut (faute / non faute) et **les 3 fautes communes changent toutes de latence** (instable → 3, 14 → instable, 11 → instable) ; 307 pertes mesurées diffèrent, écart maximal 1,49 pion. L'effet de la table est donc très fort sur ces fautes.
+- **Proportion de fautes instables : 55 % (114 sur 209).** Sensibilité : en acceptant qu'une perte reste « visible » à partir de 0,3 pion (au lieu de 0,5), il reste 95 instables sur 209 (45 %) ; hors bruit pur, 70 sur 170 (41 %). La profondeur 13 elle-même ne confirme la faute que dans 125 cas sur 209 (60 %).
+
+**Les 10 fautes aux latences les plus élevées** (latences stables, hors bruit pur ; 25 fautes ont la latence maximale 14, le classement se fait donc sur la perte de référence ; numéros FMJD ; sanction = 6 demi-coups après le coup joué) :
+
+| Partie | Coup | Joué | Meilleur | Lat. | Perte | Sanction (variante) | Pions éq. perdus | Cases prises (1re prise) |
+|---|---|---|---|---|---|---|---|---|
+| b-96 | 50… Noirs | 13-18 | 7-12 | 14 | 1,36 | 30-25 14-19 24x13 18x9 25-20 7-12 | 0 | 19 (Noirs) |
+| b-02 | 43… Noirs | 14-19 | 1-7 | 14 | 0,92 | 33-29 1-7 43-38 | 0 | aucune |
+| b-90 | 38… Noirs | 18-23 | 20-25 | 14 | 0,89 | 40-34 20-25 27-21 2-8 47-41 14-20 | 0 | aucune |
+| b-64 | 42… Noirs | 14-20 | 14-19 | 14 | 0,86 | 29-23 16-21 36-31 21-27 32x21 9-14 | 1 | 27 (Noirs) |
+| b-74 | 50… Noirs | 13-18 | 28-33 | 14 | 0,79 | 7-2 18-22 2-24 22-27 24-38 5-10 | 2 | aucune |
+| b-59 | 46. Blancs | 30-25 | 45-40 | 14 | 0,74 | 12-17 22x11 6x17 45-40 17-21 43-38 | 0 | 17 (Noirs) |
+| b-91 | 30. Blancs | 36-31 | 22-17 | 14 | 0,72 | 24-29 33x24 20x29 31-27 11-17 22x11 | −1 | 29 (Noirs) |
+| b-59 | 50. Blancs | 38-32 | 40-34 | 14 | 0,69 | 24-29 32-28 29-33 28x39 31-37 42x31 | −2 | 33 (Noirs) |
+| b-47 | 53. Blancs | 27-21 | 41-36 | 14 | 0,66 | 17-11 21-16 11-2 32-28 39-44 28-23 | 0 | aucune |
+| b-20 | 21… Noirs | 2-7 | 24-30 | 14 | 0,64 | 38-33 3-9 42-38 24-30 35x24 19x30 | 0 | 30 (Noirs) |
+
+Les 10 plus élevées parmi les latences ≤ 13 : b-50 (51… Noirs, 24-29 au lieu de 15-20, latence 13, perte 1,38, sanction 6-1 15-20 1-6 26-31 27x36 29-34, 3 pions éq. perdus, case 31) ; b-80 (38… Noirs, 14-20 au lieu de 3-9, 13, 1,03, 29-23 18x29 33x24 20x29 39-34 3-8, case 23 prise aux Blancs) ; b-96 (46… Noirs, 17-22 au lieu de 7-12, 13, 0,85, case 19) ; b-53 (63. Blancs, 50-45 au lieu de 17-26, 13, 0,73) ; b-17 (41. Blancs, 48-43 au lieu de 39-34, 13, 0,72, case 32) ; b-67 (33. Blancs, 33-29 au lieu de 48-42, 13, 0,71) ; b-86 (23… Noirs, 2-7 au lieu de 9-14, 13, 0,68) ; b-41 (56. Blancs, 38-33 au lieu de 37-32, 11, perte 92,79 : score de mat des tables, pas un chiffre en pions) ; b-13 (71. Blancs, 24-20 au lieu de 24-19, 11, 4,83, sanction 5-32 15-10 32x5…, case 10) ; a1 (45. Blancs, 33-28 au lieu de 33-29, 11, 1,91, sanction 17-22 28x17 21x12 46-41 19-23 35-30, case 22). Pour (a), `danger.jsonl` contient : a1 45. 33-28 (latence 11, piège profond) et 47. 32-28 (latence 13, perte 0,77, 23x41 prend les cases 28 et 37), a2 24… 14-19 (latence 14), a3 4. 30-24 (instable, perte proche du seuil).
+
+**Constats sur la sanction.** Sur les 170 fautes hors bruit pur : 66 voient une prise subie par le camp fautif dans les 6 premiers demi-coups ; 69 se soldent par au moins 1 pion éq. perdu net, 77 par 0 et 24 par un gain net (échange favorable après coup). Une perte de 0,5 à 1 pion mesurée par Scan est donc souvent positionnelle : la sanction « pions perdus » reste muette.
+
+**Fichiers de sortie** (`training/scan-arena/out/p27/`) : `danger.jsonl` (209 fautes ; ajoute `coupJoueEstLeMeilleur`), `danger-annotated-<partie>.pdn` (64 PDN : `a1`…`a3` et `b-NN-DamikA-blancs|noirs`), `summary.json` (résumés, contrôles, sensibilité, top 10), `run-A/` `run-B/` `run-C/` (`moves.jsonl` = tous les coups analysés avec les pertes par profondeur, `faults.jsonl`, `meta.json`). **Chaque PDN écrit a été relu et rejoué avec rules.js (64/64 : tous les coups jouables et autorisés, nombre de commentaires lus = nombre de fautes).** Convention des commentaires de l'appli : `{commentaire} coup` AVANT le coup annoté (le tokenizer de DamikA l'attache au coup suivant) ; Turbo Dambase peut les afficher décalés selon sa version : à vérifier à l'ouverture. Les rafles ambiguës sont écrites avec le chemin complet (`46x19x30x39x11`).
+
+**PDN de parties trouvés sur la machine (c)** (nombre de parties, non analysés) : des archives de parties de tournoi (≈ 20 parties à deux noms de famille, dans un dossier d'archives), des bibliothèques de test de 50 parties, ≈ 25 petits fichiers d'une à quelques parties dans le dossier des téléchargements (dont des doublons) et trois fichiers de parties de DamikA contre Scan en 3 parties ; trois fichiers de bureau dont les balises de joueurs ne sont pas reconnues (décompte 0). Dossier du dépôt (ignoré par git) : `tests/pdn-local/` (bibliothèque de 50 parties, une partie contre Scan, extraits et copies complètes de la base de parties de tournoi, ≈ 760 000 parties nominatives, non analysées). Aucun dossier clairement nommé « FFJD » : l'archive de parties de tournoi à deux noms de famille en est le meilleur candidat.
+
+**Le calcul est-il stable et parlant : non, pas en l'état.** Il est reproductible (0 écart sur un calcul refait à l'identique) mais pas stable : 55 % des fautes sont instables (la perte apparaît puis disparaît selon la profondeur, souvent autour du seuil de 0,5 ; les profondeurs testées sont impaires pour la position et paires pour la suivante, et la référence 14 / 13 est l'inverse), 39 « fautes » sont le meilleur coup de Scan lui-même, la table de transposition change la latence des 3 fautes comparées, 34 fautes n'existent qu'à la profondeur de référence (latence 14, non interprétable), et la sanction à 6 demi-coups ne montre aucune perte de pion pour 45 % des fautes. Reste de parlant : 28 fautes visibles dès la profondeur ≤ 3 (vraies bévues) et une dizaine de pièges réellement profonds (latence 11-13 avec prise et pions perdus, comme a1 45. 33-28). Avant de construire l'écran : moyenner plusieurs profondeurs voisines (paire et impaire), prendre un seuil de maintien plus bas que le seuil de faute, écarter les fautes dont le coup joué est le meilleur coup, et ne présenter la latence que pour les fautes stables.
+
+## P28 — Mesure robuste du danger, courbe d'érosion, parties de Mickaël (calcul seulement, 07/11/2026)
+
+Aucune modification de l'appli, du moteur, de `data/` ni de `js/`. Nouveau code dans `training/scan-arena/` : `p28-run.mjs` (collecte, rejeu, une recherche profondeur 14 par position), `p28-report.mjs` (valeur lissée, seuil, latence, sanction, érosion, PDN, résumé), qui réutilisent `p27-lib.mjs`. Sorties dans `training/scan-arena/out/p28/` (ignoré par git). Rien commité.
+
+**Durée réelle.** Calcul principal : **3,0 min** (71 parties, 8 976 positions, 7 en parallèle) ; contrôle de reproductibilité 0,2 min ; rapport quelques secondes.
+
+**Commandes** (`SCAN_EXE="<dossier de Scan 3.1>/scan.exe"`) :
+```
+node training/scan-arena/p28-run.mjs --tag A --parallel 7                       # parties A + B + C, positions → out/p28/run-A/
+node training/scan-arena/p28-run.mjs --tag R --only "<ids des 3 parties>" --parallel 3   # refait pour la reproductibilité
+node training/scan-arena/p28-report.mjs                                         # tout le reste (positions/moves/faults.jsonl, erosion-*.json, annote-*.pdn, summary.json)
+```
+
+**Méthode.** Scan natif 3.1, 1 thread, sans livre, `new-game` avant chaque recherche, un processus par partie. Une recherche profondeur 14 par position (avant chaque coup + position finale) ; le score de chaque itération (1 à 14) est lu et ramené au point de vue des Blancs ; scores de tables (|score| ≥ 80) plafonnés à ±15. **V = moyenne des profondeurs 11 à 14.** Perte L = V(avant) − V(après) (Blancs) ou V(après) − V(avant) (Noirs). Ignorés : coups forcés (la valeur d'une position à coup forcé est reprise de la position suivante), positions de 6 pièces ou moins. Camp sans coup (partie finie) : ±15. **Seuil de faute = max(0,5 ; 95e centile du bruit).** Faute = L ≥ seuil ET coup joué différent du meilleur coup de Scan à la profondeur 14 (comparaison des plateaux d'arrivée, pas des notations). Latence : perte au niveau d (d = 3, 5, 7, 9, 11) = moyenne des profondeurs d et d+1 avant − même moyenne après ; latence = plus petit d dont la perte reste ≥ 0,6 × seuil jusqu'à d = 11, sinon « non classée ». Vision 5 (`--vision`). Sanction : 8 premiers demi-coups de la variante de la position après le coup joué (vérifiés légaux avec rules.js, aucun illégal), matériel net (pion 1, dame 3) perdu par le camp fautif depuis la position avant le coup, ≥ 1 = « sanction matérielle », sinon « positionnelle » (un gain net est donc « positionnelle »). Cases = pièces de la première prise de la variante APRÈS le coup joué (en P27 la prise du coup joué lui-même était comptée).
+- **Zone morte de la bascule** : le signe de V est ignoré tant que |V| < 0,2 pion ; la bascule est la première position après laquelle le signe final ne change plus.
+- Camp analysé (« joueur ») : Mickaël pour (A), DamikA pour (B) et (C) ; l'érosion est calculée pour les deux camps, les statistiques de fautes par ensemble pour le joueur seulement (sauf mention).
+
+**Parties de Mickaël retenues (A)** — 7 parties distinctes sur 15 fichiers (8 copies identiques supprimées). Aucune balise du second nom de joueur trouvée ; `td-*.pdn` et `bibliotheque*.pdn` non lus. Toutes se rejouent entièrement avec rules.js. Désignées ci-dessous par leur nombre de demi-coups (116, 88, 2, 122, 108, 127, 139).
+
+| Fichier | Mickaël | Adversaire | Résultat | Date | Demi-coups |
+|---|---|---|---|---|---|
+| partie 116 | Blancs | nulle | 2025.08.21 | 116 |
+| partie 88 | Blancs | nulle | 2026.07.17 | 88 |
+| partie 2 | Blancs | non fini | — | 2 (rien à analyser) |
+| partie 122 | Noirs | gagnée | 2026.09.12 | 122 |
+| partie 108 | Noirs | gagnée | 2026.09.26 | 108 |
+| partie 127 | Blancs | gagnée | 2026.09.26 | 127 |
+| partie 139 | Noirs | nulle | 2026.09.26 | 139 |
+
+**Seuil retenu et bruit mesuré** (parties (B), côté DamikA, coup joué = meilleur coup à la profondeur 14, position suivante non terminale ; n = 1 369 coups ; pour ces coups L devrait valoir 0) : moyenne 0,09 ; écart-type 0,47 ; médiane 0,01 ; 90e centile 0,32 ; **95e centile 0,51** ; 99e centile 2,0 ; extrêmes −4,07 et +6,43. **Seuil retenu : 0,51 pion** (le 95e centile dépasse 0,5). Le bruit est très inégal : pour les positions presque égales (|V avant| < 1, n = 534) le 95e centile n'est que de 0,10 ; pour |V| < 10 (n = 1 224) il est de 0,41. Un seuil unique de 0,51 est donc trop bas dans les positions déséquilibrées ou tactiques et trop haut dans les positions calmes.
+
+**Comparaison P27 / P28 sur (B)** (DamikA, 61 défaites) :
+
+| | P27 | P28 |
+|---|---|---|
+| Coups analysés | 2 974 | 2 950 |
+| Fautes | 205 | 237 |
+| « Fausses fautes » (coup joué = meilleur coup) | 38 (19 %) | 0 par définition ; mais 69 des 306 coups avec L ≥ seuil (23 %) sont des coups égaux au meilleur : le bruit reste, il est seulement filtré |
+| Fautes classées (stables / latence définie) | 92 (45 %) | 228 (96 %) |
+| Fautes de calcul / pièges profonds | 31 / 61 | 122 / 106 |
+| Non classées (P27 : instables) | 113 | 9 |
+| Sanction matérielle / positionnelle | — | 135 / 102 |
+
+Attention à la lecture des 96 % : le critère de latence (perte ≥ 0,6 × seuil ≈ 0,31 au niveau 11, qui recouvre la fenêtre de V) est presque toujours satisfait pour toute perte déjà ≥ 0,51. Les 70 coups « égaux au meilleur » dont L ≥ 0,51 sont eux aussi classés dans 63 cas sur 70 (90 %), dont 37 avec la latence 11 ; parmi les vraies fautes, 48 sur 237 ont la latence 11. La part classée est donc élevée mais peu sélective : elle ne prouve pas à elle seule qu'une faute est réelle.
+
+**Ensembles** (côté joueur) :
+
+| | (A) Mickaël | (B) DamikA V2b | (C) Damika - Scan |
+|---|---|---|---|
+| Parties / coups analysés | 7 / 276 | 61 / 2 950 | 3 / 73 |
+| Fautes | 20 | 237 | 2 |
+| Classées | 19 (95 %) | 228 (96 %) | 2 (100 %) |
+| Fautes de calcul / pièges profonds / non classées | 6 / 13 / 1 | 122 / 106 / 9 | 1 / 1 / 0 |
+| Sanction matérielle / positionnelle | 4 / 16 | 135 / 102 | 1 / 1 |
+| Perte totale (somme des L > 0) | 43,3 pions | 664,7 | 6,8 |
+| Part venant des fautes | 70 % | 51 % | 33 % |
+| Part venant des petites pertes (L > 0 sous le seuil) | 30 % | 34 % | 67 % |
+| Part venant du bruit (L ≥ seuil, coup = meilleur) | 0 % | 15 % | 0 % |
+| Érosion moyenne par partie | 6,2 | 10,9 | 2,3 |
+
+Cohérence avec P27 sur (C) : P27 trouvait 4 fautes sur 73 coups, P28 en trouve 2 : a1 45. 33-28 (piège profond, L 1,60, confirmé) et a3 4. 30-24 (faute de calcul de latence 3, L 0,67 ; instable en P27). a1 47. 32-28 est le meilleur coup de Scan (L 0,42 : bruit, plus compté) et a2 24… 14-19 passe sous le seuil. Les trois défaites contre Scan niveau 7 se perdent bien par petites pertes : 67 % de la perte de DamikA y vient de pertes sous le seuil.
+
+**Reproductibilité.** Calcul refait sur 3 parties (A) (257 coups comparables, 15 fautes) : **0 faute dont le statut ou le type change**, 0 latence qui change, écart maximal de L = 0,00. (`new-game` avant chaque recherche rend Scan déterministe.)
+
+**Par partie de Mickaël** (érosion = somme des pertes L > 0 par camp ; coups analysés = les deux camps ; « F » = faute ; fautes données pour Mickaël ; entre parenthèses : fautes de l'adversaire) :
+
+| Partie | Coups analysés | Érosion Blancs / Noirs | Bascule | 3 plus grosses pertes de Mickaël | Fautes de Mickaël (type, sanction) |
+|---|---|---|---|---|---|
+| partie 116 (Blancs, nulle) | 93 | 4,90 / 6,01 | après 38… (Noirs), avantage final Blancs (V 0,21) | 58. 13-9 (meilleur 47-42) 1,95 F ; 55. 28-22 (28-23) 0,54 F ; 35. 49-44 (40-34) 0,25 | 55. piège profond (lat. 11), positionnelle ; 58. piège profond (7), positionnelle (−2) (2) |
+| partie 88 (Blancs, nulle) | 68 | 2,87 / 3,35 | après 25. (Blancs), avantage final Noirs (V −0,38) | 25. 32-28 (49-43) 1,48 F ; 37. 42-37 (42-38) 0,24 ; 40. 35-30 (37-32) 0,19 | 25. piège profond (11), positionnelle (3) |
+| partie 2 | 0 | — | — | — | — |
+| partie 122 (Noirs, gagnée) | 96 | 9,28 / 4,60 | aucune | 47… 13-19 (22-28) 1,63 F ; 43… 18-23 (14-20) 0,75 F ; 55… 24-30 (18-23) 0,25 | 43… et 47… : pièges profonds (11 et 7), positionnelles (2) (5) |
+| partie 108 (Noirs, gagnée) | 80 | 18,90 / 4,61 | après 22. (Blancs), avantage final Noirs (V −0,64) | 48… 45-50 (14-20) 1,55 F ; 51… 19-23 (19-24) 1,09 F ; 36… 2-8 (14-19) 0,38 | 48… faute de calcul (3) ; 51… piège profond (11) ; positionnelles (8) |
+| partie 127 (Blancs, gagnée) | 104 | 15,38 / 21,06 | après 44… (Noirs), avantage final Blancs (V 0,40) | 58. 7-1 (25-20) 5,16 F ; 61. 5-37 (36-31) 2,60 F ; 62. 36-31 (37-14) 2,17 F | 6 fautes : 23. piège (9), 44. calcul (3, matérielle 1), 58. calcul (3), 59. piège (7, matérielle 1), 61. piège (7), 62. calcul (3) (11 fautes de l'adversaire) |
+| partie 139 (Noirs, nulle) | 115 | 11,63 / 10,93 | après 42. (Blancs), avantage final Noirs (V −0,30) | 56… 48-39 (14-20) 2,29 F ; 61… 15-38 (28-32) 1,48 F ; 49… 13-19 (14-19) 1,24 F | 7 fautes : 48… piège (7), 49… calcul (5), 55… non classée, 56… calcul (3, matérielle 1), 58… piège (7, matérielle 2), 61… piège (7), 65… piège (9) (7) |
+
+(Les grosses pertes des fins de partie, comme 58. 7-1 ou 62… 49-16 de la partie 127, correspondent à des finales de dames où les scores de tables sont plafonnés à ±15 : la perte est exacte en signe mais pas en grandeur.) Pour les trois parties « gagnées » ou nulles, l'érosion de l'adversaire est en général plus forte que la sienne : la courbe d'érosion décrit bien comment chaque partie bascule.
+
+**Les 10 positions les plus intéressantes** (fautes de Mickaël classées, matérielles d'abord, puis perte ; numéros FMJD ; position au format Hub dans `faults.jsonl`) :
+
+| Partie | Coup | Joué | Meilleur | L | Lat. | Type / sanction | Variante (8 demi-coups) | Cases de la 1re prise |
+|---|---|---|---|---|---|---|---|---|
+| partie 127 | 59. Blancs | 1-23 | 17-11 | 1,13 | 7 | piège profond / matérielle 1 | 13-19 23-34 38-42 34-30 19-23 30-19 42-47 19x10 | 14 (pièce noire) |
+| partie 139 | 58… Noirs | 21-26 | 28-32 | 0,63 | 7 | piège profond / matérielle 2 | 7-1 28-32 1-29 39-22 45-40 | — |
+| partie 139 | 56… Noirs | 48-39 | 14-20 | 2,29 | 3 | calcul / matérielle 1 | 28-23 19x28 12-8 28-33 45-40 21-27 8-2 39-50 | 23 (pièce blanche) |
+| partie 127 | 44. Blancs | 41-37 | 32-28 | 1,43 | 3 | calcul / matérielle 1 | 8-13 18-12 21-27 32x21 26x8 40-34 10-15 37-32 | 27 (pièce noire) |
+| partie 127 | 58. Blancs | 7-1 | 25-20 | 5,16 | 3 | calcul / positionnelle (−2) | 33-39 17-11 39-43 11-7 43-49 7-2 14-19 1-6 | — |
+| partie 127 | 61. Blancs | 5-37 | 36-31 | 2,60 | 7 | piège profond / positionnelle | 49-38 37-48 38-33 48-30 33x6 30x2 6-1 2-19 | 17 (pièce blanche) |
+| partie 116 | 58. Blancs | 13-9 | 47-42 | 1,95 | 7 | piège profond / positionnelle (−2) | 24-29 9-4 29-33 27-22 11-16 22-17 34-39 44-40 | — |
+| partie 122 | 47… Noirs | 13-19 | 22-28 | 1,63 | 7 | piège profond / positionnelle | 30-24 19x30 25x34 20-24 39-33 14-20 42-38 12-18 | 24 (pièce blanche) |
+| partie 88 | 25. Blancs | 32-28 | 49-43 | 1,48 | 11 | piège profond / positionnelle | 16-21 27x16 6-11 16x7 18-23 29x18 12x34 30x39 | 21 (pièce noire) |
+| partie 139 | 61… Noirs | 15-38 | 28-32 | 1,48 | 7 | piège profond / positionnelle | 41-37 38-32 1-6 32x46 6x33 26-31 35-30 31-36 | 37 (pièce blanche) |
+
+Remarque : une sanction à 8 demi-coups avec perte nette 0 ou un gain (ex. 58. 7-1) montre que la perte de V vient d'un changement de plan ou de finale, pas d'un pion perdu dans la variante.
+
+**Fichiers de sortie** (`training/scan-arena/out/p28/`) : `positions.jsonl` (8 976 positions : scores par profondeur, V, meilleur coup, variante), `moves.jsonl` (8 905 coups avec L, pertes par niveau, faute), `faults.jsonl` (349 fautes des deux camps), `erosion-<partie>.json` (71 : courbe de V, érosion cumulée coup par coup, bascule, 3 plus grosses pertes), `summary.json` (seuil, bruit, ensembles, comparaison, reproductibilité, 10 positions), `annote-<partie>.pdn` (7 PDN de Mickaël), `run-A/` et `run-R/` (calcul brut). Commentaires `{…}` AVANT le coup (convention de l'appli) pour les fautes des deux camps et les 3 plus grosses pertes de chaque camp. **Chaque PDN a été relu et rejoué avec rules.js (7/7 : tous les coups jouables et autorisés, nombre de commentaires = nombre de coups annotés).**
+
+**La mesure est-elle assez stable pour l'écran :**
+- **Part classée ≥ 70 % : oui** (96 % sur (B), 95 % sur (A)), mais ce critère est peu sélectif (90 % des coups « égaux au meilleur » à L élevée sont aussi classés).
+- **Bruit au 95e centile ≤ 0,3 pion : non** (0,51 sur l'ensemble ; 0,32 au 90e centile ; mais seulement 0,10 dans les positions presque égales). Il faudrait un seuil qui dépend de |V| (ou de la phase de jeu) plutôt qu'un seuil unique.
+- **Reproductible : oui** (0 changement de statut ou de type sur 3 parties, écart de L nul).
+Verdict : en l'état non, à cause du bruit ; la mesure est reproductible et classée, et utilisable pour l'érosion (qui ne dépend pas du seuil), mais l'écran ne doit afficher les fautes qu'avec un seuil adapté à l'évaluation de la position.
+
+## P29 — Seuil adaptatif des fautes + écran « Film de la partie » (08/11/2026)
+
+Recalcul PUR à partir des mesures de P28 (`out/p28/run-A`) : aucun appel à Scan (`SCAN_EXE` non utilisé), rien dans `data/`, rien commité. Nouveau : `training/scan-arena/p29-report.mjs` (sorties dans `training/scan-arena/out/p29/` : `summary.json`, `moves.jsonl`, `faults.jsonl`, `avant-apres.txt`, `film.json`), `film.html`, `css/film.css`, `js/film.js`. Un lien discret dans le menu 🎨 (« Film de la partie (maquette) », `#link-film`, masqué si `film.json` est absent) ; 2 lignes dans `main.js`, 3 dans `style.css`, 1 dans `index.html`. Les 7 parties se rejouent avec rules.js (le script s'arrête sinon).
+
+**Formules (toutes les constantes en tête du script).** Valeurs en pions, vues du camp qui joue ; V = moyenne des profondeurs 11 à 14.
+- Seuil de faute = `max(0,30 ; 0,15·|V avant| ; PHASE(pièces))`, PHASE = 1,2 (< 10 pièces) · 0,45 (10-15) · 0,35 (16-21) · 0,20 (22-29) · 0 (≥ 30). Calé sur le bruit de P28 (1 369 coups de DamikA égaux au meilleur coup) : p95 ≈ 0,15·|V| (0,19 à |V| 0,7 ; 0,46 à 3 ; 0,73 à 5,5 ; 1,3 à 8,5 ; 2,2 à 12) et par nombre de pièces (0,07 ≥ 30 ; 0,18 à 22-29 ; 0,44 à 16-21 ; 0,59 à 10-15 ; 1,5 < 10). Contrôle : 3 % des coups-bruit dépassent le seuil (seuil unique 0,51 : 5 %), 1 % dépassent 2× le seuil, 0 % 4×. **Le plancher 0,30 est un choix d'AFFICHAGE** (sous 0,3 pion on parle d'érosion) : avec 0,10 (p95 du calme) le nombre de fautes MONTAIT (A 20 → 26, B 237 → 377).
+- Gravité = perte / seuil : < 2 **légère** ; < 4 **faute** ; ≥ 4 **majeure**.
+- **Largement gagnant** : valeur avant ≥ 2,0 ET valeur après ≥ max(2,0 ; 0,5 × avant) → aucune faute signalée. 2,0 = le palier « gros avantage » de la jauge ; l'usage de 0,5 × avant évite de masquer une chute de 10 à 2,1. Preuve par les données (devenir de la partie, camp qui joue, valeur après le coup) : 2-3 pions : 99 % de victoires, 0 défaite sur 254 positions (parties A seules : 78 % gagnées, 22 % nulles, 0 perdue, n = 9) ; ≥ 3 : 100 % (A : n = 24). Limites : échantillon A petit, parties B toutes perdues par DamikA (biais). « Largement gagnant » veut dire « jamais perdu dans nos données », pas « toujours gagné ».
+- **Latence** : fenêtre d = profondeurs (d, d+1) ; stable si les DEUX profondeurs perdent ≥ 0,6 × seuil ; latence = plus petit d (3, 5, 7, 9, 11) dont toutes les fenêtres suivantes sont stables, sinon « instable » (pas de latence). La détection de la faute ne dépend pas de la latence. Alignement conservé comme en P28 (même numéro de profondeur avant et après ; la position suivante vaut une profondeur de plus depuis la position d'avant : décalage d'un cran).
+
+**Les 4 coups de Mickaël** : partie 88, 25. 32-28 : perte 1,48, seuil 0,30 (×4,9) → **faute majeure** conservée (latence « instable » : la chute n'apparaît qu'à la profondeur 12 de la position suivante) ; partie 116, 58. 13-9 : 8 pièces, seuil 1,20, perte 1,95 (×1,6) → **faute légère** (piège profond, latence 11) ; partie 108, 48… 45-50 : valeur 4,08 → 2,53, largement gagnant → **plus signalée** ; partie 122, 47… 13-19 : valeur 4,16 → 2,52, même règle → **plus signalée** (à trancher par Mickaël, scores ci-dessous). Attention : le calage a été fait en regardant ces 4 cas : risque de sur-ajustement, à confirmer sur d'autres parties.
+
+**partie 122, 47… (vue de Mickaël, + = bon pour lui)** : prof. 11 : 22-28 → 3,73, 13-19 → 2,31 ; 12 : 4,10 / 2,54 ; 13 : 4,15 / 2,54 ; 14 : 4,64 / 2,70 ; moyenne 11-14 : 4,16 / 2,52 (perte 1,63). Le score de « 22-28 » est celui de la position AVANT le coup (c'est le meilleur coup de Scan) ; il n'a pas été relancé après 22-28. Les deux coups restent gagnants ; l'écart grandit avec la profondeur (1,42 → 1,94).
+
+**Avant (P28) / après (P29)**, fautes du joueur (calcul/piège/non classé → candidates → retirées « gagnant » → signalées, gravité majeure/faute/légère) :
+| Partie | P28 | P29 |
+|---|---|---|
+| partie 116 | 2 (0/2/0) | 2 → −1 → 1 (0/0/1) |
+| partie 88 | 1 (0/1/0) | 1 → 0 → 1 (1/0/0) |
+| partie 122 | 2 (0/2/0) | 2 → −1 → 1 (0/0/1) |
+| partie 108 | 2 (1/1/0) | 2 → −1 → 1 (0/0/1) |
+| partie 127 | 6 (3/3/0) | 6 → 0 → 6 (1/2/3) |
+| partie 139 | 7 (2/4/1) | 5 → 0 → 5 (1/2/2) |
+| Ensemble A | 20 | 18 → −3 → 15 (3/4/8 ; calcul 7, piège 5, instable 3) |
+| Ensemble B (DamikA) | 237 | 256 → 0 → 256 (36/68/152) |
+| Ensemble C | 2 | 2 → 0 → 2 (1/1/0) |
+En B le nombre monte légèrement (seuil plus bas qu'en P28 dans les positions calmes, 0,30 contre 0,51) mais 59 % sont « légères » : la hiérarchie remplace le seuil unique. Détail dans `avant-apres.txt`.
+
+**Écran « Film de la partie »** (`film.html`, ouvrir `http://localhost:8934/film.html` ou via le menu 🎨) : alimenté par `out/p29/film.json` (vraies données des 7 parties ; la 7e, 2 demi-coups, est grisée). Courbe d'érosion par camp = cumul des pertes qui ne sont PAS des fautes (légères comprises), 3 plus grosses pertes par camp (toutes, fautes comprises), cercles numérotés cliquables sur la courbe et lignes cliquables : le damier montre la position AVANT le coup, flèche rouge = coup joué, flèche verte = meilleur coup. Clic sur la courbe, flèches ← →, plateau orienté du côté de Mickaël. Palette et polices imposées (#17110c, #211810, #3a2c1e, or #e5c070 …, Inter + Cormorant Garamond), aucun défilement (vérifié à 1456×819, `scrollHeight − innerHeight = 0`, aucune erreur console). **Non vérifié après dernière retouche** : la mise en page étroite (≤ 900 px) ; avant retouche la courbe y était écrasée (hauteur 0), j'ai ajouté une hauteur minimale mais je n'ai pas pu la revoir (autorisation du navigateur expirée). **`film.json` contient des noms de joueurs** : il vit dans `out/` (ignoré par git) ; en production le lien du menu reste masqué. Ne pas le déplacer dans un dossier suivi par git.
+
+Reste à faire : valider les seuils par Mickaël (partie 122, 47…), décider si le film passe en production (il faudrait des données sans noms), vérifier l'écran sur un vrai téléphone.
+
+## P30 — Ménage du menu 🎨 + lien Film dans la barre du bas (08/11/2026)
+
+Fichiers : `index.html` (sections moteur / variété et lien Film retirés du menu ; lien `#link-film` ajouté après `#btn-analysis`), `js/main.js` (`loadSavedAnalysisEngine` n'accepte qu'un moteur Scan ; rendus des deux sections protégés par `if`), `css/style.css` (popover `max-height` + `overflow-y:auto`, style du lien, `.controls-bar` gap 5 px). Rien dans `data/`, rien commité.
+**Vérifié** (iframes 1456×819 et 1280×720, fenêtre réelle 1920×1080) : avec `damika:analysis-engine = v0` mémorisé, l'appli analyse avec Scan, aucune erreur console ; menu entièrement visible (bas à 669 px), non coupé ; aucun scroll de page. Barre du bas : débordement interne du bloc de 7 px à 1456 (0 avant le lien) ; à 1280 il était DÉJÀ de 49 px avant le lien, il est de 58 px maintenant (contenu visible, pas de scroll, non traité : hors périmètre). Le réglage `damika:opening-variety` reste actif sans menu (il ne concerne que V2b).
+
+## P31 — Le Film analyse la partie affichée (08/11/2026)
+
+Réalisé, **non commité, non déployé**, rien écrit dans `data/`. Fichiers : `js/analysis/film-metrics.js`, `film-game.js`, `film-runner.js`, `film-cache.js` (nouveaux), `js/film.js`, `film.html`, `css/film.css` (réécrits pour le direct), `js/main.js` (dépôt de la partie au clic sur Film), `index.html` (lien toujours visible), `js/ai/scan-worker.js` (option `newGame`, `wasmBytes`), `training/scan-arena/p29-report.mjs` et `p27-lib.mjs` (importent les modules), `tests/film-metrics.mjs`.
+
+**Fonctionnement.** Clic sur « Film » → la partie ACTIVE (coups de `fullMoveList`, y compris les coups « à venir » si on a reculé ; en-têtes White / Black / Date / Result ; orientation du damier) est écrite dans `sessionStorage['damika:film-current']`, puis `film.html` s'ouvre. `film.js` : rejeu rules.js (partie illégale : message « Partie impossible à rejouer » avec le coup fautif) ; moins de 10 demi-coups : « Rien à analyser » ; sinon une recherche Scan WebAssembly de profondeur 14 par position dans le Worker existant (aucune limite de temps, `new-game` avant chaque position, scores de toutes les profondeurs lus dans les lignes `info`), barre « Analyse : coup X sur Y · durée » + Annuler (devient Reprendre), courbe et pertes qui se remplissent pendant le calcul. Positions sans recherche comme en P28 : camp sans coup (perdu, ±15), ≤ 6 pièces (écartée), coup forcé (valeur de la position suivante). Cache IndexedDB (clé = SHA-256 des coups seuls) : ré-ouverture de la même partie en 42 ms, sans Worker. Mode test : `film.html?demo=1` (7 parties de `out/p29/film.json`, pastilles visibles). Pied : « Analyse en direct par Scan 3.1 (WebAssembly), moteur de Fabien Letouzey (GPL-3.0) ». Les noms viennent de PDN : écrits au DOM par `textContent` (jamais `innerHTML`). L'appli n'a pas de position de départ personnalisée : rien à transmettre de ce côté.
+
+**Formules.** Inchangées depuis P29, déplacées dans `film-metrics.js` (toutes les constantes en tête ; `METRICS_VERSION = 1`) : V = moyenne des profondeurs 11 à 14 (vue du camp qui joue), scores de tables ou de mat plafonnés à ±15, seuil = max(0,30 ; 0,15·|V avant| ; PHASE(pièces)), gravité = perte / seuil (< 2 légère, < 4 faute, ≥ 4 majeure), « largement gagnant », latence par fenêtres (d, d+1), érosion = cumul des pertes qui ne sont pas des fautes. **`p29-report.mjs` importe le module : ses 5 sorties (`summary.json`, `moves.jsonl`, `faults.jsonl`, `avant-apres.txt`, `film.json`) sont identiques octet pour octet à celles d'avant.** Tests : `node tests/film-metrics.mjs` (44 vérifications : formules, rejeu, runner avec faux Worker, annulation, reprise, erreur, et le module recalculé sur les 7 parties de P28 = 702 coups, classement, courbes, 3 plus grosses pertes et V identiques à `out/p29`) ; `node tests/scan-protocol.mjs` reste vert (71 OK).
+
+**Durées mesurées** (Chrome, Scan WebAssembly dans un Worker, machine de développement, cache vide) :
+
+| Partie | Demi-coups | Recherches | Durée | Nœuds |
+|---|---|---|---|---|
+| bibliothèque, courte | 28 | 21 | 3,8 s | 15,2 M |
+| bibliothèque, moyenne | 65 | 47 | 5,2 s | 18,0 M |
+| bibliothèque, très longue | 116 | 94 | 11,0 s | 42,8 M |
+| (autres parties de P28) | 88 / 108 / 122 / 127 / 139 | 69 à 116 | 6,4 / 7,8 / 13,0 / 11,1 / 12,3 s | 20 à 56 M |
+
+Les 7 parties de P28 (≈ 660 positions) en 62,5 s au total, 0,11 s par position en moyenne, 0,54 s au plus pour une position. **Aucune partie ne dépasse 60 s (la plus longue, 139 demi-coups : 12 s) : rien à signaler, la méthode n'a pas été touchée.** Mémoire : tas JavaScript de la page 26 à 27 Mo (mesuré) ; mémoire WebAssembly de Scan **non mesurable** (ce build n'exporte pas sa mémoire ; `wasmBytes` reste `null`) : estimation tables 2^22 entrées ≈ 64 Mo + 8,5 Mo de données d'évaluation, soit de l'ordre de 75 Mo en plus, non vérifiée.
+
+**Écarts Scan WebAssembly contre Scan natif (P28), sur les 7 parties** (mêmes positions, mêmes formules ; natif = `out/p28/run-A`) :
+- Valeur d'une position V : écart moyen 0,04 à 0,10 pion selon la partie, **jusqu'à 2,28 pions** sur une position d'une partie (la plus grosse différence observée).
+- Perte d'un coup L : écart moyen 0,06 à 0,10, 95 % des coups sous 0,21 à 0,40, maximum 2,25.
+- Même meilleur coup de Scan : 75 à 86 % des positions selon la partie.
+- Fautes signalées (parties A, les deux camps) : 45 signalées par les deux, **10 seulement par le natif, 2 seulement par le WebAssembly** (le WebAssembly en voit moins) ; parmi les 45 communes, 34 ont la même gravité.
+- Les 3 plus grosses pertes par camp : listes identiques dans 3 cas sur 12 (partie de 2 demi-coups exclue) ; les plus grosses y sont souvent les mêmes, l'ordre et la troisième changent.
+- Cause **non vérifiée** : le build WebAssembly tourne avec `tt-size 22` et `bb-size 3` (tables de finale de 3 pièces), `go analyze` ; je n'ai pas relevé les réglages du Scan natif de P28 (ses valeurs par défaut n'ont pas été relues). Ne pas présenter la cause comme établie.
+- Les 4 coups jugés à la main en P29 : le coup 25. 32-28 de la partie de 88 demi-coups reste « majeure », perte 1,51 (natif 1,48), latence instable ; le 47… 13-19 de la partie de 122 demi-coups et le 48… 45-50 de la partie de 108 restent non signalés (largement gagnant : 3,94 → 2,72 et 4,04 → 2,54) ; **le 58. 13-9 de la partie de 116 demi-coups change de verdict : natif « légère » (perte 1,95 contre un seuil de 1,20), WebAssembly perte 0,75, non signalée.** Les seuils ont été calés sur le natif : à reconfirmer sur Scan WebAssembly avant de s'y fier pour les fautes légères.
+
+**Vérification dans Chrome** (127.0.0.1:8934, bibliothèque fictive de 4 parties de test chargée par `localStorage`, nettoyée ensuite) : clic sur Film depuis l'appli sur 3 parties (28, 65, 116 demi-coups), progression et courbe qui grandit, clic sur une perte (position avant le coup, flèche rouge = coup joué, flèche verte = meilleur coup), retour à l'appli (partie intacte), ré-ouverture instantanée par le cache (42 ms, 0 recherche), annulation à 18 coups sur 116 (cache partiel de 18 positions) puis reprise : 78 recherches faites, aucune refaite. Aucun scroll (`scrollHeight` = hauteur) à 1456×819, 1280×720 (direct et `?demo=1`) et 390×800 : **la mise en page étroite, non vérifiée en P29, l'est maintenant** (damier 302 px, courbe 182 px, pertes visibles ; pied masqué volontairement). Un premier essai avec une partie vide (0 demi-coup) a été refusé par « Rien à analyser », comme prévu. PDN rejoués avec rules.js avant livraison : les 4 parties de la bibliothèque d'essai (96, 65, 28, 116 demi-coups) et les 7 de P28.
+
+**Pièges.** (1) Mon premier ajout au Worker (`wasmBytes` via `Module.HEAP8.length`) faisait échouer le chargement de Scan (« Cannot read properties of undefined (reading 'length') ») : `HEAP8` n'est pas exporté par ce build ; corrigé (lecture gardée, `null` si absent) ; ce bug aurait cassé aussi l'analyse de l'appli. (2) Après correction, Ctrl+Shift+R de la page ne rechargeait pas le module du Worker : forcer avec `fetch(url, { cache: 'reload' })`. (3) Dernière position de la partie à coup forcé : pas de position suivante pour la valoriser ; le dernier coup reste sans classement (comme en P28) ; sans ce traitement la courbe restait « en attente » pour toujours (trouvé par le test sur la partie de 2 demi-coups).
+
+Reste à décider (Mickaël) : jugement sur l'écart WebAssembly / natif (surtout fautes légères) ; commit de P29 à P31 (rien n'est commité ; `training/scan-arena/` est entièrement non suivi) ; le lien Film est visible pour tous (aucun nom de joueur dans le cache, les noms ne sont que dans la session de l'onglet).
+
+## P32 — Commit de P29 à P31, push, aperçu (08/11/2026)
+
+Commits poussés sur `main` (push normal) : `53dd429` (P29 : `js/analysis/film-metrics.js`, `film-game.js`, `tests/film-metrics.mjs`), `ecf708c` (P30 : menu 🎨, lien Film, dépôt de la partie dans `main.js`), `aadd0c5` (P31 : runner, cache, `film.js`, `film.html`, `film.css`, `scan-worker.js`). Découpage imparfait : `index.html` et `main.js` mêlent P30 et le dépôt de la partie de P31 (regroupés dans le 2e commit, qui pointe vers `film.html` livré dans le 3e). Un 4e commit porte les docs.
+**Non commités volontairement** : `training/scan-arena/` (scripts de mesure P24 à P29, noms de joueurs et chemins de parties en dur), `training/models/`, `tests/nada-vs-damika.mjs`, `Claude outputs/`. Aucun fichier commité n'importe depuis `training/scan-arena/` (`p27-lib.mjs` importe `js/analysis/film-game.js`, pas l'inverse ; `film.js` ne lit `out/p29/film.json` que dans `?demo=1`, message clair si absent ; `tests/film-metrics.mjs` saute la partie C si `out/` est absent). Docs anonymisées : parties désignées par leur nombre de demi-coups, chemins de parties et noms de joueurs retirés (vérifié par grep sur `SESSION_DERNIERE.md`, `CLAUDE.md`, code, tests).
+**Aperçu** : `deploy.ps1` (non suivi) : `film.html` ajouté à la liste des fichiers racine ; `js/analysis/` part avec `js/`. `film.json` non déployé (404 vérifié). Version `452c864c-44cf-4cf0-8977-948a1a6b4002`, URL d'aperçu **https://452c864c-damika.shell-green.workers.dev** ; **production NON déployée** (`wrangler versions deploy` attend Mickaël). Sur Cloudflare `film.html` redirige vers `/film` (307), sans effet sur le fonctionnement. Passage Chrome sur l'aperçu : appli chargée, Film sur une partie d'essai de 24 demi-coups (injectée directement dans `sessionStorage` : la partie de la bibliothèque d'essai n'a pas pu être ouverte par clic, elle était déjà active), analyse terminée en 3,1 s par Scan 3.1 WebAssembly, aucune erreur console (relevé commencé après le chargement de la page).

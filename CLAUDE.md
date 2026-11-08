@@ -30,6 +30,8 @@ assets/engines/scan/  scan.js + scan.wasm + scan.data (≈ 8,5 Mo) + README.txt 
 third_party/scan/     source CORRESPONDANT au binaire (scan-wasm, commit cbb251e) + LICENSE + BUILD.txt (obligation GPL-3.0)
 LICENSE  NOTICE  README.md  _headers   licence GPL-3.0, mentions des composants, présentation ; _headers = types MIME de LICENSE / NOTICE sur Cloudflare
 data/models/          v1b-l0.json = COPIE de training/models/v1b-l0.json, chargée par le Worker pour V1b
+film.html  css/film.css  js/film.js  écran « Film de la partie » (P29, P31) : analyse EN DIRECT de la partie affichée ; ?demo=1 = 7 parties de out/p29/film.json (test)
+js/analysis/          film-metrics.js (formules, constantes, METRICS_VERSION : UNE définition, Node + navigateur), film-game.js (rejeu rules.js, plan des positions, lignes de coups), film-runner.js (Worker Scan, une recherche par position), film-cache.js (IndexedDB « damika-film »)
 js/library-view.js    ordre d'affichage de la Bibliothèque (fonction pure : Toutes / Récentes / Favoris + recherche)
 js/photo-match.js     correspondance nom → photo (fonctions pures), aussi utilisée par « Retirer la photo »
 tests/                tests Node sans framework (moteur, évaluation, recherche, worker)
@@ -58,6 +60,7 @@ sw.js                 service worker (désactivé côté client)
   `node tests/bench.mjs`. Étage 2a (IA) : `node tests/eval-symmetry.mjs`,
   `node tests/search-consistency.mjs` (~1 min), `node tests/tactics.mjs`, `node tests/mate.mjs`,
   `node tests/match.mjs` (~70 s), `node tests/search-perf.mjs`, `node tests/worker-analyse.mjs`, `node tests/analysis-format.mjs`, `node tests/analysis-controller.mjs`.
+  Film (P31) : `node tests/film-metrics.mjs` (formules, rejeu, runner avec faux Worker ; compare le module aux sorties de p29-report si `out/p28` et `out/p29` existent).
   Scan (P25) : `node tests/scan-protocol.mjs` (protocole Hub, Worker avec faux moteur, contrôleur, mentions ; le vrai WebAssembly ne se teste que dans un
   navigateur : voir section P25 de `docs/SESSION_DERNIERE.md`).
   Étape 4.1 : `node tests/engine-select.mjs` (V0 / V1b, ≈ 8 s) ; OUTILS de mesure (pas des tests) : `node tests/gauge-calibration.mjs`
@@ -603,6 +606,21 @@ Détail, sources, points d'interprétation, effets sur le fichier de référence
 - **Déploiement** : `deploy.ps1` (non suivi par git) copie désormais aussi `third_party/`, `LICENSE`, `NOTICE`, `_headers` ; `assets/` contient le moteur. **Service Worker toujours
   désactivé** : à sa réactivation, mettre en cache `assets/engines/scan/scan.js`, `scan.wasm` et `scan.data` (à la première utilisation du moteur, pas à l'installation ; les URL du
   moteur portent parfois une chaîne `?v=`), ainsi que `js/ai/scan-worker.js` et `js/ai/scan-protocol.js` dans `ASSETS` de `sw.js`.
+
+**Chantier P29 « seuil adaptatif des fautes + écran Film de la partie » (08/11/2026) : réalisé, NON commité, NON déployé.** Détail : `docs/SESSION_DERNIERE.md` (section P29).
+- **Calcul** (`training/scan-arena/p29-report.mjs`, sans Scan, sorties dans `out/p29/`, ignoré par git) : seuil = `max(0,30 ; 0,15·|V| ; phase(pièces))`, gravité par perte/seuil (< 2 légère, < 4 faute, ≥ 4 majeure), « largement gagnant » (avant ≥ 2,0 et après ≥ max(2,0 ; 0,5 × avant)) = jamais signalé, latence seulement si les deux profondeurs de la fenêtre (d, d+1) tiennent. Calage fait en regardant 4 coups de Mickaël : à confirmer sur d'autres parties.
+- **Écran** : `film.html` + `css/film.css` + `js/film.js` (courbe d'érosion par camp, 3 plus grosses pertes cliquables, damier propre à la page, sans défilement) lit `training/scan-arena/out/p29/film.json` (noms de joueurs : ne jamais le mettre dans un dossier suivi par git ; lien du menu 🎨 masqué si absent). Mise en page étroite (≤ 900 px) à revérifier.
+
+**Chantier P30 « ménage du menu 🎨 » (08/11/2026) : réalisé, NON commité.** Menu 🎨 réduit à Damier / Pions / Taille des pions (+ « À propos », crédit Scan obligatoire) ; sections « Moteur d'analyse » et « Variété d'ouverture » retirées de l'INTERFACE seulement (code, `ENGINES`, repli sur V0 conservés ; `main.js` protège les rendus par `if (el.…)`). Une ancienne valeur `damika:analysis-engine` non Scan (v0/v1b/v2b) est IGNORÉE : Scan reste le moteur. Popover : `max-height: calc(100vh - 80px)` + défilement. Lien « Film » (`#link-film`, classe `ctrl-btn ctrl-btn-text`) à droite d'« Analyse » dans la barre du bas, `.controls-bar` gap 8 → 5 px pour le loger (depuis P31 le lien est toujours visible : voir P31).
+
+**Chantier P31 « le Film analyse la partie affichée » (08/11/2026) : réalisé, NON commité, NON déployé.** Détail, écarts chiffrés et durées : `docs/SESSION_DERNIERE.md` (section P31).
+- **Flux** : clic sur « Film » (`#link-film`, lien `film.html`, toujours visible) → `main.js` écrit la partie ACTIVE (coups de `fullMoveList(game)` en notation nue, en-têtes White/Black/Date/Result, `flipped`) dans `sessionStorage['damika:film-current']` → `film.js` la rejoue avec rules.js (message clair si illégale ; < 10 demi-coups : « Rien à analyser »), mesure chaque position avec Scan WebAssembly dans le Worker existant (`js/ai/scan-worker.js`, une recherche profondeur 14 par position, scores de TOUTES les profondeurs lus dans les `info`, V = moyenne 11 à 14), trace la courbe pendant le calcul, barre « coup X sur Y » + Annuler / Reprendre. `film.html?demo=1` = ancien mode test (fichier `out/p29/film.json`, pastilles de parties).
+- **Formules** : `js/analysis/film-metrics.js` (toutes les constantes en tête, `METRICS_VERSION`) ; `training/scan-arena/p29-report.mjs` l'importe (sorties vérifiées identiques octet pour octet). Rejeu, notations, conversions Hub : `js/analysis/film-game.js` (`p27-lib.mjs` les ré-exporte). Ne jamais recopier une formule ailleurs.
+- **Worker** : option de message `newGame: true` (envoie `new-game` avant la position : tables de Scan vidées, comme les mesures natives de P28) ; message d'état `ready` porte `wasmBytes` (`null` : ce build n'exporte pas sa mémoire). Piège rencontré : un module de Worker ancien reste en cache après Ctrl+Shift+R de la page (recharger avec `fetch(url, {cache:'reload'})` puis `location.reload()`).
+- **Cache** : IndexedDB `damika-film` / `analyses`, clé = SHA-256 des COUPS seuls (jamais de nom), contenu = scores par position + meilleur coup ; invalidé si `METRICS_VERSION` ou les profondeurs changent ; analyse interrompue = reprise à la première position manquante. Incrémenter `METRICS_VERSION` si une formule OU la façon de mesurer change.
+- Une dernière position à coup forcé (aucune position suivante pour la valoriser) laisse le dernier coup sans classement, comme en P28.
+
+**P29 à P31 commités et poussés (08/11/2026, P32)** : `53dd429`, `ecf708c`, `aadd0c5` ; `training/scan-arena/` reste NON suivi (noms de joueurs). Aperçu Cloudflare (version `452c864c`) : https://452c864c-damika.shell-green.workers.dev ; production non déployée (attend Mickaël). `deploy.ps1` copie `film.html`.
 
 **État au 01/11/2026 :** 3 parties jouées contre Scan niveau 7 le 01/11, 3 défaites ; thèmes : centre non disputé, pas de portes de sortie, horizon, pion isolé en 24 trop tôt. P19 (variété d'ouverture) en pause ; prochain prompt : P20.
 
