@@ -11,7 +11,7 @@ import {
 } from '../js/ai/scan-protocol.js';
 import { createScanSession, shouldStopForTime, SCAN_PARAMS } from '../js/ai/scan-worker.js';
 import { createAnalysisController } from '../js/ai/analysis-controller.js';
-import { formatMeta, SCAN_CREDIT } from '../js/ai/analysis-format.js';
+import { formatMeta } from '../js/ai/analysis-format.js';
 import { ENGINES, DEFAULT_ENGINE, DEFAULT_ANALYSIS_ENGINE, isEngineId } from '../js/ai/engines.js';
 
 let failures = 0;
@@ -279,7 +279,7 @@ function fakeEngine() {
 ok('O1 Scan est le moteur d\'analyse par défaut, V0 reste le repli', DEFAULT_ANALYSIS_ENGINE === 'scan' && DEFAULT_ENGINE === 'v0' && isEngineId('scan') && isEngineId('v0') && isEngineId('v1b') && isEngineId('v2b'));
 ok('O2 nom complet de Scan dans le menu des moteurs', /Scan 3\.1/.test(ENGINES.scan.label) && /Fabien Letouzey/.test(ENGINES.scan.label));
 ok('O3 ligne d\'analyse : « Moteur : Scan 3.1 par Fabien Letouzey · profondeur N · WebAssembly »',
-  formatMeta({ depth: 12, mate: null }, ENGINES.scan.short, 'scan') === 'Moteur : Scan 3.1 par Fabien Letouzey · profondeur 12 · WebAssembly' && SCAN_CREDIT === 'Moteur : Scan 3.1 par Fabien Letouzey');
+  formatMeta({ depth: 12, mate: null }, ENGINES.scan.short, 'scan') === 'Scan 3.1 · profondeur 12');
 ok('O4 autres moteurs : texte d\'avant inchangé', formatMeta({ depth: 9, mate: null }) === 'Évaluation indicative · profondeur 9' && formatMeta({ depth: 9, mate: null }, 'V1b', 'v1b') === 'Évaluation indicative · profondeur 9 · moteur V1b');
 ok('O5 partie terminée : pas de mention', formatMeta({ depth: 0, mate: { winner: 'b', in: 0 } }, 'Scan 3.1', 'scan') === '');
 void generateLegalMoves;

@@ -560,7 +560,7 @@ const SCAN_LOADING_TEXT = 'Chargement de Scan (8,5 Mo)…';
 const analysisController = createAnalysisController({
   createWorker: (engine) => {
     if (isScanEngine(engine)) {
-      if (typeof WebAssembly !== 'object') throw new Error('WebAssembly indisponible sur ce navigateur');
+      if (typeof WebAssembly !== 'object') throw new Error('moteur indisponible sur ce navigateur');
       return new Worker(new URL('./ai/scan-worker.js', import.meta.url), { type: 'module' });
     }
     return new Worker(new URL('./ai/worker.js', import.meta.url), { type: 'module' });
@@ -578,7 +578,7 @@ function fallbackToDefaultEngine(reason) {
   console.warn(`Moteur d'analyse ${failed} indisponible :`, reason);
   analysisController.setEngine(DEFAULT_ENGINE);
   refreshThemeMenuOptions();
-  const why = isScanEngine(failedId) ? ' (WebAssembly ou fichiers du moteur indisponibles)' : '';
+  const why = isScanEngine(failedId) ? ' (moteur ou fichiers du moteur indisponibles)' : '';
   showToast(`Le moteur ${failed} n'a pas pu démarrer${why} : retour au moteur ${ENGINES[DEFAULT_ENGINE].short}.`, 'error');
 }
 

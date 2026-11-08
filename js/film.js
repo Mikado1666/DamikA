@@ -138,8 +138,8 @@ function renderHeader() {
   const foot = $('film-foot'); foot.replaceChildren();
   const l = document.createElement('span');
   l.textContent = DEMO
-    ? `${when}Mesure : Scan 3.1 (Fabien Letouzey, GPL-3.0), profondeurs 11 à 14, évaluation indicative. Mode test : 7 parties mesurées en P28.`
-    : `${when}Analyse en direct par Scan 3.1 (WebAssembly), moteur de Fabien Letouzey (GPL-3.0) : profondeurs ${DEPTH_FROM} à ${DEPTH_REF}, évaluation indicative.`;
+    ? `${when}Mesure : Scan 3.1, profondeurs 11 à 14, évaluation indicative. Mode test : 7 parties mesurées en P28.`
+    : `${when}Analyse en direct par Scan 3.1 : profondeurs ${DEPTH_FROM} à ${DEPTH_REF}, évaluation indicative.`;
   const r = document.createElement('span'); r.textContent = 'Imprécisions cumulées = petites pertes de chaque camp, cumulées coup après coup (sous le seuil de faute ; seuil adaptatif selon la valeur et la phase de jeu).';
   foot.append(l, r);
   $('film-chart-note').textContent = 'Axe horizontal : numéro du coup. Chaque palier est une petite imprécision mesurée par DamikA avec Scan ; les cercles numérotés marquent les trois plus grosses pertes de chaque camp.';

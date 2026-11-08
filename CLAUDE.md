@@ -599,8 +599,7 @@ Détail, sources, points d'interprétation, effets sur le fichier de référence
   Scan n'est montré qu'après vérification avec `generateLegalMoves` (jamais un coup illégal) ; (6) paramètres AVANT `init` ; (7) `move-time` n'existe pas, seule la profondeur est envoyée.
 - **Binaires** : `assets/engines/scan/` (provenance, commande de compilation et SHA-256 dans son `README.txt` et `third_party/scan/BUILD.txt`). Pour les refaire : emsdk 7.0.0 et la
   commande de `BUILD.txt` ; l'évaluation doit rester identique à `data\eval` de Scan 3.1 (SHA-256 `0e7161c3…58abba`).
-- **Mentions et licence (règles permanentes)** : le crédit « Scan 3.1, moteur de Fabien Letouzey (GPL-3.0) » doit rester visible : écran « À propos » (menu 🎨 ou aide `?`),
-  ligne d'analyse (`SCAN_CREDIT`, `formatMeta()`), menu des moteurs, légende de l'export PNG quand une analyse y figure, `README.md`, `NOTICE`. Ne jamais les retirer. Toute
+- **Mentions et licence (règles permanentes)** : le crédit de l'auteur est UNIQUE (décision de Mickaël, P37) : « Scan 3.1, de Fabien Letouzey — licence GPL-3.0-or-later » avec lien vers le dépôt de Scan, dans l'écran « À propos » (menu 🎨 ou aide `?`) SEULEMENT. Aucune autre mention affichée (ligne d'évaluation = « Scan 3.1 · profondeur N », pied de l'écran d'analyse, menus, export PNG). `LICENSE`, `NOTICE`, `README.md` et les commentaires de code ne changent pas. Toute
   nouvelle bibliothèque ou ressource tierce : vérifier la compatibilité GPL-3.0, l'ajouter à `NOTICE` (version, licence, lien) AVANT de la livrer. `third_party/scan/` doit rester le
   source EXACT du binaire distribué (si on recompile, mettre à jour les deux et le `README.txt`). Dépôt public : ne rien y publier sans accord de Mickaël.
 - **Déploiement** : `deploy.ps1` (non suivi par git) copie désormais aussi `third_party/`, `LICENSE`, `NOTICE`, `_headers` ; `assets/` contient le moteur. **Service Worker toujours

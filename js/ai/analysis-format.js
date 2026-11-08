@@ -66,7 +66,7 @@ export const SCAN_CREDIT = 'Moteur : Scan 3.1 par Fabien Letouzey';
 export function formatMeta(result, engineName = null, engineId = null) {
   if (!result) return '';
   if (result.mate && result.mate.in === 0) return '';
-  if (engineId === 'scan') return `${SCAN_CREDIT} · profondeur ${result.depth} · WebAssembly`;
+  if (engineId === 'scan') return `Scan 3.1 · profondeur ${result.depth}`;
   return `Évaluation indicative · profondeur ${result.depth}${engineName ? ` · moteur ${engineName}` : ''}`;
 }
 
