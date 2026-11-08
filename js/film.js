@@ -1,18 +1,22 @@
-// DAMIKA — écran « Film de la partie » : courbe d'érosion par camp + 3 plus grosses pertes par camp, cliquables (P29, P31).
+// DAMIKA — écran « Analyse de la partie » (fichiers film*, vocabulaire P34) : courbe des imprécisions cumulées par camp + 3 plus grosses pertes par camp, cliquables (P29, P31).
 // Mode normal (P31) : la partie ouverte dans DamikA (sessionStorage, clé damika:film-current, écrite au clic sur « Film »)
 // est mesurée en direct par Scan 3.1 (WebAssembly) dans un Worker ; les valeurs par position sont gardées dans IndexedDB.
 // Mode test : film.html?demo=1 lit les 7 parties mesurées en P28/P29 (training/scan-arena/out/p29/film.json, produit par
 // p29-report.mjs, ignoré par git car il contient des noms de joueurs). Dans les deux cas les coups sont rejoués avec rules.js.
-import { initialBoard, squareToRC } from './engine/rules.js';
+import { initialBoard, generateLegalMoves } from './engine/rules.js';
+import { BoardRenderer } from './render/board.js';
+import { readUiTheme, applyUiTheme, applySavedBoardSettings } from './render/board-settings.js';
 import { MIN_PLIES, DEPTH_REF, DEPTH_FROM } from './analysis/film-metrics.js';
 import { replayMoves, planGame, buildFilmGame, canonicalGameText } from './analysis/film-game.js';
 import { createFilmRunner, FilmCancelled } from './analysis/film-runner.js';
+import { playSound } from './sound.js';
 import { hashText, loadAnalysis, saveAnalysis } from './analysis/film-cache.js';
 
 export const FILM_DATA_URL = 'training/scan-arena/out/p29/film.json';
 export const FILM_STORAGE_KEY = 'damika:film-current';
 const DEMO = new URLSearchParams(location.search).get('demo') === '1';
-const C = { dark: '#8a5a2b', light: '#dcc38f', gold: '#e5c070', text: '#f1e6d2', bad: '#e07a5f', good: '#7fb685', border: '#3a2c1e' };
+// Couleurs du graphique : variables CSS de l'appli (thème clair / sombre), jamais de valeur en dur.
+const C = { gold: 'var(--gold)', text: 'var(--text-0)', border: 'var(--panel-border)', muted: 'var(--text-2)', bg: 'var(--panel)' };
 const $ = (id) => document.getElementById(id);
 const fr = (x, d = 2) => x.toFixed(d).replace('.', ',');
 
@@ -29,60 +33,34 @@ function replay(moves) {
 
 // ---- état ----
 const S = { data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false };
+// Thème d'interface, thème du damier, style et taille des pions : MÊMES réglages que l'appli (js/render/board-settings.js),
+// et MÊME dessin (BoardRenderer, js/render/board.js). Le thème est posé avant la création du renderer (il lit les couleurs CSS).
+applyUiTheme(readUiTheme());
 const canvas = $('film-board');
-const ctx = canvas.getContext('2d');
+const renderer = new BoardRenderer(canvas);
+applySavedBoardSettings(renderer);
 
 const nameOf = (s) => { const [n, p] = String(s ?? '').split(',').map((x) => x.trim()); return p ? `${p} ${n}` : n; };
 const resText = (r) => (r === '2-0' || r === '1-0' ? '1-0' : r === '0-2' || r === '0-1' ? '0-1' : r === '1-1' ? '½-½' : '*');
 const gravText = { majeure: 'faute majeure', faute: 'faute', 'légère': 'faute légère', gagnant: 'position restée largement gagnante' };
 
-// ---- damier ----
-function squareCenter(sq, size) {
-  let [r, c] = squareToRC(sq);
-  if (S.flipped) { r = 9 - r; c = 9 - c; }
-  const cell = size / 10;
-  return [(c + 0.5) * cell, (r + 0.5) * cell];
-}
-function drawArrow(a, b, color, size) {
-  const [x1, y1] = squareCenter(a, size), [x2, y2] = squareCenter(b, size);
-  const ang = Math.atan2(y2 - y1, x2 - x1), head = size / 10 * 0.32, w = size / 10 * 0.11;
-  ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.globalAlpha = 0.9; ctx.lineWidth = w; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2 - Math.cos(ang) * head * 0.6, y2 - Math.sin(ang) * head * 0.6); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - head * Math.cos(ang - 0.45), y2 - head * Math.sin(ang - 0.45)); ctx.lineTo(x2 - head * Math.cos(ang + 0.45), y2 - head * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
-  ctx.restore();
-}
+// ---- damier (BoardRenderer de l'appli) ----
+// Flèche du « dernier coup » du renderer = coup JOUÉ (rouge, --arrow-color surchargée dans film.css), flèche du « meilleur
+// coup » = meilleur coup de Scan (verte, --best-arrow-color de l'appli). Hors d'une perte choisie : pas de flèche, seules
+// les cases du dernier coup sont éclairées.
 function drawBoard() {
-  const dpr = window.devicePixelRatio || 1, size = canvas.clientWidth;
-  if (!size) return;
-  canvas.width = canvas.height = Math.round(size * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const cell = size / 10, board = S.rp.boards[S.ply];
-  for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) { ctx.fillStyle = (r + c) % 2 ? C.dark : C.light; ctx.fillRect(c * cell, r * cell, cell, cell); }
-  // cases du dernier coup joué (ou du coup « en cause » quand on regarde une perte)
-  const hl = S.focus ? S.rp.steps[S.focus.ply] : S.rp.steps[S.ply - 1];
-  if (hl) for (const sq of [hl.from, hl.to]) { const [x, y] = squareCenter(sq, size); ctx.fillStyle = 'rgba(229,192,112,.28)'; ctx.fillRect(x - cell / 2, y - cell / 2, cell, cell); }
-  ctx.font = `600 ${Math.max(8, cell * 0.2)}px Inter, sans-serif`; ctx.textBaseline = 'top'; ctx.fillStyle = 'rgba(241,230,210,.55)';
-  for (let sq = 1; sq <= 50; sq++) { const [x, y] = squareCenter(sq, size); ctx.fillText(String(sq), x - cell / 2 + 3, y - cell / 2 + 2); }
-  for (let sq = 1; sq <= 50; sq++) {
-    const p = board[sq]; if (!p) continue;
-    const [x, y] = squareCenter(sq, size), rad = cell * 0.4;
-    ctx.beginPath(); ctx.arc(x, y + 1.5, rad, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(x, y, rad, 0, 7);
-    ctx.fillStyle = p.color === 'w' ? '#f1e6d2' : '#2a1d12'; ctx.fill();
-    ctx.lineWidth = Math.max(1.5, cell * 0.04); ctx.strokeStyle = p.color === 'w' ? '#b79d6c' : '#0e0a06'; ctx.stroke();
-    ctx.beginPath(); ctx.arc(x, y, rad * 0.66, 0, 7); ctx.lineWidth = 1; ctx.strokeStyle = p.color === 'w' ? 'rgba(138,90,43,.45)' : 'rgba(229,192,112,.28)'; ctx.stroke();
-    if (p.king) { ctx.beginPath(); ctx.arc(x, y, rad * 0.32, 0, 7); ctx.fillStyle = C.gold; ctx.fill(); ctx.strokeStyle = '#8a5a2b'; ctx.stroke(); }
-  }
-  if (S.focus) {
-    const pf = S.focus; const st = S.rp.steps[pf.ply];
-    if (pf.meilleur) { const [a, b] = pf.meilleur.split(/[-x]/).map(Number); drawArrow(a, b, C.good, size); }
-    if (st) drawArrow(st.from, st.to, C.bad, size);
-  }
+  if (!S.rp) return;
+  const st = S.focus ? S.rp.steps[S.focus.ply] : S.rp.steps[S.ply - 1];
+  renderer.setFlipped(S.flipped);
+  renderer.showArrow = !!S.focus;
+  renderer.bestMove = null;
+  if (S.focus && S.focus.meilleur) renderer.bestMove = { squares: S.focus.meilleur.split(/[-x]/).map(Number) };
+  renderer.setState({ board: S.rp.boards[S.ply], lastMove: st ? { squares: [st.from, st.to] } : null });
 }
 
 // ---- courbe d'érosion ----
 const NS = 'http://www.w3.org/2000/svg';
-const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) { if (typeof v === 'string' && v.startsWith('var(')) e.style.setProperty(k, v); else e.setAttribute(k, v); } if (parent) parent.appendChild(e); return e; };
 const W = 600, H = 230, M = { l: 34, r: 10, t: 26, b: 22 };
 function drawChart() {
   const g = S.data.parties[S.g], svg = $('film-chart');
@@ -93,24 +71,24 @@ function drawChart() {
   const step = ymax > 14 ? 5 : ymax > 6 ? 2 : 1;
   for (let v = 0; v <= ymax; v += step) {
     mk('line', { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: C.border, 'stroke-width': 1 }, svg);
-    mk('text', { x: M.l - 6, y: Y(v) + 4, 'text-anchor': 'end', fill: '#a8977c', 'font-size': 11, 'font-family': 'Inter' }, svg).textContent = v;
+    mk('text', { x: M.l - 6, y: Y(v) + 4, 'text-anchor': 'end', fill: C.muted, 'font-size': 11 }, svg).textContent = v;
   }
   for (let m = 10; m * 2 <= n; m += 10) {
-    mk('text', { x: X(m * 2), y: H - 6, 'text-anchor': 'middle', fill: '#a8977c', 'font-size': 11, 'font-family': 'Inter' }, svg).textContent = m;
+    mk('text', { x: X(m * 2), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': 11 }, svg).textContent = m;
   }
   // courbes en escalier : le cumul bouge après chaque coup du camp
   for (const [idx, col, side] of [[1, C.text, 'w'], [2, C.gold, 'b']]) {
     let d = `M ${X(0)} ${Y(0)}`;
     for (const c of g.courbe) d += ` L ${X(c[0] + 1)} ${Y(c[idx])}`;
-    mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 2.2, 'stroke-linejoin': 'round', opacity: side === 'w' ? 0.95 : 0.95 }, svg);
+    mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 2.2, 'stroke-linejoin': 'round', ...(side === 'b' ? { 'stroke-dasharray': '7 4' } : {}) }, svg);
   }
   // repères des 3 plus grosses pertes de chaque camp (sur la bande du haut)
   for (const side of ['w', 'b']) g.top[side].forEach((l, i) => {
     const col = side === 'w' ? C.text : C.gold, x = X(l.ply + 0.5), y = side === 'w' ? 10 : 20;
     const a = mk('g', { class: 'mk', 'data-ply': l.ply, 'data-side': side, 'data-rank': i, style: 'cursor:pointer' }, svg);
     mk('line', { x1: x, x2: x, y1: y + 6, y2: H - M.b, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '2 3', opacity: 0.45 }, a);
-    mk('circle', { cx: x, cy: y, r: 7, fill: '#17110c', stroke: col, 'stroke-width': 1.6 }, a);
-    mk('text', { x, y: y + 3.6, 'text-anchor': 'middle', fill: col, 'font-size': 10, 'font-weight': 700, 'font-family': 'Inter' }, a).textContent = i + 1;
+    mk('circle', { cx: x, cy: y, r: 7, fill: C.bg, stroke: col, 'stroke-width': 1.6 }, a);
+    mk('text', { x, y: y + 3.6, 'text-anchor': 'middle', fill: col, 'font-size': 10, 'font-weight': 700 }, a).textContent = i + 1;
     mk('title', {}, a).textContent = `${l.no}${side === 'w' ? '.' : '…'} ${l.joue} : perte ${fr(l.L)} pion`;
   });
   // curseur : position affichée
@@ -162,9 +140,9 @@ function renderHeader() {
   l.textContent = DEMO
     ? `${when}Mesure : Scan 3.1 (Fabien Letouzey, GPL-3.0), profondeurs 11 à 14, évaluation indicative. Mode test : 7 parties mesurées en P28.`
     : `${when}Analyse en direct par Scan 3.1 (WebAssembly), moteur de Fabien Letouzey (GPL-3.0) : profondeurs ${DEPTH_FROM} à ${DEPTH_REF}, évaluation indicative.`;
-  const r = document.createElement('span'); r.textContent = 'Érosion = pertes cumulées sous le seuil de faute ; seuil adaptatif (valeur et phase de jeu).';
+  const r = document.createElement('span'); r.textContent = 'Imprécisions cumulées = petites pertes de chaque camp, cumulées coup après coup (sous le seuil de faute ; seuil adaptatif selon la valeur et la phase de jeu).';
   foot.append(l, r);
-  $('film-chart-note').textContent = 'Axe horizontal : numéro du coup. Chaque palier est une petite perte mesurée par DamikA avec Scan ; les cercles numérotés marquent les trois plus grosses pertes de chaque camp.';
+  $('film-chart-note').textContent = 'Axe horizontal : numéro du coup. Chaque palier est une petite imprécision mesurée par DamikA avec Scan ; les cercles numérotés marquent les trois plus grosses pertes de chaque camp.';
 }
 function renderPly() {
   const g = S.data.parties[S.g], k = S.ply;
@@ -175,6 +153,22 @@ function renderPly() {
 }
 function refresh() { renderPly(); drawBoard(); drawChart(); document.querySelectorAll('.film-loss').forEach((b) => b.classList.toggle('active', !!S.focus && Number(b.dataset.ply) === S.focus.ply)); }
 function goTo(ply) { S.focus = null; S.ply = ply; refresh(); }
+// Son (js/sound.js, mêmes réglages que l'appli). Règle RELEVÉE dans main.js (goToNextMove, goToPrevMove, boutons début / fin,
+// jumpToPly) : l'appli joue un son SEULEMENT en avançant d'un coup (bouton ▶ et flèche →) : 'capture' si le coup est une prise,
+// 'move' sinon, puis 'game-end' si la position atteinte est terminée (camp au trait sans coup). Silence en reculant (◀ et ←),
+// au début, à la fin, au clic sur un coup de la liste (ici : clic sur la courbe ou sur une perte) et au chargement d'une partie
+// de la bibliothèque. L'écran d'analyse fait exactement pareil.
+function stepTo(ply) {
+  const from = S.focus ? S.focus.ply : S.ply, to = Math.max(0, Math.min(S.rp.steps.length, ply));
+  if (to === from) { if (S.focus) goTo(to); return; }
+  goTo(to);
+  if (to > from) {
+    const n = (b) => b.reduce((c, p) => c + (p ? 1 : 0), 0);
+    playSound(n(S.rp.boards[to - 1]) !== n(S.rp.boards[to]) ? 'capture' : 'move');
+    const { captures, simples } = generateLegalMoves(S.rp.boards[to], to % 2 === 0 ? 'w' : 'b');
+    if (captures.length === 0 && simples.length === 0) playSound('game-end');
+  }
+}
 function focusLoss(l) { S.focus = l; S.ply = l.ply; refresh(); } // position AVANT le coup en cause
 function selectGame(i) {
   const g = S.data.parties[i]; S.g = i; S.focus = null;
@@ -261,7 +255,7 @@ async function startRun() {
 
 async function initLive() {
   const raw = readStoredGame();
-  if (!raw) { showMessage('Aucune partie à analyser', 'Ouvrez une partie dans DamikA, puis cliquez sur « Film » dans la barre du bas.'); return; }
+  if (!raw) { showMessage('Aucune partie à analyser', 'Ouvrez une partie dans DamikA, puis cliquez sur « Analyse de la partie » dans la barre du bas.'); return; }
   if (raw.moves.length < MIN_PLIES) { showMessage('Rien à analyser', `La partie compte ${raw.moves.length} demi-coup${raw.moves.length > 1 ? 's' : ''} : il en faut au moins ${MIN_PLIES} pour tracer un film.`); return; }
   const plan = planGame(raw.moves);
   if (!plan.ok) { showMessage('Partie impossible à rejouer', `${plan.error}. Les règles de DamikA ne rejouent pas cette partie : elle ne peut pas être analysée.`); return; }
@@ -311,8 +305,8 @@ async function initDemo() {
 
 async function init() {
   $('film-first').onclick = () => goTo(0);
-  $('film-prev').onclick = () => goTo(Math.max(0, S.focus ? S.ply : S.ply - 1));
-  $('film-next').onclick = () => goTo(Math.min(S.rp.steps.length, S.ply + 1));
+  $('film-prev').onclick = () => stepTo(S.focus ? S.ply : S.ply - 1);
+  $('film-next').onclick = () => stepTo(S.ply + 1);
   $('film-last').onclick = () => goTo(S.rp.steps.length);
   document.addEventListener('keydown', (e) => {
     if (!S.rp) return;
@@ -320,7 +314,6 @@ async function init() {
     else if (e.key === 'ArrowLeft') { e.preventDefault(); $('film-prev').click(); }
     else if (e.key === 'Home') goTo(0); else if (e.key === 'End') goTo(S.rp.steps.length);
   });
-  new ResizeObserver(() => S.rp && drawBoard()).observe(canvas);
   if (DEMO) await initDemo(); else await initLive();
 }
 init();

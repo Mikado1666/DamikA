@@ -42,7 +42,7 @@
       <div class="topbar-actions">
         <input type="file" id="pdn-file-input" accept=".pdn,.txt" multiple hidden />
         <button id="btn-new-game" class="action-btn" title="Nouvelle partie">✚ Nouvelle partie</button>
-        <button id="btn-edit-position" class="action-btn" title="Poser une position à la main puis l'analyser" aria-pressed="false">✎ Éditer une position</button>
+        <button id="btn-edit-position" class="action-btn" title="Poser une position à la main puis l'évaluer" aria-pressed="false">✎ Éditer une position</button>
         <button id="btn-import" class="action-btn" title="Importer un fichier PDN">📂 Importer</button>
         <button id="btn-paste" class="icon-btn" title="Coller une partie (presse-papier)">📋</button>
         <button id="btn-copy" class="icon-btn" title="Copier la partie (presse-papier)">⧉</button>
@@ -207,7 +207,7 @@
         <div class="editor-message" id="editor-message" role="status"></div>
         <div class="editor-row editor-actions">
           <button type="button" class="editor-btn" id="editor-cancel" title="Quitter sans rien changer (Échap)">Annuler</button>
-          <button type="button" class="editor-btn editor-primary" id="editor-analyse" title="Jouer à partir de cette position et lancer l'analyse">Analyser</button>
+          <button type="button" class="editor-btn editor-primary" id="editor-analyse" title="Jouer à partir de cette position et lancer l'évaluation">Évaluer</button>
         </div>
       </div>
 
@@ -237,8 +237,8 @@
           </div>
         </div>
         <div class="ctrl-sep"></div>
-        <button id="btn-analysis" class="ctrl-btn ctrl-btn-text" title="Analyse du moteur : barre d'évaluation et meilleur coup (A)" aria-pressed="false">Analyse</button>
-        <a id="link-film" class="ctrl-btn ctrl-btn-text" href="film.html" title="Film de la partie : érosion et plus grosses pertes, calculées par Scan sur la partie affichée">Film</a>
+        <button id="btn-analysis" class="ctrl-btn ctrl-btn-text" title="Évaluation en direct par le moteur : barre d'évaluation et meilleur coup (A)" aria-pressed="false">Évaluation</button>
+        <a id="link-film" class="ctrl-btn ctrl-btn-text" href="film.html" title="Analyse de la partie : imprécisions cumulées et plus grosses pertes, calculées par Scan sur la partie affichée" aria-label="Analyse de la partie">Analyse</a>
       </div>
     </section>
 
@@ -380,7 +380,7 @@
         <div class="help-row"><div class="help-keys"><kbd>→</kbd></div><span>Coup suivant</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Espace</kbd></div><span>Lecture automatique (marche/pause)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>F</kbd></div><span>Retourner le plateau</span></div>
-        <div class="help-row"><div class="help-keys"><kbd>A</kbd></div><span>Analyse du moteur (barre d'évaluation, score, meilleur coup)</span></div>
+        <div class="help-row"><div class="help-keys"><kbd>A</kbd></div><span>Évaluation en direct (barre d'évaluation, score, meilleur coup)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Ctrl</kbd><span class="help-key-plus">+</span><kbd>S</kbd></div><span>Enregistrer les modifications de la partie active</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Ctrl</kbd><span class="help-key-plus">+</span><kbd>V</kbd></div><span>Coller une partie (presse-papier)</span></div>
         <div class="help-row"><div class="help-keys"><kbd>Échap</kbd></div><span>Fermer la fenêtre ouverte (commentaire, photo, cette aide...)</span></div>

@@ -2,6 +2,8 @@ import {
   DraughtsGame, WHITE, BLACK, countPieces, computeTempoDifferential, hasAnyKing, squareToRC,
 } from './engine/rules.js';
 import { BoardRenderer, BOARD_THEMES, PIECE_STYLES, PIECE_SIZES } from './render/board.js';
+import { playSound, isMuted, setMuted, getVolume, setVolume, SOUND_MUTE_KEY, SOUND_VOLUME_KEY } from './sound.js';
+import { UI_THEME_KEY, BOARD_THEME_KEY, PIECE_STYLE_KEY, PIECE_SIZE_KEY, readUiTheme, applyUiTheme, applySavedBoardSettings } from './render/board-settings.js';
 import { createAnalysisController } from './ai/analysis-controller.js';
 import { ENGINES, DEFAULT_ENGINE, DEFAULT_ANALYSIS_ENGINE, OPENING_VARIETY, isEngineId, isScanEngine, migrateAnalysisEngine } from './ai/engines.js';
 import { applyTool, emptyBoard, startBoard, cloneBoard, validatePosition, buildGameFromPosition } from './position-editor.js';
@@ -20,10 +22,9 @@ import { saveLibraryState, loadLibraryState, saveLibraryExtras, loadLibraryExtra
 // Persisté en localStorage ; appliqué AVANT la construction du BoardRenderer pour que sa
 // première lecture de couleurs (getComputedStyle(), cf. board.js) tombe déjà sur le bon
 // thème plutôt que sur le sombre par défaut suivi d'un flash au premier rendu.
-const UI_THEME_KEY = 'damika:ui-theme';
-let uiTheme = localStorage.getItem(UI_THEME_KEY) === 'light' ? 'light' : 'dark';
-if (uiTheme === 'light') document.documentElement.dataset.theme = 'light';
-else delete document.documentElement.dataset.theme;
+// (lecture et application partagées avec l'écran Film : js/render/board-settings.js, P33)
+let uiTheme = readUiTheme();
+applyUiTheme(uiTheme);
 
 let game = new DraughtsGame();
 // Variété d'ouverture (P19) : seule la partie « jouée en direct » (nouvelle partie, ou page fraîche) en bénéficie ; une partie
@@ -36,14 +37,8 @@ const renderer = new BoardRenderer(canvas);
 // ICI, juste après la création du renderer et avant tout rendu du damier (aucun flash du thème par
 // défaut). Valeur absente, invalide (thème/style qui n'existe plus) ou localStorage indisponible :
 // valeur par défaut du renderer, setBoardTheme()/setPieceStyle() ignorant les noms inconnus.
-const BOARD_THEME_KEY = 'damika:board-theme';
-const PIECE_STYLE_KEY = 'damika:piece-style';
-try {
-  const savedBoardTheme = localStorage.getItem(BOARD_THEME_KEY);
-  if (savedBoardTheme && Object.hasOwn(BOARD_THEMES, savedBoardTheme)) renderer.setBoardTheme(savedBoardTheme);
-  const savedPieceStyle = localStorage.getItem(PIECE_STYLE_KEY);
-  if (savedPieceStyle && Object.hasOwn(PIECE_STYLES, savedPieceStyle)) renderer.setPieceStyle(savedPieceStyle);
-} catch { /* localStorage indisponible : valeurs par défaut */ }
+// (clés, lecture et validation : js/render/board-settings.js, partagé avec l'écran Film ; taille des pions comprise)
+applySavedBoardSettings(renderer);
 
 // --- sons -------------------------------------------------------------------------------
 // move/capture/game-end : fichiers RÉELS du client Lidraughts (RoepStoep/lidraughts, thème
@@ -57,87 +52,13 @@ try {
 // instances plutôt qu'un <audio> unique réutilisé : rejouer un son déjà en cours (ex. 2 coups
 // très rapprochés en autoplay rapide) sur le MÊME élément le coupe net au lieu de superposer
 // les 2 lectures — un petit pool (round-robin) évite cet écrasement audible.
-const SOUND_FILES = {
-  move: 'assets/sounds/move.mp3',
-  capture: 'assets/sounds/capture.mp3',
-  'game-start': 'assets/sounds/game-start.mp3',
-  'game-end': 'assets/sounds/game-end.mp3',
-};
-const SOUND_POOL_SIZE = 3;
-const soundPools = Object.fromEntries(Object.entries(SOUND_FILES).map(([name, src]) => {
-  const pool = Array.from({ length: SOUND_POOL_SIZE }, () => {
-    const a = new Audio(src);
-    a.preload = 'auto';
-    return a;
-  });
-  return [name, { pool, next: 0 }];
-}));
-const SOUND_MUTE_KEY = 'damika:sound-muted';
-const SOUND_VOLUME_KEY = 'damika:sound-volume';
+// (sons : js/sound.js, partagé avec l'écran « Analyse de la partie », P34 ; pool, déblocage de l'autoplay, mute et volume y vivent)
 // Durée d'affichage de la flèche du dernier coup : 0 = permanente (comportement historique,
 // reste affichée jusqu'au coup suivant), sinon un nombre de secondes après lequel elle
 // s'efface automatiquement (cf. scheduleArrowHideTimer()).
 const ARROW_DURATION_KEY = 'damika:arrow-duration';
 let arrowDurationSec = Number(localStorage.getItem(ARROW_DURATION_KEY)) || 0;
 let arrowHideTimer = null;
-let soundMuted = localStorage.getItem(SOUND_MUTE_KEY) === '1';
-// Volume 0..1, persisté en pourcentage entier (0-100) — plus lisible en localStorage/devtools
-// qu'un flottant. 0.35 par défaut (raisonnable, pas agressif — demande explicite de Mickaël)
-// si jamais réglé.
-const storedVolumePct = parseInt(localStorage.getItem(SOUND_VOLUME_KEY), 10);
-let soundVolume = Number.isFinite(storedVolumePct) ? Math.min(100, Math.max(0, storedVolumePct)) / 100 : 0.35;
-
-function applySoundVolume() {
-  for (const { pool } of Object.values(soundPools)) {
-    for (const audio of pool) audio.volume = soundVolume;
-  }
-}
-applySoundVolume();
-
-// Un `playSound('game-start')` peut survenir dès le chargement de la page (partie partagée
-// par lien, cf. `loadSharedGameFromUrl()`), donc avant tout geste utilisateur — la politique
-// autoplay de Chrome bloque alors `play()` (NotAllowedError). Plutôt que perdre ce son
-// silencieusement, on retente une seule fois le DERNIER son ainsi bloqué dès le premier
-// geste utilisateur sur la page (le clic qui débloque l'audio n'a pas besoin d'être sur le
-// damier précisément — tout `pointerdown` compte, c'est la politique navigateur elle-même
-// qui ne distingue pas la cible du geste).
-let pendingUnlockSound = null;
-// `playMove()` attend la fin de l'animation (`await renderer.animateMove(...)`) avant
-// d'appeler `playSound()` : au tout premier coup de la partie, cet appel n'a donc plus lieu
-// de façon synchrone dans le gestionnaire du clic/pointerdown qui l'a déclenché, et Chrome
-// bloque le `play()` (NotAllowedError) faute d'activation utilisateur "fraîche" — le son est
-// alors mémorisé (`pendingUnlockSound`) et ne rejoue qu'au PROCHAIN pointerdown, donc décalé
-// d'un coup. On débloque l'audio dès le tout premier pointerdown de la page, de façon
-// synchrone (capture, avant même le clic sur le damier), en tentant un `play()`/`pause()`
-// immédiat sur chaque instance du pool : cette lecture réussie pendant le geste utilisateur
-// suffit à lever la restriction autoplay pour le reste de la session, donc pour tous les
-// `playSound()` ultérieurs même appelés après un `await`.
-let audioUnlocked = false;
-function unlockAudioOnce() {
-  if (audioUnlocked) return;
-  audioUnlocked = true;
-  for (const { pool } of Object.values(soundPools)) {
-    for (const audio of pool) {
-      audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
-    }
-  }
-}
-window.addEventListener('pointerdown', unlockAudioOnce, { capture: true, once: true });
-function playSound(name) {
-  if (soundMuted) return;
-  const entry = soundPools[name];
-  if (!entry) return;
-  const audio = entry.pool[entry.next];
-  entry.next = (entry.next + 1) % entry.pool.length;
-  audio.currentTime = 0;
-  audio.play().catch(() => { pendingUnlockSound = name; });
-}
-window.addEventListener('pointerdown', () => {
-  if (!pendingUnlockSound) return;
-  const name = pendingUnlockSound;
-  pendingUnlockSound = null;
-  playSound(name);
-}, { once: false });
 
 // --- état d'interaction -----------------------------------------------------
 let selectedSquare = null;
@@ -564,7 +485,7 @@ function renderAnalysis({ phase, result, error }) {
     el.analysisBest.hidden = true;
     if (phase === 'error') {
       cancelAnalysisTween();
-      el.analysisScore.textContent = 'Analyse indisponible';
+      el.analysisScore.textContent = 'Évaluation indisponible';
       el.analysisMeta.textContent = '';
       el.analysisPlate.dataset.adv = 'even';
       el.analysisPlate.classList.remove('is-mate');
@@ -698,7 +619,7 @@ function toggleAnalysis() {
       try { requestAnalysis(); return; } catch { /* repli lui-même impossible : message ci-dessous */ }
     }
     analysisController.disable();
-    showToast("L'analyse n'a pas pu démarrer sur ce navigateur", 'error');
+    showToast("L'évaluation n'a pas pu démarrer sur ce navigateur", 'error');
   }
 }
 el.btnAnalysis.addEventListener('click', toggleAnalysis);
@@ -1358,12 +1279,12 @@ el.btnUiTheme.addEventListener('click', () => {
 
 // --- mute (état persisté en localStorage, cf. `soundMuted`/SOUND_MUTE_KEY plus haut) --------
 function syncMuteButton() {
-  el.btnMute.textContent = soundMuted ? '🔇' : '🔊';
-  el.btnMute.title = soundMuted ? 'Activer le son' : 'Couper le son';
+  el.btnMute.textContent = isMuted() ? '🔇' : '🔊';
+  el.btnMute.title = isMuted() ? 'Activer le son' : 'Couper le son';
 }
 el.btnMute.addEventListener('click', () => {
-  soundMuted = !soundMuted;
-  localStorage.setItem(SOUND_MUTE_KEY, soundMuted ? '1' : '0');
+  setMuted(!isMuted());
+  localStorage.setItem(SOUND_MUTE_KEY, isMuted() ? '1' : '0');
   syncMuteButton();
 });
 syncMuteButton();
@@ -1373,15 +1294,14 @@ syncMuteButton();
 // séparément du mute (les 2 réglages sont indépendants : baisser le volume ne démute pas,
 // et le mute n'écrase pas le volume mémorisé).
 function syncVolumeSlider() {
-  const pct = Math.round(soundVolume * 100);
+  const pct = Math.round(getVolume() * 100);
   el.soundVolumeSlider.value = String(pct);
   el.soundVolumeValue.textContent = `${pct}%`;
 }
 el.soundVolumeSlider.addEventListener('input', () => {
-  soundVolume = Number(el.soundVolumeSlider.value) / 100;
+  setVolume(Number(el.soundVolumeSlider.value) / 100);
   localStorage.setItem(SOUND_VOLUME_KEY, el.soundVolumeSlider.value);
   el.soundVolumeValue.textContent = `${el.soundVolumeSlider.value}%`;
-  applySoundVolume();
 });
 // Pendant un drag du slider, le curseur peut brièvement sortir de la zone de survol
 // (`.sound-control`/`.sound-popover`) — la classe `.sound-dragging` force l'ouverture du
@@ -2535,7 +2455,7 @@ async function editorAnalyse() {
   const v = validatePosition(editor.board, editor.side);
   if (!v.ok) { editorShowMessage(v.errors); return; }
   if (libraryActiveIndex < 0 && (game.history.length > 0 || game.future.length > 0)) {
-    const ok = await confirmModal('Analyser cette position ? La partie en cours (coups joués) sera remplacée.', 'Analyser');
+    const ok = await confirmModal('Évaluer cette position ? La partie en cours (coups joués) sera remplacée.', 'Évaluer');
     if (!ok) return;
   }
   const newGame = buildGameFromPosition(editor.board, editor.side);
@@ -3101,7 +3021,7 @@ async function exportBoardImage(format = 'png') {
   // L'image contient une analyse quand la flèche du meilleur coup est dessinée (analyse active, profondeur suffisante) :
   // on cite alors le moteur (P25). Le PDF ne contient aucune analyse (diagrammes vectoriels de positions seulement).
   if (analysisController.enabled && renderer.bestMove) {
-    lines.push(isScanEngine(analysisController.engine) ? 'Analyse : Scan 3.1' : `Analyse : moteur ${ENGINES[analysisController.engine].short}`);
+    lines.push(isScanEngine(analysisController.engine) ? 'Évaluation : Scan 3.1' : `Évaluation : moteur ${ENGINES[analysisController.engine].short}`);
   }
 
   const padding = 16 * dpr;
@@ -3689,13 +3609,8 @@ function loadSharedGameFromUrl() {
 // --- thème du damier / style et taille des pions ---------------------------------------
 // Taille des pions (presets nommés PIECE_SIZES, jamais un pourcentage libre), thème du damier
 // et style de pion sont tous trois persistés (cf. BOARD_THEME_KEY/PIECE_STYLE_KEY en haut).
-const PIECE_SIZE_KEY = 'damika:piece-size';
 function pieceSizeKeyFromScale(scale) {
   return Object.keys(PIECE_SIZES).find((k) => PIECE_SIZES[k].scale === scale) || 'normal';
-}
-{
-  const savedSize = localStorage.getItem(PIECE_SIZE_KEY);
-  if (savedSize && PIECE_SIZES[savedSize]) renderer.setPieceSize(savedSize);
 }
 
 function renderThemeOptions(container, entries, activeId, onPick) {
