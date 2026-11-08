@@ -4,7 +4,9 @@
 // Ce Worker parle le MÊME protocole de messages que js/ai/worker.js (moteur maison) : l'interface, le contrôleur
 // js/ai/analysis-controller.js et l'affichage ne changent donc pas.
 //
-//   { id, type: 'analyse', position: { board, side }, history?, options?: { maxTimeMs, maxDepth } }
+//   { id, type: 'analyse', position: { board, side }, history?, options?: { maxTimeMs, maxDepth, newGame } }
+//        (newGame: true → `new-game` avant la position : tables de Scan vidées, résultats indépendants de l'ordre des
+//        positions ; utilisé par le Film de la partie, P31)
 //        → { id, type: 'progress', ok: true, result }   à chaque ligne `info` de Scan
 //        → { id, ok: true, result }                     à la fin (`done`) ; result = { score, mate, bestMove,
 //          bestMoveNotation, pv, pvNotation, depth, nodes, nps, timeMs, stopped, drawRule, tablebase }
@@ -114,7 +116,7 @@ export function createScanSession({ loadEngine, post }) {
         const err = init.find((l) => l.startsWith('error'));
         if (err) throw new Error(`Scan n'a pas pu s'initialiser : ${err}`);
         if (!init.includes('ready')) throw new Error('Scan n\'a pas répondu « ready » à init');
-        post({ type: 'status', status: 'ready', engine: engineName });
+        post({ type: 'status', status: 'ready', engine: engineName, wasmBytes: engine.memoryBytes ? (engine.memoryBytes() ?? null) : null });
       })();
       loading.catch(() => { engine = null; loading = null; });
     }
@@ -156,6 +158,7 @@ export function createScanSession({ loadEngine, post }) {
     const depth = Number.isFinite(opts.maxDepth) ? Math.max(1, Math.round(opts.maxDepth)) : DEFAULT_MAX_DEPTH;
     const timeS = (Number.isFinite(opts.maxTimeMs) ? opts.maxTimeMs : DEFAULT_MAX_TIME_MS) / 1000;
     const hh = hubHistory(position, msg.history);
+    if (opts.newGame === true) send('new-game'); // P31 : mesures indépendantes (tables vidées), comme les mesures natives de P28
     let out = hh ? send(`pos pos=${hh.pos} moves="${hh.moves}"`) : send(`pos pos=${pos}`);
     if (hh && out.some((l) => l.startsWith('error'))) out = send(`pos pos=${pos}`); // historique refusé : position seule
     if (out.some((l) => l.startsWith('error'))) { fail(msg.id, `Scan a refusé la position : ${out.find((l) => l.startsWith('error'))}`); return; }
@@ -224,7 +227,10 @@ async function loadScanWasm(onLine) {
     printErr: () => {},
     locateFile: (path) => new URL(path, base).href,
   });
-  return { send: (line) => Module.ccall('scan_command', null, ['string'], [line]) };
+  return { send: (line) => Module.ccall('scan_command', null, ['string'], [line]), memoryBytes: () => {
+      // taille de la mémoire WebAssembly (selon ce que le build exporte) ; jamais bloquant
+      try { const m = Module.wasmMemory || Module.asm?.memory || Module.asm?.o || null; return (m && m.buffer ? m.buffer.byteLength : (Module.HEAPU8 || Module.HEAP8 || { length: null }).length) ?? null; } catch { return null; }
+    } };
 }
 
 if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {

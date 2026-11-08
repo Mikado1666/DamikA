@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Film de la partie — DamikA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/film.css" />
+</head>
+<body>
+<main class="film" id="film">
+  <header class="film-head">
+    <a class="film-back" href="index.html" title="Retour à DamikA">← DamikA</a>
+    <h1 class="film-title">Le film de la partie</h1>
+    <div class="film-progress" id="film-progress" role="status" hidden>
+      <span class="film-progress-label" id="film-progress-label"></span>
+      <span class="film-progress-bar"><span class="film-progress-fill" id="film-progress-fill"></span></span>
+      <button type="button" class="film-game-btn" id="film-cancel">Annuler</button>
+    </div>
+    <nav class="film-games" id="film-games" aria-label="Parties (mode test)" hidden></nav>
+  </header>
+
+  <section class="film-board-col" aria-label="Damier">
+    <div class="film-players film-players-top" id="film-top"></div>
+    <div class="film-board-wrap"><canvas id="film-board" aria-label="Damier de la position choisie"></canvas></div>
+    <div class="film-players film-players-bottom" id="film-bottom"></div>
+    <div class="film-nav">
+      <button type="button" id="film-first" title="Début">⏮</button>
+      <button type="button" id="film-prev" title="Coup précédent (←)">◀</button>
+      <span class="film-ply" id="film-ply"></span>
+      <button type="button" id="film-next" title="Coup suivant (→)">▶</button>
+      <button type="button" id="film-last" title="Fin">⏭</button>
+    </div>
+  </section>
+
+  <section class="film-side" id="film-side">
+    <div class="film-msg" id="film-msg" role="status">
+      <h2 id="film-msg-title"></h2>
+      <p id="film-msg-text"></p>
+      <a class="film-back" href="index.html">← Retour à DamikA</a>
+    </div>
+    <div class="film-panel film-chart-panel">
+      <div class="film-panel-head">
+        <h2>Érosion, coup après coup</h2>
+        <div class="film-legend"><span class="lg lg-w"></span>Blancs <span class="lg lg-b"></span>Noirs</div>
+      </div>
+      <svg id="film-chart" viewBox="0 0 600 230" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Courbe d'érosion par camp"></svg>
+      <p class="film-note" id="film-chart-note"></p>
+    </div>
+    <div class="film-panel film-losses-panel">
+      <div class="film-panel-head"><h2>Les trois plus grosses pertes</h2><span class="film-hint">Cliquer pour voir la position</span></div>
+      <div class="film-losses" id="film-losses"></div>
+    </div>
+  </section>
+
+  <footer class="film-foot" id="film-foot"></footer>
+</main>
+<script type="module" src="js/film.js"></script>
+</body>
+</html>
