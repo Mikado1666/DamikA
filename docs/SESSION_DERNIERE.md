@@ -2190,3 +2190,31 @@ Commits poussés sur `main` (push normal) : `5bfd908` (P33 : `js/render/board-se
 
 **Inventaire avant modification (textes affichés)** : écran « À propos » (`index.html`) : ligne de crédit, phrase « Le moteur Scan tourne dans votre navigateur (WebAssembly)… scan-wasm de RoepStoep », liste de liens (Scan 3.1 / scan-wasm) ; ligne d'évaluation (`formatMeta`, « Moteur : Scan 3.1 par … · WebAssembly ») ; pied de l'écran d'analyse (deux textes : direct et mode test) ; messages d'échec (« WebAssembly indisponible… ») ; `ENGINES.scan.label/hint` (nomment l'auteur, mais le menu des moteurs n'est plus affiché depuis P30 : non modifiés). Commentaires de code, `LICENSE`, `NOTICE`, `README.md` : non touchés.
 **Fait** : crédit unique dans « À propos » : « Moteur : Scan 3.1 (lien vers le dépôt de Scan), de Fabien Letouzey — licence GPL-3.0-or-later » ; phrase WebAssembly / scan-wasm et ses deux liens retirés de « À propos » (restent : licence, NOTICE, code de DamikA, source exact du binaire) ; ligne d'évaluation = « Scan 3.1 · profondeur N » ; pieds de l'écran d'analyse sans auteur ni WebAssembly ; messages d'échec sans « WebAssembly ». `SCAN_CREDIT` reste exporté (non affiché). Tests mis à jour (`scan-protocol` O3) et verts.
+
+## P38 — Barre du bas : supprimer le débordement horizontal (11/11/2026)
+
+### Diagnostic (avant toute modification)
+Mesures dans des `<iframe>` de la largeur voulue (`.controls-bar`, `scrollWidth − clientWidth`, identique en thème sombre et clair) : 1280 px → 78 ; 1366 → 35 ; 1456, 1600, 1920 → 26 (le damier est plafonné à 950 px, donc la barre à 574 px : le débordement ne disparaît pas aux grands écrans).
+- La barre a pour largeur `--frame-px` (cadre du damier) : 471 px à 1280, 574 px au plus. Sa largeur naturelle (sans contrainte) est de **744 px**.
+- Causes (largeurs en dur, `css/style.css`, `.controls-bar` et suivants) : 5 boutons de 45/52 px ; `gap` 5 px × 11 ; 3 séparateurs à marges de 7 px ; padding de la barre 10 px ; « Évaluation » 97 px et « Analyse » 69 px (padding 12 px) ; bloc « Vitesse » 179 px (mot + curseur de 90 px + valeur de 26 px, gap 8) ; bouton flèche 45 px.
+- Les éléments sont bien `flex-shrink: 1` mais bloqués par leur `width` fixe / min-content (boutons texte, libellé « Vitesse »), d'où un contenu qui dépasse des deux côtés (marge négative de 25 à 77 px de chaque côté, `justify-content: center`).
+- `film.html` : sa barre de lecture est un composant distinct (boutons ⏮ ◀ ▶ ⏭ seuls), vérifiée plus bas.
+
+### Correction appliquée (css/style.css, index.html ; rien d'autre)
+1. (a) Gaps et paddings : `gap` 5 → 2 px, padding de la barre 10 → 10/6 px, marges des séparateurs 7 → 4 px, gap du bloc Vitesse 8 → 4 px, padding des boutons texte 12 → 8 px.
+2. (b) Compression : boutons 45 → 36 px (lecture 52 → 40), curseur de vitesse 90 → 48 px avec `min-width`, valeur 26 → 24 px, séparateurs `flex: none`, boutons texte `flex: none; white-space: nowrap`.
+3. (c) Palier compact par requête de conteneur (`.controls-bar { container-type: inline-size }`, `@container (max-width: 540px)`, c'est la largeur de la BARRE, donc du damier, qui compte, pas celle de la fenêtre) : boutons 32 px (lecture 36), texte 13 px, curseur 40 px, et le mot « Vitesse » masqué (`<span class="ctrl-speed-text">`, infobulle « Vitesse de lecture » sur le libellé). Actif seulement vers 1280 px d'écran. Ordre des boutons, libellés « Évaluation » / « Analyse », taille du damier et hauteur de la barre (62 px) inchangés. Layout ≤ 900 px non touché.
+4. Écran « Analyse de la partie » : sa barre de lecture (⏮ ◀ ▶ ⏭) ne déborde pas (0 px à 1280, 1456, 1920 ; pas de défilement horizontal de la page) : aucune modification.
+
+### Mesures (`scrollWidth − clientWidth` de `.controls-bar`, identiques en thème sombre et clair)
+| Largeur | Barre | Avant | Après | Après, analyse active |
+|---|---|---|---|---|
+| 1280 | 471 px | 78 | 0 | 0 |
+| 1366 | 557 px | 35 | 0 | – |
+| 1456 | 574 px | 26 | 0 | 0 |
+| 1600 | 574 px | 26 | 0 | – |
+| 1920 | 574 px | 26 | 0 | 0 |
+Hauteur de la barre : 62 px avant et après. « Analyse active » = classes `analysis-on` / `active` posées à la main (le calcul Scan n'a pas été lancé : il ne change pas la largeur de la barre). Tests Node de l'interface et de l'analyse : verts. NON commité : validation visuelle de Mickaël attendue.
+
+### Commit (P39)
+P38 commité : `cdb7500`, poussé sur main. Non déployé.

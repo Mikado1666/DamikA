@@ -631,6 +631,8 @@ Détail, sources, points d'interprétation, effets sur le fichier de référence
 
 **P33 à P35 commités et poussés (P36)** : `5bfd908`, `bd74933` ; aperçu https://ddaffa5a-damika.shell-green.workers.dev (version `ddaffa5a`), production non déployée.
 
+**Chantier P38 « barre du bas sans débordement » (11/11/2026) : validé par Mickaël, commité, NON déployé.** Le débordement horizontal de `.controls-bar` (26 à 78 px selon la largeur) est supprimé de 1280 à 1920 px, thèmes sombre et clair : gaps, paddings et largeurs de boutons réduits, puis palier compact par requête de conteneur (`container-type: inline-size` sur `.controls-bar`, `@container (max-width: 540px)` : c'est la largeur de la barre, donc du damier, qui compte, pas celle de la fenêtre) où le mot « Vitesse » (`.ctrl-speed-text`) est masqué (infobulle conservée). Ordre et libellés des boutons, hauteur (62 px) et layout ≤ 900 px inchangés. Détail et mesures : `docs/SESSION_DERNIERE.md` (section P38).
+
 **État au 01/11/2026 :** 3 parties jouées contre Scan niveau 7 le 01/11, 3 défaites ; thèmes : centre non disputé, pas de portes de sortie, horizon, pion isolé en 24 trop tôt. P19 (variété d'ouverture) en pause ; prochain prompt : P20.
 
 **Règle de méthode :** un seul chantier à la fois. Rien de nouveau tant que le précédent n'est

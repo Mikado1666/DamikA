@@ -1547,18 +1547,21 @@ a.ctrl-btn[hidden] { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 2px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
-  padding: 10px;
+  padding: 10px 6px;
+  container-type: inline-size; /* palier compact (P38) : voir @container ci-dessous */
   width: var(--frame-px, 100%);
   max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
 }
 .ctrl-btn {
-  width: 45px;
+  width: 36px;
+  flex: 0 1 auto;
+  min-width: 0;
   height: 40px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--panel-border);
@@ -1572,7 +1575,7 @@ a.ctrl-btn[hidden] { display: none; }
 .ctrl-btn:disabled { opacity: 0.3; cursor: default; }
 .ctrl-btn:disabled:hover { background: var(--bg-2); color: var(--text-1); }
 .ctrl-btn-main {
-  width: 52px;
+  width: 40px;
   background: var(--gold-chip);
   color: #241a0d;
   border-color: var(--chip-border);
@@ -1584,17 +1587,20 @@ a.ctrl-btn[hidden] { display: none; }
   width: 1px;
   height: 27px;
   background: var(--panel-border);
-  margin: 0 7px;
+  margin: 0 4px;
+  flex: none;
 }
 .ctrl-speed-label {
   font-size: 14px;
   color: var(--text-2);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  min-width: 0;
 }
 #speed-slider {
-  width: 90px;
+  width: 48px;
+  min-width: 24px;
   accent-color: var(--gold);
   cursor: pointer;
 }
@@ -1602,13 +1608,23 @@ a.ctrl-btn[hidden] { display: none; }
   color: var(--gold-text);
   font-weight: 700;
   font-size: 13px;
-  min-width: 26px;
+  min-width: 24px;
   text-align: center;
 }
 .ctrl-btn.active { background: var(--gold-chip); color: #241a0d; border-color: var(--chip-border); }
 .ctrl-btn.active:hover { background: var(--gold-chip); filter: brightness(1.08); }
 /* Bouton à libellé texte (« Analyse ») dans la barre de contrôles. */
-.ctrl-btn-text { width: auto; padding: 0 12px; font-size: 14px; font-weight: 600; }
+.ctrl-btn-text { width: auto; padding: 0 8px; font-size: 14px; font-weight: 600; white-space: nowrap; flex: none; min-width: auto; }
+/* Barre étroite (damier réduit, ≈ 1280 px d'écran) : boutons plus petits et libellé « Vitesse » masqué
+   (le curseur garde son infobulle) ; ordre et libellés des boutons inchangés. */
+@container (max-width: 540px) {
+  .ctrl-btn { width: 32px; }
+  .ctrl-btn-main { width: 36px; }
+  .ctrl-btn.ctrl-btn-text { width: auto; padding: 0 6px; font-size: 13px; }
+  .ctrl-sep { margin: 0 2px; }
+  .ctrl-speed-text { display: none; }
+  #speed-slider { width: 40px; }
+}
 
 /* ---------- Analyse du moteur (étage 2b) ---------- */
 /* JAUGE d'évaluation verticale (Noirs en haut, Blancs en bas comme les cartes joueurs ; .flipped, basculé
