@@ -2217,4 +2217,4 @@ Mesures dans des `<iframe>` de la largeur voulue (`.controls-bar`, `scrollWidth 
 Hauteur de la barre : 62 px avant et après. « Analyse active » = classes `analysis-on` / `active` posées à la main (le calcul Scan n'a pas été lancé : il ne change pas la largeur de la barre). Tests Node de l'interface et de l'analyse : verts. NON commité : validation visuelle de Mickaël attendue.
 
 ### Commit (P39)
-P38 commité : `cdb7500`, poussé sur main. Non déployé.
+P38 commité : `ab669e3`, poussé sur main. Non déployé.
