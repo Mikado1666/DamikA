@@ -6,7 +6,7 @@
 import { initialBoard, generateLegalMoves } from './engine/rules.js';
 import { BoardRenderer } from './render/board.js';
 import { readUiTheme, applyUiTheme, applySavedBoardSettings } from './render/board-settings.js';
-import { MIN_PLIES, DEPTH_REF, DEPTH_FROM, CAP, EVAL_TICKS, EVAL_ZONE, evalY } from './analysis/film-metrics.js';
+import { MIN_PLIES, DEPTH_REF, DEPTH_FROM, CAP, EVAL_TICKS, EVAL_ZONE, evalY, difficultyOf, moveVerdict } from './analysis/film-metrics.js';
 import { replayMoves, planGame, buildFilmGame, canonicalGameText } from './analysis/film-game.js';
 import { createFilmRunner, FilmCancelled } from './analysis/film-runner.js';
 import { playSound } from './sound.js';
@@ -32,7 +32,7 @@ function replay(moves) {
 }
 
 // ---- état ----
-const S = { data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval' }; // view : 'eval' (défaut) ou 'cum', non persisté
+const S = { data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval', touched: false }; // view : 'eval' (défaut) ou 'cum', non persisté
 // Thème d'interface, thème du damier, style et taille des pions : MÊMES réglages que l'appli (js/render/board-settings.js),
 // et MÊME dessin (BoardRenderer, js/render/board.js). Le thème est posé avant la création du renderer (il lit les couleurs CSS).
 applyUiTheme(readUiTheme());
@@ -52,7 +52,7 @@ function drawBoard() {
   if (!S.rp) return;
   const st = S.focus ? S.rp.steps[S.focus.ply] : S.rp.steps[S.ply - 1];
   renderer.setFlipped(S.flipped);
-  renderer.showArrow = !!S.focus;
+  renderer.showArrow = !!S.focus || S.ply > 0; // moment critique : position AVANT avec les deux flèches ; coup ordinaire : position APRÈS avec la flèche du coup joué
   renderer.bestMove = null;
   if (S.focus && S.focus.meilleur) renderer.bestMove = { squares: S.focus.meilleur.split(/[-x]/).map(Number) };
   renderer.setState({ board: S.rp.boards[S.ply], lastMove: st ? { squares: [st.from, st.to] } : null });
@@ -194,11 +194,19 @@ function drawEvalChart(g, svg) {
   hover.style.pointerEvents = 'none';
   // pastilles des fautes signalées (ordre de la partie), au point de la courbe après le coup : 26 px de diamètre
   (g.faults ?? []).forEach((f, i) => {
+    if (displayedMove() === f.ply) return; // dessinée en dernier (par-dessus les autres)
+    drawPastille(svg, g, f, i, X, Y, cy, evals);
+  });
+  (g.faults ?? []).forEach((f, i) => { if (displayedMove() === f.ply) drawPastille(svg, g, f, i, X, Y, cy, evals); });
+}
+function drawPastille(svg, g, f, i, X, Y, cy, evals) {
+  {
     const v = evals[f.ply + 1], x = X(f.ply + 1), y = v === null || v === undefined ? cy : Y(v);
     const a = mk('g', { class: 'mk-f', 'data-i': i, style: 'cursor:pointer' }, svg);
-    mk('circle', { cx: x, cy: y, r: 13, fill: graviteVar[f.gravite], stroke: C.bg, 'stroke-width': 2 }, a);
+    const sel = displayedMove() === f.ply;
+    mk('circle', { cx: x, cy: y, r: sel ? 16 : 13, fill: graviteVar[f.gravite], stroke: sel ? C.text : C.bg, 'stroke-width': sel ? 3.5 : 2 }, a);
     mk('text', { x, y: y + 5, 'text-anchor': 'middle', fill: 'var(--fault-on)', 'font-size': FS, 'font-weight': 700 }, a).textContent = i + 1;
-  });
+  }
 }
 
 // Position (0..n) sous le pointeur ; tient compte du redimensionnement (viewBox = taille du SVG, échelle 1).
@@ -257,23 +265,145 @@ $('film-chart').addEventListener('click', (e) => {
 document.querySelectorAll('.film-toggle button').forEach((b) => b.addEventListener('click', () => { S.view = b.dataset.view; drawChart(); }));
 
 // ---- listes et navigation ----
-function renderLosses() {
-  const g = S.data.parties[S.g], box = $('film-losses'); box.replaceChildren();
-  for (const [side, label] of [['w', 'Blancs'], ['b', 'Noirs']]) {
-    const col = document.createElement('div'); col.className = 'film-loss-col';
-    const h = document.createElement('h3'); const nm = nameOf(side === 'w' ? g.blancs : g.noirs); h.textContent = nm ? `${label} · ${nm}` : label; col.appendChild(h);
-    if (!g.top[side].length) { const p = document.createElement('div'); p.className = 'film-empty'; p.textContent = !DEMO && L.state === 'running' ? 'Analyse en cours…' : 'Rien à signaler.'; col.appendChild(p); }
-    g.top[side].forEach((l, i) => {
-      const b = document.createElement('button'); b.type = 'button';
-      b.className = 'film-loss' + (l.gravite === 'gagnant' ? ' gagnant' : '') + (S.focus && S.focus.ply === l.ply ? ' active' : '');
-      b.dataset.ply = l.ply;
-      b.innerHTML = `<span class="rk">${i + 1}</span><span class="mv">${l.no}${side === 'w' ? '.' : '…'} ${l.joue}<small>meilleur : ${l.meilleur ?? '—'}${l.gravite ? ' · ' + gravText[l.gravite] : ''}</small></span><span class="ls" style="color:${graviteVar[l.gravite] ?? 'var(--text-2)'}">−${fr(l.L)} <small>pion</small></span>`;
-      b.addEventListener('click', () => focusLoss(l));
-      col.appendChild(b);
-    });
-    box.appendChild(col);
-  }
+// ---- moments critiques (P42) : frise des fautes signalées des deux camps + carte du moment sélectionné ----
+// Données : g.faults (film-game.js, un coup identique au meilleur coup n'y figure jamais), numérotées dans l'ordre de la partie
+// comme les pastilles de la courbe. La sélection pilote le grand damier (position AVANT le coup, flèche rouge du coup joué,
+// flèche verte du meilleur coup) : c'est `S.focus`, comme avant. P42B : la carte du bas décrit TOUJOURS le coup affiché (displayedMove), critique ou non.
+const FRISE = { page: 0, side: 'all', ensure: false, last: null };
+const gravLabel = { 'légère': 'Légère', faute: 'Faute', majeure: 'Majeure' };
+const sideName = { w: 'Blancs', b: 'Noirs' };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const moveLabel = (f) => `${f.no}${f.side === 'w' ? '.' : '…'} ${f.joue}`;
+const faultsOf = (g) => (g.faults ?? []).map((f, i) => ({ ...f, n: i + 1 }));
+const selectedPly = () => displayedMove(); // mise en évidence (frise, courbe) : seulement si le coup affiché est un moment critique
+
+function renderMoments() {
+  const g = S.data.parties[S.g], all = faultsOf(g);
+  const list = all.filter((f) => FRISE.side === 'all' || f.side === FRISE.side);
+  document.querySelectorAll('.film-seg button').forEach((b) => { const on = b.dataset.side === FRISE.side; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
+  const track = $('film-frise-track'); track.replaceChildren();
+  $('film-frise').hidden = all.length === 0;
+  const dm = displayedMove();
+  if (dm !== null && dm !== FRISE.last && list.some((f) => f.ply === dm)) FRISE.ensure = true;
+  FRISE.last = dm;
+  list.forEach((f) => {
+    const b = el('button', 'film-card'); b.type = 'button'; b.dataset.ply = f.ply;
+    const tour = !!g.tournant && g.tournant.ply === f.ply;
+    if (tour) b.classList.add('tournant');
+    if (selectedPly() === f.ply) b.classList.add('active');
+    const dot = el('span', 'fc-dot', String(f.n)); dot.style.background = graviteVar[f.gravite];
+    const txt = el('span', 'fc-txt');
+    txt.append(el('b', '', moveLabel(f)), el('small', '', `${sideName[f.side]} · −${fr(f.L, 1)}`));
+    if (tour) txt.append(el('small', 'fc-tour', 'Le tournant'));
+    b.append(dot, txt);
+    b.addEventListener('click', () => focusLoss(f));
+    track.appendChild(b);
+  });
+  layoutFrise(list);
+  renderMomentCard(g, all);
 }
+
+// Pagination de la frise : les cartes ne tiennent pas → deux flèches font défiler par pages (aucune barre de défilement).
+function layoutFrise(list) {
+  const view = $('film-frise-view'), cards = [...$('film-frise-track').children];
+  const frise = $('film-frise');
+  frise.classList.remove('single');
+  if (!cards.length) return;
+  const step = cards[0].offsetWidth + 8, vw = view.clientWidth;
+  const per = Math.max(1, Math.floor((vw + 8) / step)), pages = Math.max(1, Math.ceil(cards.length / per));
+  if (pages === 1) frise.classList.add('single');
+  if (FRISE.ensure) { const i = list.findIndex((f) => f.ply === selectedPly()); if (i >= 0) FRISE.page = Math.floor(i / per); FRISE.ensure = false; }
+  FRISE.page = Math.max(0, Math.min(pages - 1, FRISE.page));
+  $('film-frise-track').style.transform = `translateX(${-FRISE.page * per * step}px)`;
+  $('frise-prev').disabled = FRISE.page === 0; $('frise-next').disabled = FRISE.page >= pages - 1;
+}
+new ResizeObserver(() => { if (S.data && S.rp) { const g = S.data.parties[S.g]; layoutFrise(faultsOf(g).filter((f) => FRISE.side === 'all' || f.side === FRISE.side)); } }).observe($('film-frise-view'));
+$('frise-prev').addEventListener('click', () => { FRISE.page--; layoutFrise(faultsOf(S.data.parties[S.g]).filter((f) => FRISE.side === 'all' || f.side === FRISE.side)); });
+$('frise-next').addEventListener('click', () => { FRISE.page++; layoutFrise(faultsOf(S.data.parties[S.g]).filter((f) => FRISE.side === 'all' || f.side === FRISE.side)); });
+document.querySelectorAll('.film-seg button').forEach((b) => b.addEventListener('click', () => { FRISE.side = b.dataset.side; FRISE.page = 0; renderMoments(); }));
+
+// Le coup AFFICHÉ sur le grand damier : indice du demi-coup (index de g.rows), null à la position de départ.
+// Une sélection (S.focus) montre la position AVANT son coup ; sinon la position k est celle qui suit le coup k − 1.
+function displayedMove() { if (!S.rp) return null; return S.focus ? S.focus.ply : (S.ply > 0 ? S.ply - 1 : null); }
+
+// Une seule carte, deux contenus : moment critique (P42) ou coup ordinaire (verdict allégé) ; cas à part en texte simple.
+function renderMomentCard(g, all) {
+  const box = $('film-moment'); box.replaceChildren();
+  const m = displayedMove(), f = m === null ? null : all.find((x) => x.ply === m), row = m === null ? null : (g.rows ?? [])[m];
+  const nav = () => { // « Moment précédent / suivant » partent du coup affiché, même ordinaire : toujours visibles
+    const base = m === null ? -1 : m, prevF = [...all].reverse().find((x) => x.ply < base), nextF = all.find((x) => x.ply > base);
+    const n = el('div', 'mc-nav'), prev = el('button', 'mc-btn', '◀ Moment précédent'), next = el('button', 'mc-btn', 'Moment suivant ▶');
+    prev.type = next.type = 'button'; prev.disabled = !prevF; next.disabled = !nextF;
+    prev.addEventListener('click', () => focusLoss(prevF)); next.addEventListener('click', () => focusLoss(nextF));
+    n.append(prev, next); return n;
+  };
+  const evalLine = () => {
+    const ev = g.evals ?? [], fmtV = (v) => (v === null || v === undefined ? 'non analysée' : signed(v, 1));
+    const evl = el('div', 'mc-line'); evl.append(document.createTextNode('Évaluation : de '), el('b', '', fmtV(ev[m])), document.createTextNode(' à '), el('b', '', fmtV(ev[m + 1])), el('small', '', ' (vue des Blancs)')); return evl;
+  };
+  const line = (swatch, label, value) => { const d = el('div', 'mc-line'); if (swatch) d.appendChild(el('span', `sw ${swatch}`)); d.append(document.createTextNode(`${label} : `), el('b', '', value)); return d; };
+  const simple = (over, big, text) => { // cas à part : sur-titre, coup, phrase
+    box.dataset.simple = '1';
+    const main = el('div', 'mc-main'), side = el('div', 'mc-side');
+    if (over) main.appendChild(el('div', 'mc-over', over));
+    if (big) { const b = el('div', 'mc-big'); b.appendChild(el('span', 'mc-move', big)); main.appendChild(b); }
+    main.appendChild(el('p', 'mc-sentence', text)); side.appendChild(nav()); box.append(main, side);
+  };
+  delete box.dataset.simple;
+  if (!g.rows || !g.rows.length && !all.length) { box.append(el('p', 'mc-empty', 'Aucun coup à décrire.')); return; }
+  if (m === null) { simple('', '', 'Position de départ : à toi de dérouler la partie.'); return; }
+  if (!row) { simple('', '', 'Analyse en cours…'); return; }
+  const who = sideName[row.side], mv = `${row.moveNo}${row.side === 'w' ? '.' : '…'} ${row.played}`, over = `Coup ${row.moveNo} des ${who}`;
+  if (row.pending) { simple(over, mv, 'Analyse en cours…'); return; }
+  if (row.skipped) {
+    const t = row.skipped === 'forcé' ? (row.played.includes('x') ? 'Coup forcé : une seule prise possible.' : 'Coup forcé : un seul coup possible.')
+      : (String(row.skipped).startsWith('finale') ? 'Position non analysée : il reste trop peu de pièces.' : 'Position non analysée.');
+    simple(over, mv, t); return;
+  }
+  const main = el('div', 'mc-main'), side = el('div', 'mc-side');
+  if (f) { // moment critique : contenu de P42
+    const tour = !!g.tournant && g.tournant.ply === f.ply;
+    main.append(el('div', 'mc-over', tour ? 'Le coup qui a tout changé' : `Moment critique n° ${f.n}`));
+    const big = el('div', 'mc-big');
+    const loss = el('span', 'mc-loss', `−${fr(f.L, 1)} pion`); loss.style.color = graviteVar[f.gravite];
+    const badge = el('span', 'mc-badge', gravLabel[f.gravite]); badge.style.background = graviteVar[f.gravite];
+    big.append(el('span', 'mc-move', moveLabel(f)), loss, badge, el('span', 'mc-trait', `${sideName[f.side]} au trait`));
+    main.append(big, line('sw-played', 'Coup joué', f.joue), line('sw-best', 'Meilleur coup', f.meilleur ?? '—'), evalLine());
+    const dif = difficultyOf(f.type, f.latence);
+    if (dif) {
+      const d = el('div', 'mc-diff');
+      const head = el('div', 'mc-diff-head'); head.append(el('span', 'mc-diff-label', dif.label));
+      const gauge = el('span', 'gauge'); gauge.setAttribute('role', 'img'); gauge.setAttribute('aria-label', `Difficulté : ${dif.points} sur 5`);
+      for (let i = 1; i <= 5; i++) gauge.appendChild(el('span', 'gd' + (i <= dif.points ? ' on' : '')));
+      head.appendChild(gauge);
+      d.append(head, el('p', 'mc-sentence', dif.text));
+      side.appendChild(d);
+    }
+  } else { // coup ordinaire : verdict allégé, pas de difficulté
+    const v = moveVerdict({ same: row.same, L: row.Lraw ?? row.L });
+    main.append(el('div', 'mc-over', over));
+    const big = el('div', 'mc-big'), badge = el('span', `mc-badge verdict-${v.kind}`, v.label);
+    big.append(el('span', 'mc-move', mv), badge);
+    if (v.kind === 'small') big.appendChild(el('span', 'mc-loss mc-loss-small', `−${fr(row.Lraw ?? row.L, 1)} pion`));
+    main.appendChild(big);
+    main.appendChild(evalLine());
+    if (!row.same && row.best && row.best !== row.played) main.appendChild(line('sw-best', 'Meilleur coup selon Scan', row.best));
+  }
+  side.appendChild(nav());
+  box.append(main, side);
+}
+
+// Sélection automatique à la fin de l'analyse, si l'utilisateur n'a rien touché : le tournant, sinon la faute la plus coûteuse.
+function autoSelectMoment() {
+  if (S.touched || !S.data) return;
+  if (!DEMO && L.state !== 'done') return;
+  const g = S.data.parties[S.g], all = g.faults ?? [];
+  if (!all.length) return;
+  const f = (g.tournant && all.find((x) => x.ply === g.tournant.ply)) || all.reduce((m, x) => (x.L > m.L ? x : m), all[0]);
+  FRISE.ensure = true;
+  setFocus(f);
+}
+
 function renderHeader() {
   const g = S.data.parties[S.g];
   const top = S.flipped ? g.blancs : g.noirs, bottom = S.flipped ? g.noirs : g.blancs;
@@ -299,8 +429,8 @@ function renderPly() {
   else t = k === 0 ? 'Position de départ' : `Après ${Math.floor((k - 1) / 2) + 1}${(k - 1) % 2 === 0 ? '.' : '…'} ${g.moves[k - 1]}`;
   $('film-ply').textContent = t;
 }
-function refresh() { renderPly(); drawBoard(); drawChart(); document.querySelectorAll('.film-loss').forEach((b) => b.classList.toggle('active', !!S.focus && Number(b.dataset.ply) === S.focus.ply)); }
-function goTo(ply) { S.focus = null; S.ply = ply; refresh(); }
+function refresh() { renderPly(); drawBoard(); drawChart(); renderMoments(); }
+function goTo(ply) { S.touched = true; S.focus = null; S.ply = ply; refresh(); } // la carte du bas suit le coup affiché
 // Son (js/sound.js, mêmes réglages que l'appli). Règle RELEVÉE dans main.js (goToNextMove, goToPrevMove, boutons début / fin,
 // jumpToPly) : l'appli joue un son SEULEMENT en avançant d'un coup (bouton ▶ et flèche →) : 'capture' si le coup est une prise,
 // 'move' sinon, puis 'game-end' si la position atteinte est terminée (camp au trait sans coup). Silence en reculant (◀ et ←),
@@ -317,14 +447,18 @@ function stepTo(ply) {
     if (captures.length === 0 && simples.length === 0) playSound('game-end');
   }
 }
-function focusLoss(l) { S.focus = l; S.ply = l.ply; refresh(); } // position AVANT le coup en cause
+function setFocus(l) { // position AVANT le coup en cause ; une faute signalée devient aussi le moment affiché
+  S.focus = l; S.ply = l.ply;
+  refresh();
+}
+function focusLoss(l) { S.touched = true; setFocus(l); }
 function selectGame(i) {
-  const g = S.data.parties[i]; S.g = i; S.focus = null;
+  const g = S.data.parties[i]; S.g = i; S.focus = null; S.touched = false; FRISE.page = 0; FRISE.last = null;
   S.rp = replay(g.moves);
   if (DEMO) S.flipped = g.joueur === 'b'; else S.flipped = !!g.flipped;
   S.ply = 0;
   document.querySelectorAll('.film-game-btn').forEach((b, j) => b.classList.toggle('active', j === i));
-  renderHeader(); renderLosses(); refresh();
+  renderHeader(); refresh(); autoSelectMoment();
   if (S.rp.error) $('film-foot').textContent = `Partie non rejouable : ${S.rp.error}`;
 }
 
@@ -367,7 +501,7 @@ function renderProgress() {
 function applyRecs() {
   const g = buildFilmGame(L.plan, L.recs, L.meta);
   S.data.parties[0] = g;
-  renderLosses(); drawChart(); renderProgress();
+  renderMoments(); drawChart(); renderProgress();
 }
 function setState(state) {
   L.state = state;
@@ -393,7 +527,7 @@ async function startRun() {
       onRec: async () => { L.loading = false; applyRecs(); L.save = saveAnalysis(L.key, L.recs, L.recs.filter(Boolean).length === total); },
     });
     await L.save;
-    setState('done'); applyRecs();
+    setState('done'); applyRecs(); autoSelectMoment();
     publishStats('live', stats, Math.round(performance.now() - L.t0));
   } catch (e) {
     if (e instanceof FilmCancelled) { await L.save; setState('cancelled'); }
@@ -417,7 +551,7 @@ async function initLive() {
   const cached = await loadAnalysis(L.key);
   if (cached) L.recs = cached.recs.slice(0, plan.positions.length);
   const complete = L.recs.length >= plan.positions.length && L.recs.slice(0, plan.positions.length).every(Boolean);
-  if (complete) { applyRecs(); setState('done'); publishStats('cache', null, Math.round(performance.now() - t0)); return; }
+  if (complete) { applyRecs(); setState('done'); autoSelectMoment(); publishStats('cache', null, Math.round(performance.now() - t0)); return; }
   applyRecs();
   startRun();
 }

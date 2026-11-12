@@ -150,3 +150,29 @@ export function turningPoint(rows, evals) {
   }
   return null;
 }
+
+// ---- P42 : difficulté d'une faute (affichage seulement, à partir de la latence déjà calculée par classifyMove) ----
+// La latence est comptée en interne en « coups de chaque camp » (3, 5, 7, 9, 11) ; pour le joueur on parle en COUPS À LUI :
+// arrondi supérieur de la moitié (3 → 2, 5 → 3, 7 → 4, 9 → 5, 11 → 6).
+export const latencyToMoves = (lat) => Math.ceil(lat / 2);
+// { label, points (0 à 5 : 1 pour la latence la plus courte, 5 pour la plus longue, 0 si instable), moves, text } ou null
+// si la faute n'a pas de type. `type` : 'faute de calcul' | 'piège profond' | 'instable' (valeurs de classifyMove).
+export function difficultyOf(type, latence) {
+  if (type === 'instable' || latence === null || latence === undefined) {
+    if (type !== 'instable') return null;
+    return { label: 'Difficile à juger', points: 0, moves: null, text: 'Même le moteur hésite sur ce coup : à regarder de près.' };
+  }
+  const moves = latencyToMoves(latence), points = LEVELS.indexOf(latence) + 1;
+  if (type === 'faute de calcul') return { label: 'Bévue visible', points, moves, text: `La punition se voit en calculant ${moves} coups à l'avance : à ne pas rater.` };
+  if (type === 'piège profond') return { label: 'Piège profond', points, moves, text: `Il fallait calculer ${moves} coups à l'avance : difficile à trouver devant le damier.` };
+  return null;
+}
+
+// ---- P42B : verdict d'un coup ordinaire (ni faute signalée) affiché dans la carte du bas ----
+export const GOOD_LOSS = 0.1; // perte (pions) sous laquelle un coup est « Bon coup » ; à partir de là (sans être une faute) : « Petite imprécision »
+// m = { same (coup joué = meilleur coup de Scan), L (perte en pions, vue du camp qui joue ; négative = gain) }
+export function moveVerdict(m) {
+  if (m.same) return { kind: 'best', label: 'Meilleur coup' };
+  if (m.L < GOOD_LOSS) return { kind: 'good', label: 'Bon coup' };
+  return { kind: 'small', label: 'Petite imprécision' };
+}

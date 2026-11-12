@@ -1,5 +1,6 @@
 /* DAMIKA — écran « Film de la partie » (maquette B) : tout tient à l'écran, aucun défilement. */
 /* Couleurs, thème clair / sombre et polices : celles de l'appli (css/style.css, chargée avant ce fichier). Aucune couleur propre au Film. */
+:root { --film-played-arrow: #e5392a; } /* rouge vif du coup joué (damier ET carte du moment) : seule couleur propre à l'écran d'analyse */
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
@@ -45,7 +46,7 @@ button { font: inherit; color: inherit; }
 .film-board-col { grid-area: board; display: flex; flex-direction: column; gap: 6px; min-height: 0; --bsz: min(calc(100dvh - 190px), 46vw); width: var(--bsz); }
 .film-board-wrap { width: var(--bsz); height: var(--bsz); }
 /* le BoardRenderer de l'appli fixe lui-même la taille en pixels ; flèche du coup joué = rouge de l'appli */
-#film-board { display: block; --arrow-color: #e5392a; /* rouge vif, lisible sur les 4 damiers (le --danger du thème clair est trop sombre sur l'ardoise) */ }
+#film-board { display: block; --arrow-color: var(--film-played-arrow); /* rouge vif, lisible sur les 4 damiers (le --danger du thème clair est trop sombre sur l'ardoise) */ }
 .film-players { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; min-height: 18px; }
 .film-players .nm { font-weight: 600; }
 .film-players .tag { color: var(--text-2); font-size: 12px; }
@@ -84,20 +85,9 @@ button { font: inherit; color: inherit; }
 .tip-fault[hidden] { display: none; }
 .tip-g { font-weight: 700; }
 
-.film-losses { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; flex: 1; align-content: start; }
-.film-loss-col h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
-.film-loss {
   display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; width: 100%; text-align: left;
   background: transparent; border: 1px solid var(--panel-border); border-radius: 6px; padding: 5px 8px; margin-bottom: 5px; cursor: pointer;
 }
-.film-loss:hover, .film-loss.active { border-color: var(--gold); background: var(--gold-soft); }
-.film-loss .rk { color: var(--gold); font-weight: 700; font-size: 18px; }
-.film-loss .mv { font-weight: 600; }
-.film-loss .mv small { display: block; color: var(--text-2); font-weight: 400; font-size: 11.5px; }
-.film-loss .ls { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--danger); text-align: right; }
-.film-loss .ls small { display: block; font-weight: 500; color: var(--text-2); font-size: 11px; }
-.film-loss.gagnant .ls { color: var(--text-2); }
-.film-empty { color: var(--text-2); font-size: 12.5px; padding: 4px 2px; }
 
 .film-foot { grid-area: foot; color: var(--text-2); font-size: 11.5px; line-height: 1.35; display: flex; justify-content: space-between; gap: 16px; min-height: 16px; }
 
@@ -105,7 +95,7 @@ button { font: inherit; color: inherit; }
    Colonne du damier : 36 % de la largeur au plus ; colonne d'analyse : tout le reste, courbe ≈ 60 % de la hauteur. Aucun texte utile
    sous 14 px (13 px au minimum seulement dans la mise en page étroite, bloc ≤ 900 px plus bas, inchangé). */
 .film-board-col { --bsz: min(calc(100dvh - 190px), 36vw); }
-.film-side { grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
+.film-side { grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr); } /* courbe ≈ 55 %, moments critiques ≈ 45 % (P42 : la carte du moment a besoin de hauteur) */
 .film-back { display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: var(--text-0); background: var(--panel); border: 1px solid var(--gold); border-radius: 999px; padding: 6px 14px; }
 .film-back:hover { background: var(--gold-soft); color: var(--gold-text); }
 .film-players { font-size: 15px; }
@@ -130,17 +120,61 @@ button { font: inherit; color: inherit; }
 .film-help-tip { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 15; width: 380px; max-width: 70vw; padding: 10px 12px; background: var(--panel); color: var(--text-0); border: 1px solid var(--panel-border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); font-size: 14px; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal; pointer-events: none; }
 .film-help:hover .film-help-tip, .film-help:focus .film-help-tip { display: block; }
 /* Les trois plus grosses pertes : les blocs s'étirent pour remplir la hauteur */
-.film-losses { gap: 14px; align-content: stretch; }
-.film-loss-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.film-loss-col h3 { font-size: 14px; margin: 0; }
-.film-loss { flex: 1 1 0; min-height: 0; margin-bottom: 0; grid-template-columns: 28px minmax(0, 1fr) auto; padding: 6px 10px; }
-.film-loss .rk { font-size: 22px; }
-.film-loss .mv { font-size: 18px; font-weight: 700; }
-.film-loss .mv small { font-size: 15px; font-weight: 400; }
-.film-loss .ls { font-size: 20px; font-weight: 700; white-space: nowrap; }
-.film-loss .ls small { display: inline; font-size: 14px; font-weight: 500; color: var(--text-2); }
-.film-empty { font-size: 14px; }
 .film-foot { font-size: 14px; }
+
+/* ---- P42 : moments critiques (frise + carte du moment) ---- */
+.film-seg { display: inline-flex; border: 1px solid var(--panel-border); border-radius: 999px; overflow: hidden; flex: none; }
+.film-seg button { background: transparent; border: 0; padding: 4px 14px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.film-seg button + button { border-left: 1px solid var(--panel-border); }
+.film-seg button:hover { color: var(--text-0); }
+.film-seg button.active { background: var(--gold-chip); color: var(--on-gold); }
+.film-frise { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.film-frise[hidden] { display: none; }
+.film-frise-view { flex: 1 1 0; min-width: 0; overflow: hidden; }
+.film-frise-track { display: flex; gap: 8px; }
+.film-card { flex: none; width: 178px; height: 72px; display: flex; align-items: center; gap: 8px; padding: 6px 8px; text-align: left; cursor: pointer; background: transparent; border: 1px solid var(--panel-border); border-radius: 8px; color: var(--text-0); }
+.film-card:hover { border-color: var(--gold); }
+.film-card.active { border-color: var(--gold); background: var(--gold-soft); }
+.fc-dot { flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--fault-on); font-size: 14px; font-weight: 700; }
+.fc-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.fc-txt b { font-size: 16px; white-space: nowrap; }
+.fc-txt small { font-size: 14px; color: var(--text-2); white-space: nowrap; }
+.fc-txt small.fc-tour { color: var(--fault-major); font-weight: 700; }
+.film-arrow { flex: none; width: 32px; height: 48px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text-0); }
+.film-arrow:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-text); }
+.film-arrow:disabled { opacity: .3; cursor: default; }
+.film-frise.single .film-arrow { display: none; }
+.film-moment { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 6px 22px; padding: 10px 16px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; }
+.film-moment[data-empty] { display: flex; align-items: center; justify-content: center; }
+.mc-empty { margin: 0; color: var(--text-2); font-size: 16px; text-align: center; }
+.mc-main, .mc-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.mc-over { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.mc-big { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; }
+.mc-move { font-size: 28px; font-weight: 800; line-height: 1.15; }
+.mc-loss { font-size: 24px; font-weight: 700; white-space: nowrap; }
+.mc-badge { font-size: 14px; font-weight: 700; padding: 2px 10px; border-radius: 999px; color: var(--fault-on); }
+.verdict-best, .verdict-good { background: var(--success); }
+.verdict-small { background: var(--text-2); }
+.mc-loss-small { color: var(--text-2); }
+.film-moment[data-simple] .mc-sentence { font-size: 16px; margin-top: 6px; }
+.mc-trait { font-size: 14px; color: var(--text-2); }
+.mc-line { font-size: 15px; line-height: 1.45; }
+.mc-line b { font-weight: 700; }
+.mc-line small { font-size: 14px; color: var(--text-2); }
+.sw { display: inline-block; width: 24px; height: 5px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+.sw-played { background: var(--film-played-arrow); }
+.sw-best { background: var(--best-arrow-color); }
+.mc-diff-head { display: flex; align-items: center; gap: 12px; }
+.mc-diff-label { font-size: 18px; font-weight: 700; }
+.gauge { display: inline-flex; gap: 5px; }
+.gd { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--text-2); }
+.gd.on { background: var(--gold); border-color: var(--gold); }
+.mc-sentence { margin: 4px 0 0; font-size: 15px; line-height: 1.4; }
+.mc-nav { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.mc-btn { font-size: 14px; font-weight: 600; padding: 6px 12px; cursor: pointer; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; color: var(--text-0); }
+.mc-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-text); }
+.mc-btn:disabled { opacity: .35; cursor: default; }
+@media (max-height: 760px) { .film-moment { padding: 4px 12px; } .film-panel { padding-top: 6px; padding-bottom: 6px; } .film-side { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); } .mc-sentence { font-size: 14px; } .film-moment { padding: 6px 12px; gap: 0 18px; } .film-card { height: 60px; } .fc-txt { line-height: 1.12; } .mc-main, .mc-side { gap: 1px; } .mc-move { font-size: 26px; } .mc-loss { font-size: 22px; } .mc-line { line-height: 1.3; } .mc-sentence { margin-top: 2px; line-height: 1.3; } .mc-diff-label { font-size: 16px; } .film-frise { margin-bottom: 4px; } .mc-big { gap: 0 12px; } }
 
 /* étroit : une seule colonne, toujours sans défilement */
 @media (max-width: 900px) {
@@ -155,18 +189,15 @@ button { font: inherit; color: inherit; }
   .film-players { width: var(--bsz); font-size: 12px; }
   .film-side { grid-template-rows: minmax(90px, 1fr) auto; gap: 6px; }
   .film-chart-box { min-height: 90px; }
+  .film-moment { display: none; }
+  .film-card { width: 150px; height: 64px; }
   .film-help-tip { width: 260px; }
   .film-panel-head { margin-bottom: 0; }
   .film-legend { display: none; }
   .film-toggle button { padding: 3px 9px; font-size: 12px; }
-  .film-loss .mv small, .film-loss .ls small { display: none; }
-  .film-loss { grid-template-columns: 14px 1fr auto; gap: 4px; font-size: 12px; }
-  .film-loss-col h3 { font-size: 10px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .film-panel { padding: 6px 10px; }
   .film-panel h2 { font-size: 16px; }
   .film-foot { display: none; }
-  .film-loss { padding: 3px 6px; margin-bottom: 3px; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .film-loss, .film-game-btn, .film-nav button { transition: border-color .15s, background .15s, color .15s; }
 }

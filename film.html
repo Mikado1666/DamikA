@@ -55,9 +55,21 @@
       </div>
       <div class="film-chart-box" id="film-chart-box"><svg id="film-chart" viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Courbe d'évaluation de la partie, vue des Blancs"></svg></div>
     </div>
-    <div class="film-panel film-losses-panel">
-      <div class="film-panel-head"><div class="film-head-left"><h2>Les trois plus grosses pertes</h2><span class="film-help" tabindex="0" role="note" aria-label="Aide sur les pertes"><span class="film-help-q">?</span><span class="film-help-tip">Les trois coups où chaque camp a perdu le plus. Cliquer sur l'un d'eux pour voir la position juste avant : le coup joué (flèche rouge) et le meilleur coup (flèche verte).</span></span></div></div>
-      <div class="film-losses" id="film-losses"></div>
+    <div class="film-panel film-moments-panel">
+      <div class="film-panel-head">
+        <div class="film-head-left"><h2>Moments critiques</h2><span class="film-help" tabindex="0" role="note" aria-label="Aide sur les moments critiques"><span class="film-help-q">?</span><span class="film-help-tip">Les coups où un camp a mal joué, dans l'ordre de la partie (même numéro que sur la courbe). Cliquer sur l'un d'eux : le damier montre la position juste avant, avec le coup joué (flèche rouge) et le meilleur coup (flèche verte).</span></span></div>
+        <div class="film-seg" role="group" aria-label="Filtrer par camp">
+          <button type="button" class="active" data-side="all" aria-pressed="true">Tous</button>
+          <button type="button" data-side="w" aria-pressed="false">Blancs</button>
+          <button type="button" data-side="b" aria-pressed="false">Noirs</button>
+        </div>
+      </div>
+      <div class="film-frise" id="film-frise">
+        <button type="button" class="film-arrow" id="frise-prev" aria-label="Moments précédents">◀</button>
+        <div class="film-frise-view" id="film-frise-view"><div class="film-frise-track" id="film-frise-track"></div></div>
+        <button type="button" class="film-arrow" id="frise-next" aria-label="Moments suivants">▶</button>
+      </div>
+      <div class="film-moment" id="film-moment" aria-live="polite"></div>
     </div>
   </section>
 

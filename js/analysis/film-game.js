@@ -179,7 +179,8 @@ export function buildFilmGame(plan, recsRaw, meta = {}) {
     top: { w: topLosses(rows, 'w'), b: topLosses(rows, 'b') },
     // P41 : courbe d'évaluation, fautes signalées des deux camps (même forme que `top`), tournant, phases, échanges (coups avec prise)
     evals,
-    faults: rows.filter((r) => r.signaled).map((r) => ({ ply: r.ply, no: r.moveNo, side: r.side, joue: r.played, meilleur: r.best ?? null, L: r.L, gravite: r.gravite, type: r.type ?? null })),
+    // un coup joué identique au meilleur coup n'est JAMAIS un moment critique (garde-fou d'affichage, P42)
+    faults: rows.filter((r) => r.signaled && !r.same && r.best !== r.played).map((r) => ({ ply: r.ply, no: r.moveNo, side: r.side, joue: r.played, meilleur: r.best ?? null, L: r.L, gravite: r.gravite, type: r.type ?? null, latence: r.latence ?? null })),
     tournant: turningPoint(rows, evals),
     pieces,
     phases: phaseSegments(pieces),

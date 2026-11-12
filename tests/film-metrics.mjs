@@ -229,5 +229,26 @@ ok('E11 aucune formule de mesure touchée : METRICS_VERSION = 1, seuils inchang�
   ok('E13 échanges = coups avec prise (notation « x »)', JSON.stringify(g0.echanges) === JSON.stringify(plan.plies.filter((p) => p.played.includes('x')).map((p) => p.ply)));
 }
 
+// ---- F. P42 : difficulté de la faute (latence → coups du joueur → étiquette, jauge, phrase) ----
+ok('F1 latence → coups du joueur : arrondi supérieur de la moitié', [3, 5, 7, 9, 11].map(M.latencyToMoves).join() === '2,3,4,5,6');
+let d = M.difficultyOf('faute de calcul', 3);
+ok('F2 latence 3 : « Bévue visible », 1 point sur 5, 2 coups', d.label === 'Bévue visible' && d.points === 1 && d.moves === 2 && d.text === 'La punition se voit en calculant 2 coups à l\'avance : à ne pas rater.', JSON.stringify(d));
+d = M.difficultyOf('faute de calcul', 5);
+ok('F3 latence 5 (= SAN_VISION) : encore « Bévue visible », 2 points, 3 coups', d.label === 'Bévue visible' && d.points === 2 && d.moves === 3);
+d = M.difficultyOf('piège profond', 11);
+ok('F4 latence 11 : « Piège profond », 5 points, 6 coups', d.label === 'Piège profond' && d.points === 5 && d.moves === 6 && d.text === 'Il fallait calculer 6 coups à l\'avance : difficile à trouver devant le damier.', JSON.stringify(d));
+d = M.difficultyOf('piège profond', 7);
+ok('F5 latence 7 : « Piège profond », 3 points, 4 coups', d.label === 'Piège profond' && d.points === 3 && d.moves === 4);
+d = M.difficultyOf('instable', null);
+ok('F6 instable : « Difficile à juger », 0 point, pas de nombre de coups', d.label === 'Difficile à juger' && d.points === 0 && d.moves === null && d.text === 'Même le moteur hésite sur ce coup : à regarder de près.');
+ok('F7 sans type : null ; « bévue » et « piège » se coupent bien à SAN_VISION', M.difficultyOf(null, null) === null && M.difficultyOf(undefined, undefined) === null && M.SAN_VISION === 5);
+ok('F8 les points suivent les niveaux de latence (3,5,7,9,11 → 1 à 5)', M.LEVELS.map((l) => M.difficultyOf(l <= M.SAN_VISION ? 'faute de calcul' : 'piège profond', l).points).join() === '1,2,3,4,5');
+
+// ---- G. P42B : verdict d'un coup ordinaire ----
+ok('G1 constante : 0,1 pion', M.GOOD_LOSS === 0.1);
+ok('G2 coup = meilleur coup de Scan → « Meilleur coup » (même avec une perte de bruit)', M.moveVerdict({ same: true, L: 0 }).label === 'Meilleur coup' && M.moveVerdict({ same: true, L: 0.6 }).kind === 'best');
+ok('G3 perte < 0,1 (ou gain) → « Bon coup »', M.moveVerdict({ same: false, L: 0.09 }).kind === 'good' && M.moveVerdict({ same: false, L: -0.4 }).label === 'Bon coup' && M.moveVerdict({ same: false, L: 0 }).kind === 'good');
+ok('G4 perte ≥ 0,1 sans être une faute → « Petite imprécision »', M.moveVerdict({ same: false, L: 0.1 }).label === 'Petite imprécision' && M.moveVerdict({ same: false, L: 0.25 }).kind === 'small');
+
 console.log(failures ? `\n${failures} échec(s)` : '\nTout est vert.');
 process.exit(failures ? 1 : 0);
