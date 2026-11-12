@@ -2349,3 +2349,6 @@ Réalisé, **non commité, non déployé**. Aucune formule ni mesure touchée : 
 | 1920×1080 | 691 px (36 %) | 1137×527 | 60 % | 26 px | 14 px | 14 px | 260 / 18 / 15 px |
 
 Polices HTML mesurées (`getComputedStyle`) : bouton retour 14, bascule 15, légende 14, noms des joueurs 15, mention de camp 14, texte de position 14, titres 20, coup d'une perte 18, « meilleur » 15, perte 20, en-têtes de camp 14, pied 14. À 1280×720 rien n'a eu besoin de descendre d'un cran (aucun `clamp`). Tests Node de l'analyse verts (le code de calcul n'a pas bougé).
+
+### Commit (P41C)
+P41 et P41B commités : `88541d6`, poussés sur main. Non déployé.
