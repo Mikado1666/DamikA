@@ -2396,3 +2396,6 @@ Réalisé, **non commité, non déployé**. Affichage seulement, aucune formule 
 **Vérification** (`film.html?demo=1`, 1456×819, thèmes sombre et clair, partie de 61 coups avec tournant) : début, → d'un coup, fin (« Position non analysée »), clic sur la courbe hors pastille (« Coup 22 des Blancs », aucune carte ni pastille en évidence), clic sur la pastille 3, ← depuis la pastille (« Coup 41 des Noirs, Meilleur coup »), ← de nouveau (« Le coup qui a tout changé », carte et pastille en évidence), « Moment suivant » depuis un coup ordinaire (va au moment critique n° 1, position avant le coup), « Moment précédent », coup forcé trouvé (« une seule prise possible »), « Petite imprécision −0,1 pion » trouvée ; carte sans débordement, pas de défilement de page, 0 erreur JS. Tests Node de l'analyse verts.
 
 **Comment tester en 2 minutes** : `film.html?demo=1`, « Partie 4 ». Cliquer n'importe où sur la courbe, puis ← → : la carte du bas suit chaque coup ; elle ne s'éclaire dans la frise que sur un moment critique. « Moment suivant » depuis un coup ordinaire saute au prochain moment critique.
+
+### Commit (P42D)
+P42 et P42B commités : `4948eef`, poussés sur main. Non déployé.
