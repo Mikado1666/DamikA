@@ -67,6 +67,11 @@
   --eval-light: rgba(255, 210, 110, 1);
   --eval-zone: rgba(255, 200, 80, 0.38);
   --eval-tick: rgba(170, 156, 136, 0.95);
+  /* Écran d'analyse (P41) : pastilles des fautes signalées, une couleur par gravité, et chiffre posé dessus. */
+  --fault-light: #e8c25a;
+  --fault-mid: #f08a3c;
+  --fault-major: #ff6a55;
+  --fault-on: #1a120a;
   /* Plaque de score (grand nombre sous le damier) : un fond par camp qui a l'avantage. */
   --plate-white-bg: linear-gradient(180deg, #fff8e6 0%, #ecdcb6 100%);
   --plate-white-fg: #2a1c0a;
@@ -175,6 +180,12 @@
   --eval-light: rgba(255, 186, 60, 1);
   --eval-zone: rgba(224, 150, 20, 0.4);
   --eval-tick: rgba(120, 98, 66, 0.95);
+  /* Contrastes mesurés (WCAG) contre --panel #e6d9be : légère 4,7:1, faute 4,1:1, majeure 5,8:1 (graphiques, 3:1 exigé ; la
+     couleur « majeure » sert aussi de texte : 4,5:1 exigé, 5,8:1) ; chiffre --fault-on sur la pastille : 6,2 / 5,4 / 7,7:1. */
+  --fault-light: #7a5800;
+  --fault-mid: #a1500a;
+  --fault-major: #9c1c14;
+  --fault-on: #fff8ea;
   --plate-white-bg: linear-gradient(180deg, #efe5cd 0%, #dccca3 100%);
   --plate-white-fg: #3a2408;
   --plate-black-bg: linear-gradient(180deg, #5a4838 0%, #2a2018 100%);

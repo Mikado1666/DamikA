@@ -58,12 +58,31 @@ button { font: inherit; color: inherit; }
 .film-panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 14px; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .film-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .film-panel h2 { font-weight: 700; font-size: 20px; margin: 0; color: var(--text-0); }
-.film-hint { color: var(--text-2); font-size: 11.5px; }
 .film-legend { color: var(--text-2); font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .lg { display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-left: 8px; }
 .lg-w { background: var(--text-0); } .lg-b { background: repeating-linear-gradient(90deg, var(--gold) 0 7px, transparent 7px 11px); }
 #film-chart { flex: 1 1 0; min-height: 0; width: 100%; cursor: pointer; }
-.film-note { margin: 2px 0 0; color: var(--text-2); font-size: 11.5px; line-height: 1.35; }
+.film-toggle { display: inline-flex; border: 1px solid var(--panel-border); border-radius: 999px; overflow: hidden; }
+.film-toggle button { background: transparent; border: 0; padding: 4px 14px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.film-toggle button + button { border-left: 1px solid var(--panel-border); }
+.film-toggle button:hover { color: var(--text-0); }
+.film-toggle button.active { background: var(--gold-chip); color: var(--on-gold); }
+.lg-ew, .lg-eb { height: 9px; border-radius: 2px; }
+.lg-ew { background: var(--eval-white-1); border: 1px solid var(--eval-border); }
+.lg-eb { background: var(--eval-dark-1); border: 1px solid var(--eval-border); }
+.dt { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 10px; }
+.dt-light { background: var(--fault-light); } .dt-mid { background: var(--fault-mid); } .dt-major { background: var(--fault-major); }
+/* infobulle de survol : ne capte jamais la souris, reste dans la fenêtre (positionnée par js/film.js) */
+.film-tip { position: fixed; z-index: 20; pointer-events: none; width: 276px; padding: 8px; background: var(--panel); color: var(--text-0); border: 1px solid var(--panel-border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); font-size: 15px; line-height: 1.35; }
+.film-tip[hidden] { display: none; }
+/* le BoardRenderer impose un canvas d'au moins 280 px : réduit par transform dans une fenêtre de 260 px */
+.film-tip-board { width: 260px; height: 260px; overflow: hidden; border-radius: 4px; }
+.film-tip-board canvas { display: block; transform-origin: 0 0; transform: scale(0.9286); }
+.tip-move { margin-top: 6px; font-weight: 700; font-size: 18px; }
+.tip-eval { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.tip-fault { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--panel-border); }
+.tip-fault[hidden] { display: none; }
+.tip-g { font-weight: 700; }
 
 .film-losses { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; flex: 1; align-content: start; }
 .film-loss-col h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
@@ -82,6 +101,47 @@ button { font: inherit; color: inherit; }
 
 .film-foot { grid-area: foot; color: var(--text-2); font-size: 11.5px; line-height: 1.35; display: flex; justify-content: space-between; gap: 16px; min-height: 16px; }
 
+/* ---- P41B : « c'est l'analyse la vedette, pas le damier » ----
+   Colonne du damier : 36 % de la largeur au plus ; colonne d'analyse : tout le reste, courbe ≈ 60 % de la hauteur. Aucun texte utile
+   sous 14 px (13 px au minimum seulement dans la mise en page étroite, bloc ≤ 900 px plus bas, inchangé). */
+.film-board-col { --bsz: min(calc(100dvh - 190px), 36vw); }
+.film-side { grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
+.film-back { display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: var(--text-0); background: var(--panel); border: 1px solid var(--gold); border-radius: 999px; padding: 6px 14px; }
+.film-back:hover { background: var(--gold-soft); color: var(--gold-text); }
+.film-players { font-size: 15px; }
+.film-players .tag { font-size: 14px; }
+.film-nav button { width: 38px; height: 32px; font-size: 16px; }
+.film-ply { font-size: 14px; min-width: 170px; }
+.film-progress, .film-game-btn { font-size: 14px; }
+.film-test-label { font-size: 14px; font-weight: 700; color: var(--text-2); align-self: center; margin-right: 4px; }
+.film-panel-head { align-items: center; gap: 12px; margin-bottom: 6px; }
+.film-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.film-toggle button { font-size: 15px; padding: 5px 16px; }
+.film-legend { font-size: 14px; }
+.lg { height: 4px; }
+.lg-ew, .lg-eb { height: 10px; }
+.dt { width: 12px; height: 12px; }
+.film-chart-box { flex: 1 1 0; min-height: 0; position: relative; }
+#film-chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* « ? » : explication en infobulle (remplace les longues phrases sous la courbe et en bas de page) */
+.film-help { position: relative; display: inline-flex; flex: none; outline: none; }
+.film-help-q { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--text-2); color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; cursor: help; }
+.film-help:hover .film-help-q, .film-help:focus .film-help-q { border-color: var(--gold); color: var(--gold-text); }
+.film-help-tip { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 15; width: 380px; max-width: 70vw; padding: 10px 12px; background: var(--panel); color: var(--text-0); border: 1px solid var(--panel-border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); font-size: 14px; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal; pointer-events: none; }
+.film-help:hover .film-help-tip, .film-help:focus .film-help-tip { display: block; }
+/* Les trois plus grosses pertes : les blocs s'étirent pour remplir la hauteur */
+.film-losses { gap: 14px; align-content: stretch; }
+.film-loss-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.film-loss-col h3 { font-size: 14px; margin: 0; }
+.film-loss { flex: 1 1 0; min-height: 0; margin-bottom: 0; grid-template-columns: 28px minmax(0, 1fr) auto; padding: 6px 10px; }
+.film-loss .rk { font-size: 22px; }
+.film-loss .mv { font-size: 18px; font-weight: 700; }
+.film-loss .mv small { font-size: 15px; font-weight: 400; }
+.film-loss .ls { font-size: 20px; font-weight: 700; white-space: nowrap; }
+.film-loss .ls small { display: inline; font-size: 14px; font-weight: 500; color: var(--text-2); }
+.film-empty { font-size: 14px; }
+.film-foot { font-size: 14px; }
+
 /* étroit : une seule colonne, toujours sans défilement */
 @media (max-width: 900px) {
   .film { padding: 8px 12px 6px; gap: 6px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-areas: "head" "board" "side" "foot"; }
@@ -94,15 +154,17 @@ button { font: inherit; color: inherit; }
   .film-board-col { --bsz: min(calc(100vw - 24px), 38dvh); width: 100%; align-items: center; gap: 3px; }
   .film-players { width: var(--bsz); font-size: 12px; }
   .film-side { grid-template-rows: minmax(90px, 1fr) auto; gap: 6px; }
-  #film-chart { min-height: 60px; }
+  .film-chart-box { min-height: 90px; }
+  .film-help-tip { width: 260px; }
   .film-panel-head { margin-bottom: 0; }
   .film-legend { display: none; }
+  .film-toggle button { padding: 3px 9px; font-size: 12px; }
   .film-loss .mv small, .film-loss .ls small { display: none; }
   .film-loss { grid-template-columns: 14px 1fr auto; gap: 4px; font-size: 12px; }
   .film-loss-col h3 { font-size: 10px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .film-panel { padding: 6px 10px; }
   .film-panel h2 { font-size: 16px; }
-  .film-hint, .film-note, .film-foot { display: none; }
+  .film-foot { display: none; }
   .film-loss { padding: 3px 6px; margin-bottom: 3px; }
 }
 @media (prefers-reduced-motion: no-preference) {

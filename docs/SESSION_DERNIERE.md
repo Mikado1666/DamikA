@@ -2218,3 +2218,134 @@ Hauteur de la barre : 62 px avant et après. « Analyse active » = classes `ana
 
 ### Commit (P39)
 P38 commité : `ab669e3`, poussé sur main. Non déployé.
+
+## P40 — Recalibrage des seuils de fautes sur Scan WebAssembly (11/11/2026)
+
+**Conclusion : seuils inchangés.** Les constantes de `js/analysis/film-metrics.js` (plancher 0,30 ; 0,15·|V| ; PHASE 1,2 / 0,45 / 0,35 / 0,20 / 0) respectent déjà les trois critères sur le bruit de Scan WebAssembly. Aucun fichier de `js/`, `tests/` ni `data/` modifié, `METRICS_VERSION` reste 1 (le cache IndexedDB n'est pas invalidé), rien commité. Nouveau code (non suivi par git, comme le reste de `training/scan-arena/`) : `p40-scan-node.mjs`, `p40-run.mjs`, `p40-report.mjs` ; sorties dans `training/scan-arena/out/p40/` (ignoré par git ; `games.json` contient des noms de joueurs : ne jamais le déplacer).
+
+**Méthode de mesure (identique à l'écran).** Le VRAI Scan WebAssembly (`assets/engines/scan/`, mêmes octets que le site) tourne sous Node : `p40-scan-node.mjs` le charge en fournissant `scan.wasm` (hook `instantiateWasm`) et `scan.data` (`getPreloadedPackage`) et en simulant un Worker (`WorkerGlobalScope`). Par-dessus, le vrai `createScanSession` de `js/ai/scan-worker.js` (mêmes réglages : `tt-size 22`, `bb-size 3`, `go analyze`) et le vrai `js/analysis/film-runner.js` (profondeur 14, `new-game` avant chaque position, V = moyenne des profondeurs 11 à 14). Positions et rejeu : `film-game.js` ; classement des coups : `buildMoveRows` puis `film-metrics.js`. Aucune formule recopiée : `p40-report.mjs` n'en contient une, de même forme, que pour tester des constantes candidates, avec un autotest qui la compare au module (identique). 6 threads, un moteur chacun.
+```
+node training/scan-arena/p40-run.mjs collect                      # tirage et rejeu rules.js -> out/p40/games.json (graine 40)
+node training/scan-arena/p40-run.mjs measure --tag A --workers 6  # tout l'échantillon -> out/p40/run-A/
+node training/scan-arena/p40-run.mjs measure --tag R --only P28   # 2e passe des 7 parties de P28
+node training/scan-arena/p40-report.mjs [--cand '{"floor":..,"kv":..,"phase":[5 valeurs]}']   # -> summary.json, rapport.txt
+```
+
+**Échantillon.** 112 parties, 11 456 positions (9 137 recherches ; le reste = coups forcés, ≤ 6 pièces, positions terminales), 9 027 coups analysés dont **4 181 coups-bruit** (coup joué = meilleur coup de Scan à la profondeur 14, position suivante non terminale). Mesure : **149 s** (6 threads ; 863 s de calcul cumulées, ≈ 0,09 s par recherche). Détail : (1) les 7 parties de P28 (702 demi-coups) ; (2) « bibliothèque » = ce qui est dans `tests/pdn-local/` hors `td-*` : 5 parties distinctes (4, 11, 13, 16 et 71 demi-coups) ; les 7 parties de Mickaël de P28 ne sont PAS dans ce dossier (elles venaient de Téléchargements) ; `bibliotheque-complete.pdn` = 50 parties dont 47 sont la même partie de test de 4 demi-coups (46 doublons écartés) ; `td-echantillon-1000.pdn` volontairement NON utilisé (extrait de Turbo Dambase, pas la bibliothèque de Mickaël) ; (3) 100 parties de `td-propre` (758 150 parties lues, 721 399 avec PlyCount ≥ 60, tirage réservoir graine **40**, toutes ≥ 60 demi-coups au rejeu ; 10 527 demi-coups). **Parties écartées : 0** (aucune illégale, aucune de moins de 60 demi-coups dans td-propre).
+
+**Reproductibilité.** Les 7 parties de P28 mesurées deux fois (moteurs neufs) : 564 positions comparées, **0 écart** (maximum 0,00 pion, 0 meilleur coup différent). Le WebAssembly avec `new-game` est déterministe : le bruit ne vient pas de la répétition de la mesure mais de la mesure elle-même (V est une moyenne de profondeurs, pas une valeur exacte).
+
+**Bruit : WebAssembly contre natif** (perte du coup joué quand il égale le meilleur coup ; p95 / p99, en pions ; natif A = les MÊMES 7 parties mesurées en P28 ; natif B = parties de DamikA du tableau de P29, population différente : fins de parties tactiques) :
+
+| Tranche | WebAssembly (112 parties) | Natif A (7 parties) | Natif B (P29) | Seuil actuel |
+|---|---|---|---|---|
+| tout | n 4 181, p50 0, **0,16 / 0,48** | n 236, 0,19 / 0,41 | n 1 369, 0,51 / 2,00 | |
+| \|V\| < 0,5 | 0,06 / 0,16 | 0,06 / 0,13 | 0,06 / 0,09 | 0,30 (plancher) |
+| 0,5 à 1,5 | 0,22 / 0,43 | 0,25 / 0,63 | 0,24 / 0,43 | 0,30 |
+| 1,5 à 3 | 0,40 / 0,66 | 0,20 / 0,74 | 0,38 / 0,53 | 0,30 à 0,45 |
+| 3 à 6 | 0,51 / 1,20 | 0,29 / 0,43 | 0,62 / 1,48 | 0,45 à 0,90 |
+| 6 à 16 | 1,95 / 2,42 | (n 5) | 1,97 / 3,28 | 0,90 à 2,40 |
+| < 10 pièces | 0,41 / 1,73 | 0,47 / 0,72 | 1,95 / 3,42 | 1,20 |
+| 10 à 15 | 0,40 / 0,82 | 0,21 / 0,23 | 0,76 / 1,76 | 0,45 |
+| 16 à 21 | 0,16 / 0,40 | 0,13 / 0,68 | 0,44 / 0,65 | 0,35 |
+| 22 à 29 | 0,10 / 0,20 | 0,06 / 0,09 | 0,19 / 0,48 | 0,20 |
+| ≥ 30 | 0,04 / 0,07 | 0,05 / 0,09 | 0,07 / 0,21 | 0,30 (plancher) |
+
+À positions identiques (colonne natif A), le bruit du WebAssembly n'est pas plus fort que celui du natif : l'écart sur les fautes signalées (10 natif seul, 2 WebAssembly seul, P31) ne vient donc pas d'un bruit plus grand. Écart de perte d'un même coup entre les deux moteurs sur les 7 parties : moyenne 0,08, p95 0,37, maximum 2,25 (557 coups). Le bruit du natif B est plus élevé parce que ces coups sont des fins de parties tactiques de DamikA, pas parce que le moteur diffère ; sur les parties humaines propres il est plus faible partout.
+
+**Constantes avant / après : identiques** (plancher 0,30 ; K_V 0,15 ; PHASE 1,2 / 0,45 / 0,35 / 0,20 / 0). Critères (part des coups-bruit au-dessus de 1× / 2× / 4× le seuil ; exigés ≤ 5 % / ≤ 1 % / 0 %) :
+
+| Population | n | > 1× | > 2× | > 4× |
+|---|---|---|---|---|
+| WebAssembly, tout l'échantillon | 4 181 | 1 % | 0 % | 0 % (0 coup) |
+| WebAssembly, 7 parties de P28 | 241 | 1 % | 0 % | 0 % |
+| WebAssembly, td-propre | 3 895 | 1 % | 0 % | 0 % |
+| natif B (P29, contrôle) | 1 369 | 3 % | 1 % | 0 % (3 coups) |
+
+Les seuils sont même plutôt larges sur parties humaines (1 % de bruit au-dessus, critère 5 %). Cela ne justifie pas de changement (consigne : ne rien changer si les critères sont respectés ; ne pas baisser le plancher sans raison chiffrée).
+
+**Fautes signalées** (constantes actuelles, donc « avant » = « après » ; WebAssembly) :
+
+| Ensemble | Coups | Candidates | Signalées | Majeure | Faute | Légère |
+|---|---|---|---|---|---|---|
+| 7 parties de P28, deux camps | 557 | 52 | 47 | 7 | 16 | 24 |
+| 7 parties de P28, côté de Mickaël | 276 | 18 | 13 | 2 | 5 | 6 |
+| (même ensemble, natif, P29) | | | 15 | 3 | 4 | 8 |
+| bibliothèque (5 parties, surtout celle de 71 demi-coups) | 98 | 18 | 17 | 11 | 4 | 2 |
+| td-propre (100 parties) | 8 372 | 479 | 465 | 80 | 117 | 268 |
+
+Sur les 7 parties : 47 signalées en WebAssembly contre 55 en natif (45 communes + 10 natif seul, P31) : cohérent. td-propre : 5,6 % des coups signalés, dont 58 % « légères ».
+
+**Règle « largement gagnant »** (devenir de la partie, camp qui joue, valeur APRÈS son coup) : 1 à 2 pions : 77 % gagnées / 22 % nulles / 1 % perdues (n 348, 77 parties) ; 2 à 3 : 77 / 23 / 0 (n 152) ; 3 à 5 : 95 / 2 / 3 (n 153) ; ≥ 5 : 100 / 0 / 0 (n 115). Positions « largement gagnantes » au sens de la règle (avant ≥ 2,0 et après ≥ max(2,0 ; 0,5 × avant)) : n 401, 70 parties : **90 % gagnées, 8 % nulles, 1 % perdues** ; les 20 candidates retirées par la règle (16 parties) : 85 % gagnées, 15 % nulles, 0 perdue ; les candidates NON retirées (n 528) : 17 % gagnées, 34 % nulles, 50 % perdues. **Règle conservée** (les données ne la contredisent pas), mais « jamais perdu » (P29) devient « une partie sur 70 » : les 5 positions perdues viennent toutes de la même partie de la bibliothèque (71 demi-coups ; Scan donne +3,1 à +4,9 au camp qui perd ensuite).
+
+**Les 4 coups jugés par Mickaël** (avant = après recalibrage ; natif = P29) :
+
+| Coup | Verdict attendu | Natif (P29) | WebAssembly, avant et après |
+|---|---|---|---|
+| partie 88, 25. 32-28 | vraie bévue | majeure (perte 1,48, seuil 0,30) | **majeure** (1,51) ✓ |
+| partie 116, 58. 13-9 | petite faute | légère (1,95, seuil 1,20) | **non signalé** (perte 0,75 sous le seuil 1,20 ; meilleur coup de Scan 13-8 au lieu de 47-42) ✗ |
+| partie 122, 47… 13-19 | pas de faute | non signalé (largement gagnant) | **non signalé** (3,94 → 2,72) ✓ |
+| partie 108, 48… 45-50 | pas de faute | non signalé (largement gagnant) | **non signalé** (4,04 → 2,54) ✓ |
+
+Le 58. 13-9 ne colle pas : en WebAssembly, Scan voit autrement cette finale de 8 pièces (meilleur coup et perte différents du natif). Je n'ai pas tordu la constante. À titre d'information, j'ai chiffré PHASE(< 10 pièces) = 0,60 au lieu de 1,2 : le 58. 13-9 serait signalé « légère » (perte 0,75 contre 0,60), mais 1 coup-bruit dépasserait 4× le seuil (critère 0 % non tenu strictement, 0,02 %) et le calage serait fait sur un seul cas ; **non retenu** (+10 fautes signalées sur td-propre, de 465 à 475 ; +5 sur les 7 parties, de 47 à 52). Si Mickaël veut les finales de moins de 10 pièces plus sensibles, c'est la seule constante à toucher.
+
+**Réglages du Scan natif de P28 (retrouvés).** `scan.exe` de Turbo Dambase, `scan.ini` : `book = false`, `threads = 1`, **`tt-size = 24`** (2^24 entrées), **`bb-size = 0`** (aucune table de finale) ; P28 n'a surchargé que `book` et `threads`. Le WebAssembly tourne avec `tt-size 22` (4 fois moins) et `bb-size 3` (tables de 2 à 3 pièces), build scan-wasm « 3.1b » de RoepStoep, `go analyze` (natif : `go think`). Ces différences sont notées, **pas établies comme cause** des écarts (même évaluation `data/eval`, SHA-256 identique).
+
+**À regarder par Mickaël pour valider** (à ouvrir dans l'écran Analyse ; je ne connais pas l'ordre de sa bibliothèque, donc les parties sont désignées par leur nombre de demi-coups) : la partie de **116** demi-coups (58. 13-9 : attendu « légère », non signalé) ; la partie de **88** (25. 32-28 : doit rester « majeure ») ; la partie de **122** (47… 13-19 : ne doit pas être signalé). Décision à prendre : rendre ou non les finales de moins de 10 pièces plus sensibles (option ci-dessus) ; sinon rien à changer.
+
+## P41 — Écran « Analyse de la partie » : la courbe d'évaluation (12/11/2026)
+
+Réalisé, **non commité, non déployé**. La mesure (Scan, profondeurs, seuils, `METRICS_VERSION = 1`) n'est pas touchée : seulement de l'affichage et deux notions dérivées (tournant, phases). Rien dans `data/`.
+
+**Fait**
+- **Courbe « Évaluation »** (par défaut ; bascule à deux boutons « Évaluation » / « Imprécisions cumulées » au-dessus de la courbe, choix NON persisté ; l'ancienne courbe est inchangée) : une valeur par position vue des Blancs, échelle `y = v / (|v| + 1,5)` (`EVAL_SCALE`), aire claire côté Blancs (`--eval-white-1`) et sombre côté Noirs (`--eval-dark-1`), trait net avec halo de la couleur du panneau (lisible sur les deux aires, dans les deux thèmes), bande d'équilibre ±0,2 (`--eval-zone`), lignes à ±0,5 / ±1 / ±2 graduées à gauche (« +0,5 »), axe du bas en numéros de COUPS (tous les 5, tous les 10 au-delà de 60 coups). Position non analysée : la courbe s'interrompt. Pendant l'analyse en direct elle se remplit au fur et à mesure.
+- **Survol** (courbe « Évaluation » seulement) : trait vertical + infobulle (mini-damier dessiné par le `BoardRenderer` de l'appli avec les réglages de l'utilisateur, coup « 35. 40-34 », évaluation, et pour une faute signalée : gravité, perte, meilleur coup). `pointer-events: none`, positionnée en `fixed` et bornée à la fenêtre (aucun défilement). Le `BoardRenderer` impose un canvas d'au moins 280 px : il est réduit par `transform: scale(0,6)` dans une fenêtre de 168 px (aucun changement de `board.js`). Clic sur la courbe : le grand damier va à la position (comportement conservé).
+- **Pastilles** : une par faute signalée des DEUX camps, numérotée dans l'ordre de la partie, couleur selon la gravité, placée sur la courbe après le coup. Clic = comme un clic sur une perte de la liste (position avant le coup, flèche rouge du coup joué, flèche verte du meilleur coup).
+- **Tournant** : trait pointillé + étiquette « Le tournant · 35. 40-34 » (couleur de la gravité « majeure »). **Définition retenue** (`turningPoint`, `film-metrics.js`, testée E5 à E10) : la PREMIÈRE faute signalée de gravité « faute » ou « majeure » après laquelle l'évaluation reste, jusqu'à la fin, à PLUS de 0,5 pion (strict) du côté de l'adversaire ; les positions non analysées sont ignorées (au moins une valeur exigée) ; pas de faute qui répond : pas de repère ; **aucun tournant tant que l'analyse n'est pas complète** (une partie à moitié mesurée donnerait un faux tournant).
+- **Phases** : bande fine sous la courbe, Ouverture (30 pièces ou plus), Milieu de partie (20 à 29), Finale (moins de 20) (`PHASE_OPENING_MIN`, `PHASE_MIDDLE_MIN`, `phaseSegments`) ; petit trait au-dessus de la bande à chaque coup avec prise.
+- **Vocabulaire** : le seul « demi-coup » affiché était le message « Rien à analyser » de `film.js` ; remplacé (« La partie est trop courte : il faut au moins 5 coups de chaque camp pour la tracer »). Rien d'autre dans `film.html`, `film.js`, `index.html`, `main.js`.
+- **Mode test** `film.html?demo=1` : lit maintenant les 7 parties mesurées en P40 (`training/scan-arena/out/p40/`, `games.json` + `run-A/`), rejouées et classées par les mêmes modules que le mode normal (l'ancien `out/p29/film.json` n'avait ni fautes ni valeurs par position). Constante `DEMO_DIR` (remplace `FILM_DATA_URL`).
+
+**Fichiers touchés** : `js/analysis/film-metrics.js` (constantes `EVAL_*`, `TURN_*`, `PHASE_*`, `evalY`, `phaseName`, `phaseSegments`, `turningPoint`), `js/analysis/film-game.js` (`buildFilmGame` renvoie en plus `evals` (n+1 valeurs), `faults`, `tournant`, `pieces`, `phases`, `echanges`), `js/film.js` (courbes, survol, infobulle, bascule, mode test), `film.html` (bascule, légende, infobulle), `css/film.css`, `css/style.css` (variables), `tests/film-metrics.mjs` (E1 à E13), `CLAUDE.md` (règles permanentes).
+
+**Nouvelles variables de couleur** (`css/style.css`, définies dans les deux thèmes ; contrastes WCAG mesurés en thème clair contre `--panel` #e6d9be) :
+
+| Variable | Sombre | Clair | Clair : contre le panneau | Chiffre `--fault-on` dessus (clair) |
+|---|---|---|---|---|
+| `--fault-light` (légère) | #e8c25a | #7a5800 | 4,7:1 | 6,2:1 |
+| `--fault-mid` (faute) | #f08a3c | #a1500a | 4,1:1 | 5,4:1 |
+| `--fault-major` (majeure, aussi texte du tournant) | #ff6a55 | #9c1c14 | 5,8:1 (texte : 4,5 exigé) | 7,7:1 |
+| `--fault-on` (chiffre) | #1a120a | #fff8ea | | |
+
+En thème sombre : 10,0 / 6,9 / 6,1:1 contre le panneau ; chiffre 10,8 / 7,4 / 6,6:1. Aucune autre couleur en dur ajoutée (`css/film.css` : le rouge `--arrow-color` de P33 reste la seule exception, documentée).
+
+**Vérification** : `node tests/film-metrics.mjs` (E1 à E13 ajoutés) et `analysis-format`, `analysis-controller`, `scan-protocol` verts. Une passe navigateur sur `film.html?demo=1` (iframes 1280×720, 1456×819, 1920×1080, thèmes sombre et clair) : aucun défilement (`scrollHeight − hauteur` = 0 et aucun débordement horizontal), 0 erreur JS, infobulle visible, dans la fenêtre, `pointer-events: none`, mini-damier de 280 px réduit, 3 pastilles sur la première partie ; sur les 7 parties : tournants trouvés sur 3 (41. 48-42, 23. 32-27, 62… 49-16), aucun sur 4. Coup d'œil sur les deux thèmes. **Non passé** : l'analyse en direct d'une partie de la bibliothèque dans cette passe (le tracé progressif réutilise `applyRecs()` inchangé, couvert seulement par le mode normal d'avant) ; à vérifier par Mickaël.
+
+**Comment tester en 2 minutes**
+1. `python -m http.server 8934`, ouvrir `http://localhost:8934/film.html?demo=1` (Ctrl+Maj+R), puis les pastilles de parties en haut à droite (61, 54, 64 coups : un tournant).
+2. Survoler la courbe : trait vertical + infobulle avec le mini-damier ; survoler une pastille : la faute (gravité, perte, meilleur coup). Cliquer une pastille : le grand damier montre la position avant le coup avec les flèches rouge et verte.
+3. Basculer « Imprécisions cumulées » (l'ancienne courbe) et revenir. Changer de thème dans l'appli (menu 🎨) puis rouvrir l'écran.
+4. Dans l'appli, ouvrir une partie de sa bibliothèque, « Analyse » : la courbe se remplit pendant le calcul, le tournant n'apparaît qu'à la fin.
+
+## P41B — Écran « Analyse de la partie » : la courbe en vedette (12/11/2026)
+
+Réalisé, **non commité, non déployé**. Aucune formule ni mesure touchée : `css/film.css` (bloc « P41B » avant la mise en page étroite), `film.html`, `js/film.js` (affichage), règle permanente dans `CLAUDE.md`.
+
+**Mise en page**
+- Colonne du damier : `--bsz: min(100dvh − 190px, 36vw)`, damier carré calé en haut ; colonne d'analyse : tout le reste, lignes `3fr / 2fr` (courbe ≈ 60 % de la hauteur, pertes le reste). Les trois blocs de perte de chaque camp s'étirent (`flex: 1`) : plus de vide sous la liste (11 px de marge intérieure seulement).
+- **Courbe à taille réelle** : le `viewBox` du SVG est recalculé à chaque redimensionnement (`ResizeObserver` sur `#film-chart-box`) pour valoir exactement la taille du SVG à l'écran (1 unité = 1 pixel) : les `font-size` écrits dans le code sont les tailles RÉELLES. Trait 3 px (halo 6 px), aires pleines, pastilles de 26 px de diamètre, graduations, numéros de coups, étiquette du tournant et libellés de phases en 14 px, bande des phases de 22 px de haut, bascule et légende en 14 / 15 px.
+- **Textes** : plus aucun texte utile sous 14 px. Pertes : coup 18 px gras, perte 20 px gras dans la couleur de sa gravité (`--fault-*`, gris `--text-2` si « largement gagnant »), « −0,75 pion » sur une ligne, « meilleur : … » 15 px. Retirées de l'écran : la phrase sous la courbe et la phrase d'explication de « Imprécisions cumulées » en bas de page (devenues des infobulles sur un « ? » à côté de la bascule, texte selon la courbe affichée, en langage simple) et le texte « Cliquer pour voir la position » (infobulle du « ? » des pertes). Le pied de page ne garde qu'une ligne courte (date, résultat, nombre de coups, « Évaluation indicative »).
+- **Survol** : mini-damier de 260 px (BoardRenderer de l'appli, canvas 280 px réduit par `transform: scale(0,9286)`), coup en 18 px gras, le reste en 15 px ; l'infobulle se place à côté du pointeur (26 px d'écart, côté où elle tient), jamais dessus, bornée à la fenêtre.
+- **Retour** : « ← Retour à la partie », vrai bouton à bordure dorée, 14 px, même lien qu'avant (aussi dans le message « aucune partie »).
+- **Mode test** (`?demo=1`) : libellé « Mode test » devant les pastilles « Partie 1 » à « Partie 7 », nombre de coups en infobulle ; rien en mode normal.
+- Mise en page étroite (≤ 900 px) : règles inchangées, seulement la hauteur minimale reportée de `#film-chart` sur sa boîte.
+
+**Mesures** (iframes, `film.html?demo=1`, partie de 61 coups ; identiques dans les deux thèmes ; défilement vertical, horizontal et du corps = 0 partout ; 0 erreur JS ; infobulle dans la fenêtre et ne recouvrant pas la pastille survolée) :
+
+| Fenêtre | Colonne du damier | Courbe (SVG) | Courbe / (courbe + pertes) | Pastille | Police du SVG | Plus petite police HTML | Infobulle : damier / coup / texte |
+|---|---|---|---|---|---|---|---|
+| 1280×720 | 461 px (36 %) | 727×291 | 60 % | 26 px | 14 px | 14 px | 260 / 18 / 15 px |
+| 1456×819 | 524 px (36 %) | 840×370 | 60 % | 26 px | 14 px | 14 px | 260 / 18 / 15 px |
+| 1920×1080 | 691 px (36 %) | 1137×527 | 60 % | 26 px | 14 px | 14 px | 260 / 18 / 15 px |
+
+Polices HTML mesurées (`getComputedStyle`) : bouton retour 14, bascule 15, légende 14, noms des joueurs 15, mention de camp 14, texte de position 14, titres 20, coup d'une perte 18, « meilleur » 15, perte 20, en-têtes de camp 14, pied 14. À 1280×720 rien n'a eu besoin de descendre d'un cran (aucun `clamp`). Tests Node de l'analyse verts (le code de calcul n'a pas bougé).

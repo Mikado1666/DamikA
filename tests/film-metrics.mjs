@@ -204,5 +204,30 @@ const firstLegal = (pos) => { const { captures, simples } = generateLegalMoves(p
     const rec = recFromSearch({ board: b, side: 'w' }, 4, { 14: 0.2 }, { bestMove: legal.seq }); return rec.best === '28x19' && /^[WB]/.test(rec.bestPos); })());
 }
 
+// ---- E. P41 : échelle de la courbe, phases, tournant (affichage seulement) ----
+ok('E1 échelle : y(0) = 0, y(1,5) = 0,5, antisymétrique, bornée par 1', M.evalY(0) === 0 && M.evalY(1.5) === 0.5 && M.evalY(-2) === -M.evalY(2) && Math.abs(M.evalY(15)) < 1);
+ok('E2 échelle : les petits écarts restent lisibles (0,5 pion → 0,25 ; 2 pions → 0,57)', Math.abs(M.evalY(0.5) - 0.25) < 1e-12 && Math.abs(M.evalY(2) - 4 / 7) < 1e-12);
+ok('E3 phases : 30+ ouverture, 20 à 29 milieu, < 20 finale', M.phaseName(40) === 'ouverture' && M.phaseName(30) === 'ouverture' && M.phaseName(29) === 'milieu' && M.phaseName(20) === 'milieu' && M.phaseName(19) === 'finale');
+const seg = M.phaseSegments([40, 38, 30, 29, 25, null, 19, 12]);
+ok('E4 segments de phases (une position inconnue interrompt)', JSON.stringify(seg) === JSON.stringify([{ phase: 'ouverture', from: 0, to: 2 }, { phase: 'milieu', from: 3, to: 4 }, { phase: 'finale', from: 6, to: 7 }]), JSON.stringify(seg));
+const row = (ply, side, gravite, extra = {}) => ({ ply, moveNo: Math.floor(ply / 2) + 1, side, played: '32-28', signaled: true, gravite, L: 1, ...extra });
+let evals = [0, 0.1, 0.0, 0.2, -0.3, -1.2, -0.9, -2.0, -1.5];
+let tp = M.turningPoint([row(2, 'b', 'légère'), row(4, 'w', 'faute'), row(6, 'w', 'majeure')], evals);
+ok('E5 tournant : la PREMIÈRE faute après laquelle l\'avantage de l\'adversaire tient (légères ignorées)', tp && tp.ply === 4 && tp.gravite === 'faute', JSON.stringify(tp));
+evals = [0, 0.1, 0.0, 0.2, -0.3, -1.2, 0.2, -2.0, -1.5];
+tp = M.turningPoint([row(4, 'w', 'faute'), row(6, 'w', 'majeure')], evals);
+ok('E6 tournant : si l\'avantage revient (position 6 à +0,2) la faute du ply 4 ne compte pas, celle du ply 6 oui', tp && tp.ply === 6, JSON.stringify(tp));
+ok('E7 tournant : aucune faute ne répond → null (pas de repère)', M.turningPoint([row(4, 'w', 'faute')], [0, 0.1, 0.0, 0.2, -0.3, -1.2, 0.2, -2.0, 0.4]) === null && M.turningPoint([row(2, 'b', 'légère')], evals) === null && M.turningPoint([], evals) === null);
+ok('E8 tournant : camp noir (l\'adversaire est les Blancs) ; seuil strict 0,5', M.turningPoint([row(3, 'b', 'majeure')], [0, 0, 0, 0, 0.6, 0.9, 0.7]).ply === 3 && M.turningPoint([row(3, 'b', 'majeure')], [0, 0, 0, 0, 0.5, 0.9, 0.7]) === null);
+ok('E9 tournant : position non analysée ignorée, mais au moins une valeur exigée', M.turningPoint([row(4, 'w', 'faute')], [0, 0, 0, 0, 0, null, -1, null, -2]).ply === 4 && M.turningPoint([row(4, 'w', 'faute')], [0, 0, 0, 0, 0, null, null]) === null);
+ok('E10 tournant : analyse incomplète (ligne en attente) → pas de tournant', M.turningPoint([row(4, 'w', 'faute'), { ply: 9, pending: true }], [0, 0, 0, 0, 0, -1, -1, -1, -1, -1]) === null);
+ok('E11 aucune formule de mesure touchée : METRICS_VERSION = 1, seuils inchangés', M.METRICS_VERSION === 1 && M.FLOOR === 0.30 && M.K_V === 0.15);
+{ // buildFilmGame : evals (n+1), fautes, échanges, phases cohérents sur une partie courte
+  const mv = []; { let b = initialBoard(), sd = 'w'; for (let i = 0; i < 12; i++) { const { captures, simples } = generateLegalMoves(b, sd); const m = captures.length ? { kind: 'capture', seq: captures[0] } : { kind: 'simple', move: simples[0] }; mv.push(fmjd(m)); b = applyLegal(b, sd, m); sd = other(sd); } }
+  const plan = planGame(mv); const g0 = buildFilmGame(plan, [], {});
+  ok('E12 partie non mesurée : evals de n+1 valeurs toutes nulles, pas de faute, pas de tournant', g0.evals.length === 13 && g0.evals.every((v) => v === null) && g0.faults.length === 0 && g0.tournant === null && g0.phases.length === 0);
+  ok('E13 échanges = coups avec prise (notation « x »)', JSON.stringify(g0.echanges) === JSON.stringify(plan.plies.filter((p) => p.played.includes('x')).map((p) => p.ply)));
+}
+
 console.log(failures ? `\n${failures} échec(s)` : '\nTout est vert.');
 process.exit(failures ? 1 : 0);

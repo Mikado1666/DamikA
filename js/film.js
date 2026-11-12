@@ -1,18 +1,18 @@
 // DAMIKA — écran « Analyse de la partie » (fichiers film*, vocabulaire P34) : courbe des imprécisions cumulées par camp + 3 plus grosses pertes par camp, cliquables (P29, P31).
 // Mode normal (P31) : la partie ouverte dans DamikA (sessionStorage, clé damika:film-current, écrite au clic sur « Film »)
 // est mesurée en direct par Scan 3.1 (WebAssembly) dans un Worker ; les valeurs par position sont gardées dans IndexedDB.
-// Mode test : film.html?demo=1 lit les 7 parties mesurées en P28/P29 (training/scan-arena/out/p29/film.json, produit par
-// p29-report.mjs, ignoré par git car il contient des noms de joueurs). Dans les deux cas les coups sont rejoués avec rules.js.
+// Mode test : film.html?demo=1 lit les 7 parties mesurées en P40 (training/scan-arena/out/p40/, produit par
+// p40-run.mjs, ignoré par git car il contient des noms de joueurs). Dans les deux cas les coups sont rejoués avec rules.js.
 import { initialBoard, generateLegalMoves } from './engine/rules.js';
 import { BoardRenderer } from './render/board.js';
 import { readUiTheme, applyUiTheme, applySavedBoardSettings } from './render/board-settings.js';
-import { MIN_PLIES, DEPTH_REF, DEPTH_FROM } from './analysis/film-metrics.js';
+import { MIN_PLIES, DEPTH_REF, DEPTH_FROM, CAP, EVAL_TICKS, EVAL_ZONE, evalY } from './analysis/film-metrics.js';
 import { replayMoves, planGame, buildFilmGame, canonicalGameText } from './analysis/film-game.js';
 import { createFilmRunner, FilmCancelled } from './analysis/film-runner.js';
 import { playSound } from './sound.js';
 import { hashText, loadAnalysis, saveAnalysis } from './analysis/film-cache.js';
 
-export const FILM_DATA_URL = 'training/scan-arena/out/p29/film.json';
+export const DEMO_DIR = 'training/scan-arena/out/p40/';
 export const FILM_STORAGE_KEY = 'damika:film-current';
 const DEMO = new URLSearchParams(location.search).get('demo') === '1';
 // Couleurs du graphique : variables CSS de l'appli (thème clair / sombre), jamais de valeur en dur.
@@ -32,7 +32,7 @@ function replay(moves) {
 }
 
 // ---- état ----
-const S = { data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false };
+const S = { data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval' }; // view : 'eval' (défaut) ou 'cum', non persisté
 // Thème d'interface, thème du damier, style et taille des pions : MÊMES réglages que l'appli (js/render/board-settings.js),
 // et MÊME dessin (BoardRenderer, js/render/board.js). Le thème est posé avant la création du renderer (il lit les couleurs CSS).
 applyUiTheme(readUiTheme());
@@ -58,53 +58,203 @@ function drawBoard() {
   renderer.setState({ board: S.rp.boards[S.ply], lastMove: st ? { squares: [st.from, st.to] } : null });
 }
 
-// ---- courbe d'érosion ----
+// ---- courbes (SVG) : « Évaluation » (P41, par défaut) et « Imprécisions cumulées » (P29, inchangée) ----
+// P41B : le viewBox épouse la taille RÉELLE du SVG (1 unité = 1 pixel écran, redessiné au redimensionnement) : les tailles de
+// police écrites ici sont donc les tailles réelles à l'écran, jamais mises à l'échelle.
 const NS = 'http://www.w3.org/2000/svg';
 const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) { if (typeof v === 'string' && v.startsWith('var(')) e.style.setProperty(k, v); else e.setAttribute(k, v); } if (parent) parent.appendChild(e); return e; };
-const W = 600, H = 230, M = { l: 34, r: 10, t: 26, b: 22 };
+// Géométrie de la courbe affichée (posée par chaque tracé, lue par le clic et le survol).
+const GEO = { W: 600, H: 230, M: { l: 34, r: 10, t: 26, b: 22 }, n: 0 };
+const FS = 14; // taille minimale du texte à l'écran (graduations, numéros de coups, étiquettes)
+function geoFor(view) {
+  const r = $('film-chart').getBoundingClientRect();
+  const W = Math.max(320, Math.round(r.width) || 600), H = Math.max(160, Math.round(r.height) || 260);
+  return view === 'eval' ? { W, H, M: { l: 54, r: 16, t: 24, b: 62 } } : { W, H, M: { l: 46, r: 16, t: 66, b: 34 } };
+}
+const signed = (v, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fr(Math.abs(v), d)}`;
+const graviteVar = { 'légère': 'var(--fault-light)', faute: 'var(--fault-mid)', majeure: 'var(--fault-major)' };
+const helpOf = (view) => (view === 'eval'
+  ? 'La courbe montre qui est mieux placé à chaque coup : au-dessus de zéro, les Blancs ; en dessous, les Noirs. Les pastilles numérotées sont les coups où un camp a mal joué (jaune : petite faute, orange : faute, rouge : grosse faute). Sous la courbe : les phases de la partie, et un trait à chaque échange de pièces.'
+  : 'Chaque palier est une petite imprécision de l\'un des camps (trop petite pour être une faute), additionnée coup après coup : plus la ligne monte, plus le camp a laissé filer d\'avantage petit à petit. Les cercles numérotés marquent les trois plus grosses pertes de chaque camp.');
+const legendOf = (view, box) => {
+  box.replaceChildren();
+  const add = (cls, text) => { const s = document.createElement('span'); s.className = cls; box.append(s, document.createTextNode(text)); };
+  if (view === 'eval') { add('lg lg-ew', 'Avantage Blancs'); add('lg lg-eb', 'Avantage Noirs'); add('dt dt-light', 'légère'); add('dt dt-mid', 'faute'); add('dt dt-major', 'majeure'); }
+  else { add('lg lg-w', 'Blancs'); add('lg lg-b', 'Noirs'); }
+};
+
 function drawChart() {
-  const g = S.data.parties[S.g], svg = $('film-chart');
+  const svg = $('film-chart');
   svg.replaceChildren();
+  const g = S.data.parties[S.g];
+  document.querySelectorAll('.film-toggle button').forEach((b) => { const on = b.dataset.view === S.view; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
+  legendOf(S.view, $('film-legend'));
+  $('film-help-chart').textContent = helpOf(S.view);
+  hideTip();
+  const geo = geoFor(S.view);
+  Object.assign(GEO, geo, { n: g.plies });
+  svg.setAttribute('viewBox', `0 0 ${geo.W} ${geo.H}`);
+  if (S.view === 'eval') drawEvalChart(g, svg); else drawCumChart(g, svg);
+}
+// Redessin quand la taille du cadre de la courbe change (fenêtre, mise en page).
+new ResizeObserver(() => { if (S.data && S.rp) { cancelAnimationFrame(drawChart._raf); drawChart._raf = requestAnimationFrame(drawChart); } }).observe($('film-chart-box'));
+
+function drawCumChart(g, svg) {
+  const { W, H, M } = GEO;
+  svg.setAttribute('aria-label', 'Courbe des imprécisions cumulées par camp');
   const n = g.plies, ymax = Math.max(1, ...g.courbe.map((c) => Math.max(c[1], c[2]))) * 1.08;
   const X = (ply) => M.l + (ply / Math.max(1, n)) * (W - M.l - M.r), Y = (v) => H - M.b - (v / ymax) * (H - M.t - M.b);
   // quadrillage
   const step = ymax > 14 ? 5 : ymax > 6 ? 2 : 1;
   for (let v = 0; v <= ymax; v += step) {
     mk('line', { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: C.border, 'stroke-width': 1 }, svg);
-    mk('text', { x: M.l - 6, y: Y(v) + 4, 'text-anchor': 'end', fill: C.muted, 'font-size': 11 }, svg).textContent = v;
+    mk('text', { x: M.l - 8, y: Y(v) + 5, 'text-anchor': 'end', fill: C.muted, 'font-size': FS }, svg).textContent = v;
   }
-  for (let m = 10; m * 2 <= n; m += 10) {
-    mk('text', { x: X(m * 2), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': 11 }, svg).textContent = m;
+  const stepC = Math.ceil(n / 2) > 60 ? 10 : 5;
+  for (let m = stepC; m * 2 <= n; m += stepC) {
+    mk('text', { x: X(m * 2), y: H - 8, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
   }
   // courbes en escalier : le cumul bouge après chaque coup du camp
   for (const [idx, col, side] of [[1, C.text, 'w'], [2, C.gold, 'b']]) {
     let d = `M ${X(0)} ${Y(0)}`;
     for (const c of g.courbe) d += ` L ${X(c[0] + 1)} ${Y(c[idx])}`;
-    mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 2.2, 'stroke-linejoin': 'round', ...(side === 'b' ? { 'stroke-dasharray': '7 4' } : {}) }, svg);
+    mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 3, 'stroke-linejoin': 'round', ...(side === 'b' ? { 'stroke-dasharray': '9 5' } : {}) }, svg);
   }
   // repères des 3 plus grosses pertes de chaque camp (sur la bande du haut)
   for (const side of ['w', 'b']) g.top[side].forEach((l, i) => {
-    const col = side === 'w' ? C.text : C.gold, x = X(l.ply + 0.5), y = side === 'w' ? 10 : 20;
+    const col = side === 'w' ? C.text : C.gold, x = X(l.ply + 0.5), y = side === 'w' ? 16 : 44;
     const a = mk('g', { class: 'mk', 'data-ply': l.ply, 'data-side': side, 'data-rank': i, style: 'cursor:pointer' }, svg);
-    mk('line', { x1: x, x2: x, y1: y + 6, y2: H - M.b, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '2 3', opacity: 0.45 }, a);
-    mk('circle', { cx: x, cy: y, r: 7, fill: C.bg, stroke: col, 'stroke-width': 1.6 }, a);
-    mk('text', { x, y: y + 3.6, 'text-anchor': 'middle', fill: col, 'font-size': 10, 'font-weight': 700 }, a).textContent = i + 1;
+    mk('line', { x1: x, x2: x, y1: y + 13, y2: H - M.b, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '2 3', opacity: 0.45 }, a);
+    mk('circle', { cx: x, cy: y, r: 13, fill: C.bg, stroke: col, 'stroke-width': 2 }, a);
+    mk('text', { x, y: y + 5, 'text-anchor': 'middle', fill: col, 'font-size': FS, 'font-weight': 700 }, a).textContent = i + 1;
     mk('title', {}, a).textContent = `${l.no}${side === 'w' ? '.' : '…'} ${l.joue} : perte ${fr(l.L)} pion`;
   });
   // curseur : position affichée
-  mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 6, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.4, opacity: 0.9 }, svg);
-  mk('circle', { cx: X(S.ply), cy: H - M.b, r: 3.5, fill: C.gold }, svg);
-  svg._X = X;
+  mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 6, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.6, opacity: 0.9 }, svg);
+  mk('circle', { cx: X(S.ply), cy: H - M.b, r: 4.5, fill: C.gold }, svg);
 }
+
+// Courbe d'évaluation : une valeur par position (vue des Blancs), aire claire côté Blancs / sombre côté Noirs, paliers du
+// barème en fond, pastilles des fautes, tournant, bande des phases + échanges, numéros de coups. Position sans valeur :
+// la courbe s'interrompt (aucune valeur inventée).
+function drawEvalChart(g, svg) {
+  const { W, H, M } = GEO;
+  const n = g.plies, evals = g.evals ?? [];
+  svg.setAttribute('aria-label', 'Courbe d\'évaluation de la partie, vue des Blancs');
+  const plotH = H - M.t - M.b, cy = M.t + plotH / 2, top = evalY(CAP);
+  const X = (k) => M.l + (k / Math.max(1, n)) * (W - M.l - M.r);
+  const Y = (v) => cy - (evalY(v) / top) * (plotH / 2);
+  // bande d'équilibre et lignes graduées (paliers du barème de la jauge)
+  mk('rect', { x: M.l, y: Y(EVAL_ZONE), width: W - M.l - M.r, height: Y(-EVAL_ZONE) - Y(EVAL_ZONE), fill: 'var(--eval-zone)', opacity: 0.4 }, svg);
+  const lab = (v) => (Number.isInteger(v) ? `${v > 0 ? '+' : '−'}${Math.abs(v)}` : signed(v, 1));
+  for (const t of EVAL_TICKS) for (const v of [t, -t]) {
+    mk('line', { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: C.border, 'stroke-width': 1, 'stroke-dasharray': '2 5', opacity: 0.75 }, svg);
+    mk('text', { x: M.l - 8, y: Y(v) + 5, 'text-anchor': 'end', fill: C.muted, 'font-size': FS }, svg).textContent = lab(v);
+  }
+  mk('line', { x1: M.l, x2: W - M.r, y1: cy, y2: cy, stroke: C.muted, 'stroke-width': 1.2 }, svg);
+  mk('text', { x: M.l - 8, y: cy + 5, 'text-anchor': 'end', fill: C.muted, 'font-size': FS }, svg).textContent = '0';
+  // aires (relief) : même polygone, deux découpes (au-dessus / au-dessous de zéro), puis trait net par-dessus
+  const defs = mk('defs', {}, svg);
+  mk('rect', { x: 0, y: 0, width: W, height: cy }, mk('clipPath', { id: 'film-clip-up' }, defs));
+  mk('rect', { x: 0, y: cy, width: W, height: H - cy }, mk('clipPath', { id: 'film-clip-dn' }, defs));
+  const runs = []; let cur = null;
+  evals.forEach((v, k) => { if (v === null || v === undefined) { cur = null; return; } if (!cur) { cur = []; runs.push(cur); } cur.push([X(k), Y(v)]); });
+  for (const run of runs) {
+    if (run.length < 2) { mk('circle', { cx: run[0][0], cy: run[0][1], r: 3, fill: C.text }, svg); continue; }
+    const line = run.map(([x, y], i) => `${i ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+    const area = `${line} L ${run[run.length - 1][0].toFixed(1)} ${cy} L ${run[0][0].toFixed(1)} ${cy} Z`;
+    mk('path', { d: area, fill: 'var(--eval-white-1)', 'clip-path': 'url(#film-clip-up)' }, svg);
+    mk('path', { d: area, fill: 'var(--eval-dark-1)', 'clip-path': 'url(#film-clip-dn)' }, svg);
+    // halo (couleur du panneau) sous le trait : reste lisible sur l'aire claire comme sur l'aire sombre, dans les deux thèmes
+    mk('path', { d: line, fill: 'none', stroke: C.bg, 'stroke-width': 6, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    mk('path', { d: line, fill: 'none', stroke: C.text, 'stroke-width': 3, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+  }
+  // bande des phases (sous la courbe) et petits traits des échanges (coups avec prise) juste au-dessus
+  const by = H - M.b + 12, bh = 22;
+  const half = (W - M.l - M.r) / Math.max(1, n) / 2, phaseLabel = { ouverture: 'Ouverture', milieu: 'Milieu de partie', finale: 'Finale' }, phaseOp = { ouverture: 0.16, milieu: 0.3, finale: 0.46 };
+  for (const s of g.phases ?? []) {
+    const x0 = X(s.from) - (s.from === 0 ? 0 : half), x1 = X(s.to) + (s.to === n ? 0 : half);
+    mk('rect', { x: x0, y: by, width: Math.max(1, x1 - x0), height: bh, fill: C.muted, opacity: phaseOp[s.phase] }, svg);
+    if (x1 - x0 > phaseLabel[s.phase].length * 8 + 12) mk('text', { x: (x0 + x1) / 2, y: by + 16, 'text-anchor': 'middle', fill: C.text, 'font-size': FS, 'font-weight': 600 }, svg).textContent = phaseLabel[s.phase];
+  }
+  for (const p of g.echanges ?? []) { const x = X(p + 1); if ((g.pieces ?? [])[p + 1] != null) mk('line', { x1: x, x2: x, y1: by - 8, y2: by - 2, stroke: C.muted, 'stroke-width': 1.6 }, svg); }
+  // numéros de coups (un coup = un coup de chaque camp : la position 2m est celle qui suit le coup m des Noirs)
+  const coups = Math.ceil(n / 2), stepC = coups > 60 ? 10 : 5;
+  for (let m = stepC; m <= coups; m += stepC) mk('text', { x: X(2 * m), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
+  // le tournant
+  if (g.tournant) {
+    const t = g.tournant, x = X(t.ply + 1), left = x > W * 0.6;
+    mk('line', { x1: x, x2: x, y1: M.t - 4, y2: H - M.b, stroke: 'var(--fault-major)', 'stroke-width': 2, 'stroke-dasharray': '6 5' }, svg);
+    const tx = mk('text', { x: left ? x - 8 : x + 8, y: M.t + 12, 'text-anchor': left ? 'end' : 'start', fill: 'var(--fault-major)', 'font-size': FS, 'font-weight': 700, 'paint-order': 'stroke', stroke: C.bg, 'stroke-width': 4 }, svg);
+    tx.textContent = `Le tournant · ${t.moveNo}${t.side === 'w' ? '.' : '…'} ${g.moves[t.ply]}`;
+  }
+  // curseur (position affichée) et repère de survol
+  mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 4, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.8, opacity: 0.9 }, svg);
+  const hover = mk('line', { id: 'film-hover', x1: 0, x2: 0, y1: M.t - 4, y2: H - M.b, stroke: C.text, 'stroke-width': 1.2, opacity: 0.55, visibility: 'hidden' }, svg);
+  hover.style.pointerEvents = 'none';
+  // pastilles des fautes signalées (ordre de la partie), au point de la courbe après le coup : 26 px de diamètre
+  (g.faults ?? []).forEach((f, i) => {
+    const v = evals[f.ply + 1], x = X(f.ply + 1), y = v === null || v === undefined ? cy : Y(v);
+    const a = mk('g', { class: 'mk-f', 'data-i': i, style: 'cursor:pointer' }, svg);
+    mk('circle', { cx: x, cy: y, r: 13, fill: graviteVar[f.gravite], stroke: C.bg, 'stroke-width': 2 }, a);
+    mk('text', { x, y: y + 5, 'text-anchor': 'middle', fill: 'var(--fault-on)', 'font-size': FS, 'font-weight': 700 }, a).textContent = i + 1;
+  });
+}
+
+// Position (0..n) sous le pointeur ; tient compte du redimensionnement (viewBox = taille du SVG, échelle 1).
+function positionAt(e) {
+  const svg = $('film-chart'), r = svg.getBoundingClientRect();
+  const scale = Math.min(r.width / GEO.W, r.height / GEO.H), ox = (r.width - GEO.W * scale) / 2;
+  const vx = (e.clientX - r.left - ox) / scale;
+  return Math.max(0, Math.min(S.rp.steps.length, Math.round(((vx - GEO.M.l) / (GEO.W - GEO.M.l - GEO.M.r)) * GEO.n)));
+}
+
+// ---- infobulle de survol : mini-damier (BoardRenderer de l'appli, mêmes réglages), coup, évaluation, faute ----
+const tip = $('film-tip');
+let tipRenderer = null;
+function hideTip() { if (tip) tip.hidden = true; const h = document.getElementById('film-hover'); if (h) h.setAttribute('visibility', 'hidden'); }
+function showTip(k, e) {
+  const g = S.data.parties[S.g];
+  if (!S.rp || S.view !== 'eval' || k < 0 || k > g.plies) { hideTip(); return; }
+  if (!tipRenderer) { tipRenderer = new BoardRenderer($('film-tip-canvas')); applySavedBoardSettings(tipRenderer); }
+  tipRenderer.setFlipped(S.flipped);
+  tipRenderer.showArrow = false; tipRenderer.bestMove = null;
+  const st = k > 0 ? S.rp.steps[k - 1] : null;
+  tipRenderer.setState({ board: S.rp.boards[k], lastMove: st ? { squares: [st.from, st.to] } : null });
+  const v = (g.evals ?? [])[k], f = (g.faults ?? []).find((x) => x.ply === k - 1);
+  $('film-tip-move').textContent = k === 0 ? 'Position de départ' : `${Math.floor((k - 1) / 2) + 1}${(k - 1) % 2 === 0 ? '.' : '…'} ${g.moves[k - 1]}`;
+  $('film-tip-eval').textContent = v === null || v === undefined ? 'Position non analysée' : `Évaluation ${signed(v, 1)}${Math.abs(v) >= CAP ? ' (gain forcé)' : ''}`;
+  const fb = $('film-tip-fault'); fb.replaceChildren();
+  if (f) {
+    const a = document.createElement('div'); a.className = 'tip-g'; a.style.color = graviteVar[f.gravite]; a.textContent = `${gravText[f.gravite][0].toUpperCase()}${gravText[f.gravite].slice(1)} : perte ${fr(f.L)} pion`;
+    const b = document.createElement('div'); b.textContent = `Meilleur coup : ${f.meilleur ?? '—'}`;
+    fb.append(a, b);
+  }
+  fb.hidden = !f;
+  tip.hidden = false;
+  // placée à côté du pointeur (jamais dessus), du côté où elle tient ; bornée à la fenêtre
+  const w = tip.offsetWidth, h = tip.offsetHeight, gap = 26;
+  const left = e.clientX + gap + w <= window.innerWidth - 8 ? e.clientX + gap : e.clientX - gap - w;
+  tip.style.left = `${Math.max(8, left)}px`;
+  tip.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, e.clientY - h / 2))}px`;
+  const hl = document.getElementById('film-hover');
+  if (hl) { const x = GEO.M.l + (k / Math.max(1, GEO.n)) * (GEO.W - GEO.M.l - GEO.M.r); hl.setAttribute('x1', x); hl.setAttribute('x2', x); hl.setAttribute('visibility', 'visible'); }
+}
+$('film-chart').addEventListener('mousemove', (e) => {
+  if (!S.rp || S.view !== 'eval') return;
+  const pf = e.target.closest && e.target.closest('.mk-f');
+  const k = pf ? S.data.parties[S.g].faults[Number(pf.dataset.i)].ply + 1 : positionAt(e);
+  showTip(k, e);
+});
+$('film-chart').addEventListener('mouseleave', hideTip);
 $('film-chart').addEventListener('click', (e) => {
+  const pf = e.target.closest('.mk-f');
+  if (pf) { focusLoss(S.data.parties[S.g].faults[Number(pf.dataset.i)]); return; }
   const mkEl = e.target.closest('.mk');
   if (mkEl) { const side = mkEl.dataset.side; focusLoss(S.data.parties[S.g].top[side][Number(mkEl.dataset.rank)]); return; }
-  const svg = $('film-chart'), r = svg.getBoundingClientRect(), g = S.data.parties[S.g];
-  const scale = Math.min(r.width / W, r.height / H), ox = (r.width - W * scale) / 2;
-  const vx = (e.clientX - r.left - ox) / scale;
-  const ply = Math.round(((vx - M.l) / (W - M.l - M.r)) * g.plies);
-  goTo(Math.max(0, Math.min(S.rp.steps.length, ply)));
+  goTo(positionAt(e));
 });
+document.querySelectorAll('.film-toggle button').forEach((b) => b.addEventListener('click', () => { S.view = b.dataset.view; drawChart(); }));
 
 // ---- listes et navigation ----
 function renderLosses() {
@@ -117,7 +267,7 @@ function renderLosses() {
       const b = document.createElement('button'); b.type = 'button';
       b.className = 'film-loss' + (l.gravite === 'gagnant' ? ' gagnant' : '') + (S.focus && S.focus.ply === l.ply ? ' active' : '');
       b.dataset.ply = l.ply;
-      b.innerHTML = `<span class="rk">${i + 1}</span><span class="mv">${l.no}${side === 'w' ? '.' : '…'} ${l.joue}<small>meilleur : ${l.meilleur ?? '—'}${l.gravite ? ' · ' + gravText[l.gravite] : ''}</small></span><span class="ls">−${fr(l.L)}<small>pion</small></span>`;
+      b.innerHTML = `<span class="rk">${i + 1}</span><span class="mv">${l.no}${side === 'w' ? '.' : '…'} ${l.joue}<small>meilleur : ${l.meilleur ?? '—'}${l.gravite ? ' · ' + gravText[l.gravite] : ''}</small></span><span class="ls" style="color:${graviteVar[l.gravite] ?? 'var(--text-2)'}">−${fr(l.L)} <small>pion</small></span>`;
       b.addEventListener('click', () => focusLoss(l));
       col.appendChild(b);
     });
@@ -138,11 +288,9 @@ function renderHeader() {
   const foot = $('film-foot'); foot.replaceChildren();
   const l = document.createElement('span');
   l.textContent = DEMO
-    ? `${when}Mesure : Scan 3.1, profondeurs 11 à 14, évaluation indicative. Mode test : 7 parties mesurées en P28.`
-    : `${when}Analyse en direct par Scan 3.1 : profondeurs ${DEPTH_FROM} à ${DEPTH_REF}, évaluation indicative.`;
-  const r = document.createElement('span'); r.textContent = 'Imprécisions cumulées = petites pertes de chaque camp, cumulées coup après coup (sous le seuil de faute ; seuil adaptatif selon la valeur et la phase de jeu).';
-  foot.append(l, r);
-  $('film-chart-note').textContent = 'Axe horizontal : numéro du coup. Chaque palier est une petite imprécision mesurée par DamikA avec Scan ; les cercles numérotés marquent les trois plus grosses pertes de chaque camp.';
+    ? `${when}Évaluation indicative (Scan 3.1, profondeurs 11 à 14). Mode test : 7 parties déjà mesurées.`
+    : `${when}Évaluation indicative (Scan 3.1, profondeurs ${DEPTH_FROM} à ${DEPTH_REF}).`;
+  foot.append(l);
 }
 function renderPly() {
   const g = S.data.parties[S.g], k = S.ply;
@@ -182,7 +330,7 @@ function selectGame(i) {
 
 // ---- message à la place des panneaux (aucune partie, rien à analyser, partie non rejouable…) ----
 function showMessage(title, text) {
-  S.data = { parties: [{ plies: 0, moves: [], courbe: [], top: { w: [], b: [] }, blancs: '', noirs: '', date: '', resultat: '' }] };
+  S.data = { parties: [{ plies: 0, moves: [], courbe: [], top: { w: [], b: [] }, evals: [], faults: [], phases: [], echanges: [], pieces: [], tournant: null, blancs: '', noirs: '', date: '', resultat: '' }] };
   selectGame(0);
   $('film-side').dataset.state = 'msg';
   $('film-msg-title').textContent = title;
@@ -256,7 +404,7 @@ async function startRun() {
 async function initLive() {
   const raw = readStoredGame();
   if (!raw) { showMessage('Aucune partie à analyser', 'Ouvrez une partie dans DamikA, puis cliquez sur « Analyse de la partie » dans la barre du bas.'); return; }
-  if (raw.moves.length < MIN_PLIES) { showMessage('Rien à analyser', `La partie compte ${raw.moves.length} demi-coup${raw.moves.length > 1 ? 's' : ''} : il en faut au moins ${MIN_PLIES} pour tracer un film.`); return; }
+  if (raw.moves.length < MIN_PLIES) { showMessage('Rien à analyser', `La partie est trop courte : il faut au moins ${MIN_PLIES / 2} coups de chaque camp pour la tracer.`); return; }
   const plan = planGame(raw.moves);
   if (!plan.ok) { showMessage('Partie impossible à rejouer', `${plan.error}. Les règles de DamikA ne rejouent pas cette partie : elle ne peut pas être analysée.`); return; }
   const h = raw.headers || {};
@@ -279,27 +427,38 @@ $('film-cancel').addEventListener('click', () => {
 });
 window.addEventListener('pagehide', () => { if (L.runner && L.state === 'running') L.runner.cancel(); });
 
-// ---- mode test : parties mesurées en P28/P29 ----
+// ---- mode test : les 7 parties mesurées en P40 avec Scan WebAssembly (positions brutes de out/p40/, jamais suivies par git) ----
+// Les parties sont rejouées et classées par les MÊMES modules que le mode normal (film-game.js, film-metrics.js).
 async function initDemo() {
-  let data;
+  let games;
   try {
-    const r = await fetch(FILM_DATA_URL, { cache: 'no-store' });
+    const r = await fetch(`${DEMO_DIR}games.json`, { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
-    data = await r.json();
+    games = (await r.json()).games.filter((g) => g.set === 'P28');
+    if (!games.length) throw new Error('aucune partie');
   } catch {
-    showMessage('Données de test absentes', `${FILM_DATA_URL} : lancer node training/scan-arena/p29-report.mjs, puis servir le dépôt avec python -m http.server 8934.`);
+    showMessage('Données de test absentes', `${DEMO_DIR} : lancer node training/scan-arena/p40-run.mjs collect puis measure --tag A, et servir le dépôt avec python -m http.server 8934.`);
     return;
   }
-  S.data = data;
+  const parties = [];
+  for (const g of games) {
+    let recs = null;
+    try { const r = await fetch(`${DEMO_DIR}run-A/${g.id}.json`, { cache: 'no-store' }); if (r.ok) recs = (await r.json()).recs; } catch { /* partie sans mesure */ }
+    const plan = planGame(g.moves);
+    if (!recs || !plan.ok) continue;
+    parties.push({ ...buildFilmGame(plan, recs, { blancs: g.white, noirs: g.black, date: '', resultat: g.result || '', joueur: null, flipped: false }), titre: `${Math.ceil(g.plies / 2)} coups` });
+  }
+  S.data = { parties };
   const nav = $('film-games'); nav.hidden = false;
-  data.parties.forEach((p, i) => {
+  const lbl = document.createElement('span'); lbl.className = 'film-test-label'; lbl.textContent = 'Mode test'; nav.appendChild(lbl);
+  parties.forEach((p, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'film-game-btn';
-    b.textContent = p.titre; b.title = `${nameOf(p.blancs)} – ${nameOf(p.noirs)}`;
+    b.textContent = `Partie ${i + 1}`; b.title = `${p.titre}`;
     if (p.plies < MIN_PLIES) { b.disabled = true; b.title += ' : rien à analyser'; }
     b.addEventListener('click', () => selectGame(i));
     nav.appendChild(b);
   });
-  const first = data.parties.findIndex((p) => p.plies >= MIN_PLIES);
+  const first = parties.findIndex((p) => p.plies >= MIN_PLIES);
   selectGame(first < 0 ? 0 : first);
 }
 

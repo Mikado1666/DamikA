@@ -9,7 +9,7 @@
 
 import { initialBoard, generateLegalMoves, applyCaptureSequence, applySimpleMove } from '../engine/rules.js';
 import { toHubPosition } from '../ai/scan-protocol.js';
-import { CAP, MIN_PIECES, DEPTH_REF, classifyMove, erosionCurve, topLosses, valueSeries } from './film-metrics.js';
+import { CAP, MIN_PIECES, DEPTH_REF, classifyMove, erosionCurve, topLosses, valueSeries, turningPoint, phaseSegments } from './film-metrics.js';
 
 export const countAll = (board) => { let n = 0; for (let s = 1; s <= 50; s++) if (board[s]) n++; return n; };
 export const other = (s) => (s === 'w' ? 'b' : 'w');
@@ -168,11 +168,21 @@ export function buildFilmGame(plan, recsRaw, meta = {}) {
   const rows = buildMoveRows(plan, recsRaw);
   const n = plan.plies.length;
   const done = rows.findIndex((r) => r.pending);
+  const resolved = resolveRecs(recsRaw, plan.positions.length);
+  const evals = valueSeries(resolved, n + 1); // P41 : une valeur par position (n+1), vue des Blancs, null = non analysée
+  const pieces = Array.from({ length: n + 1 }, (_, k) => resolved[k]?.pieces ?? null);
   return {
     ...meta, plies: n, moves: plan.plies.map((p) => p.playedPdn), rows,
     done: done < 0 ? n : done,
-    V: valueSeries(resolveRecs(recsRaw, plan.positions.length), n),
+    V: valueSeries(resolved, n),
     courbe: erosionCurve(rows),
     top: { w: topLosses(rows, 'w'), b: topLosses(rows, 'b') },
+    // P41 : courbe d'évaluation, fautes signalées des deux camps (même forme que `top`), tournant, phases, échanges (coups avec prise)
+    evals,
+    faults: rows.filter((r) => r.signaled).map((r) => ({ ply: r.ply, no: r.moveNo, side: r.side, joue: r.played, meilleur: r.best ?? null, L: r.L, gravite: r.gravite, type: r.type ?? null })),
+    tournant: turningPoint(rows, evals),
+    pieces,
+    phases: phaseSegments(pieces),
+    echanges: plan.plies.filter((p) => p.played.includes('x')).map((p) => p.ply),
   };
 }

@@ -13,7 +13,7 @@
 <body>
 <main class="film" id="film">
   <header class="film-head">
-    <a class="film-back" href="index.html" title="Retour à DamikA">← DamikA</a>
+    <a class="film-back" href="index.html" title="Revenir à la partie dans DamikA">← Retour à la partie</a>
     <h1 class="film-title">Analyse de la partie</h1>
     <div class="film-progress" id="film-progress" role="status" hidden>
       <span class="film-progress-label" id="film-progress-label"></span>
@@ -40,24 +40,35 @@
     <div class="film-msg" id="film-msg" role="status">
       <h2 id="film-msg-title"></h2>
       <p id="film-msg-text"></p>
-      <a class="film-back" href="index.html">← Retour à DamikA</a>
+      <a class="film-back" href="index.html">← Retour à la partie</a>
     </div>
     <div class="film-panel film-chart-panel">
       <div class="film-panel-head">
-        <h2>Imprécisions cumulées, coup après coup</h2>
-        <div class="film-legend"><span class="lg lg-w"></span>Blancs <span class="lg lg-b"></span>Noirs</div>
+        <div class="film-head-left">
+          <div class="film-toggle" role="group" aria-label="Courbe affichée">
+            <button type="button" class="active" data-view="eval" aria-pressed="true">Évaluation</button>
+            <button type="button" data-view="cum" aria-pressed="false">Imprécisions cumulées</button>
+          </div>
+          <span class="film-help" tabindex="0" role="note" aria-label="Aide sur la courbe"><span class="film-help-q">?</span><span class="film-help-tip" id="film-help-chart"></span></span>
+        </div>
+        <div class="film-legend" id="film-legend"></div>
       </div>
-      <svg id="film-chart" viewBox="0 0 600 230" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Courbe des imprécisions cumulées par camp"></svg>
-      <p class="film-note" id="film-chart-note"></p>
+      <div class="film-chart-box" id="film-chart-box"><svg id="film-chart" viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Courbe d'évaluation de la partie, vue des Blancs"></svg></div>
     </div>
     <div class="film-panel film-losses-panel">
-      <div class="film-panel-head"><h2>Les trois plus grosses pertes</h2><span class="film-hint">Cliquer pour voir la position</span></div>
+      <div class="film-panel-head"><div class="film-head-left"><h2>Les trois plus grosses pertes</h2><span class="film-help" tabindex="0" role="note" aria-label="Aide sur les pertes"><span class="film-help-q">?</span><span class="film-help-tip">Les trois coups où chaque camp a perdu le plus. Cliquer sur l'un d'eux pour voir la position juste avant : le coup joué (flèche rouge) et le meilleur coup (flèche verte).</span></span></div></div>
       <div class="film-losses" id="film-losses"></div>
     </div>
   </section>
 
   <footer class="film-foot" id="film-foot"></footer>
 </main>
+<div class="film-tip" id="film-tip" hidden aria-hidden="true">
+  <div class="film-tip-board"><canvas id="film-tip-canvas"></canvas></div>
+  <div class="tip-move" id="film-tip-move"></div>
+  <div class="tip-eval" id="film-tip-eval"></div>
+  <div class="tip-fault" id="film-tip-fault" hidden></div>
+</div>
 <script type="module" src="js/film.js"></script>
 </body>
 </html>

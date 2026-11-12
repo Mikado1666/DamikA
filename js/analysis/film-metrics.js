@@ -27,6 +27,16 @@ export const KEEP = 0.6, LEVELS = [3, 5, 7, 9, 11]; // latence : fenêtre d = pr
 export const SAN_VISION = 5;                // latence ≤ 5 : « faute de calcul » ; au-delà : « piège profond »
 export const TOP_N = 3;                     // nombre de plus grosses pertes listées par camp
 
+// ---- affichage de la courbe d'évaluation (P41) : AUCUNE influence sur la mesure ni sur les seuils de faute ----
+export const EVAL_SCALE = 1.5;              // échelle verticale douce : y = v / (|v| + EVAL_SCALE), entre −1 et +1 (petits écarts lisibles)
+export const evalY = (v) => v / (Math.abs(v) + EVAL_SCALE);
+export const EVAL_TICKS = [0.5, 1, 2];      // lignes graduées (± pions), paliers du barème de la jauge
+export const EVAL_ZONE = 0.2;               // bande d'équilibre : −0,2 à +0,2
+export const TURN_MARGIN = 0.5;             // tournant : l'évaluation reste, jusqu'à la fin, à plus de 0,5 pion du côté de l'adversaire
+export const TURN_TIERS = ['faute', 'majeure']; // gravités qui peuvent être « le tournant »
+export const PHASE_OPENING_MIN = 30, PHASE_MIDDLE_MIN = 20; // pièces sur le damier : ouverture ≥ 30, milieu de partie 20 à 29, finale < 20
+export const phaseName = (pieces) => (pieces >= PHASE_OPENING_MIN ? 'ouverture' : pieces >= PHASE_MIDDLE_MIN ? 'milieu' : 'finale');
+
 export const r2 = (x) => (x === null || x === undefined ? null : Math.round(x * 100) / 100);
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 
@@ -104,4 +114,39 @@ export function valueSeries(recs, plies) {
   const out = [];
   for (let k = 0; k < plies; k++) out.push(recs[k]?.scores ? r2(positionValue(recs[k].scores)) : null);
   return out;
+}
+
+// ---- P41 : phases et tournant (fonctions pures, affichage seulement) ----
+
+// Phases d'une partie à partir du nombre de pièces de chaque position (tableau de n+1 entrées, null = inconnu).
+// Retourne des segments { phase, from, to } sur les indices de position (to inclus) ; une position inconnue interrompt le segment.
+export function phaseSegments(pieces) {
+  const out = [];
+  pieces.forEach((n, i) => {
+    if (n === null || n === undefined) return;
+    const ph = phaseName(n), last = out[out.length - 1];
+    if (last && last.phase === ph && last.to === i - 1) last.to = i; else out.push({ phase: ph, from: i, to: i });
+  });
+  return out;
+}
+
+// Le tournant : la PREMIÈRE faute signalée de gravité « faute » ou « majeure » (rows de buildMoveRows) après laquelle
+// l'évaluation reste, jusqu'à la fin de la partie, à plus de TURN_MARGIN pion du côté de l'adversaire. `evals` : valeur de
+// chaque position (n+1), vue des Blancs, null si non analysée (ignorée). Aucune ligne en attente (`pending`) : analyse
+// complète exigée, sinon null (un tournant calculé sur une partie à moitié mesurée serait faux). Aucune faute qui répond :
+// null (pas de repère). Retourne la ligne de coup { ply, moveNo, side, played, gravite, L } ou null.
+export function turningPoint(rows, evals) {
+  if (rows.some((r) => r.pending)) return null;
+  for (const r of rows) {
+    if (!r.signaled || !TURN_TIERS.includes(r.gravite)) continue;
+    let seen = 0, held = true;
+    for (let q = r.ply + 1; q < evals.length; q++) {
+      const v = evals[q];
+      if (v === null || v === undefined) continue;
+      seen++;
+      if (!((r.side === 'w' ? -v : v) > TURN_MARGIN)) { held = false; break; }
+    }
+    if (held && seen > 0) return { ply: r.ply, moveNo: r.moveNo, side: r.side, played: r.played, gravite: r.gravite, L: r.L };
+  }
+  return null;
 }
