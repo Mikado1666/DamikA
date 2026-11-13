@@ -2572,3 +2572,7 @@ Réalisé, **non commité, non déployé**. Fichiers : `film.html`, `js/film.js`
 - **Gabarit compact** : fenêtres de 780 px de haut ou moins (1280×720, 1366×768) ; au-dessus, photo 56 à 58 px et cartes de 76 px.
 - **Mesuré** (iframes, sans défilement ni débordement dans tous les cas) : 1280×720 → 415 px (32 %), 1366×768 → 463 px (34 %), 1456×819 → 429 px (29 %), 1536×864 → 474 px (31 %), 1920×1080 → 690 px (36 %). À 1456×819 le damier est à 29 % (< 30 %) mais à 429 px : la règle « 30 % » n'était exigée qu'à 1280×720.
 - **À regarder par Mickaël** : la photo à 38 × 48 px sur petit écran ; le bandeau passe sur 2 lignes si le nom du tournoi est long (70 px de haut à 1280×720).
+
+## P45 — Commit unique de l'écran « Analyse de la partie » (13/11/2026)
+
+Commit `c5d5196` poussé sur `main` (récit P42C à P42C-4, contour P42D, zoom P43, cartes joueurs P44, bandeau du tournoi P44B). Non déployé. `training/scan-arena/`, `tests/nada-vs-damika.mjs` et `Claude outputs/` restent non suivis.
