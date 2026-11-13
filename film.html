@@ -24,6 +24,7 @@
   </header>
 
   <section class="film-board-col" aria-label="Damier">
+    <div class="film-info" id="film-info" hidden></div>
     <div class="film-players film-players-top" id="film-top"></div>
     <div class="film-board-wrap"><canvas id="film-board" aria-label="Damier de la position choisie"></canvas></div>
     <div class="film-players film-players-bottom" id="film-bottom"></div>
@@ -42,6 +43,14 @@
       <p id="film-msg-text"></p>
       <a class="film-back" href="index.html">← Retour à la partie</a>
     </div>
+    <div class="film-panel film-story" id="film-story-panel">
+      <div class="story-head"><h2>Le récit de la partie</h2><button type="button" class="mc-btn story-more" id="film-story-more" hidden aria-expanded="false">Lire la suite</button></div>
+      <div class="film-story-text" id="film-story-text"></div>
+      <div class="film-story-pop" id="film-story-pop" role="dialog" aria-label="Le récit de la partie" hidden>
+        <div class="story-head"><h2>Le récit de la partie</h2><button type="button" class="mc-btn" id="film-story-close">Fermer</button></div>
+        <div class="story-pop-text" id="film-story-pop-text"></div>
+      </div>
+    </div>
     <div class="film-panel film-chart-panel">
       <div class="film-panel-head">
         <div class="film-head-left">
@@ -51,9 +60,21 @@
           </div>
           <span class="film-help" tabindex="0" role="note" aria-label="Aide sur la courbe"><span class="film-help-q">?</span><span class="film-help-tip" id="film-help-chart"></span></span>
         </div>
+        <div class="film-zoom" role="group" aria-label="Zoom sur la courbe" title="Zoom : Ctrl + molette, ou glisser sur la courbe">
+          <button type="button" id="film-zoom-out" class="zb" aria-label="Zoom arrière" disabled>−</button>
+          <button type="button" id="film-zoom-in" class="zb" aria-label="Zoom avant">+</button>
+          <button type="button" id="film-zoom-all" class="zb zb-text" hidden>Tout voir</button>
+        </div>
         <div class="film-legend" id="film-legend"></div>
       </div>
-      <div class="film-chart-box" id="film-chart-box"><svg id="film-chart" viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Courbe d'évaluation de la partie, vue des Blancs"></svg></div>
+      <div class="film-chart-box" id="film-chart-box"><svg id="film-chart" viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Courbe d'évaluation de la partie, vue des Blancs"></svg><div class="film-sel" id="film-sel" hidden></div></div>
+      <div class="film-zoombar" id="film-zoombar">
+        <div class="film-zoomnav" id="film-zoomnav" hidden>
+          <button type="button" id="film-pan-l" class="zb" title="Reculer dans la partie" aria-label="Plage précédente">◀</button>
+          <div class="film-nav" id="film-nav"><div class="film-nav-thumb" id="film-nav-thumb"></div></div>
+          <button type="button" id="film-pan-r" class="zb" title="Avancer dans la partie" aria-label="Plage suivante">▶</button>
+        </div>
+      </div>
     </div>
     <div class="film-panel film-moments-panel">
       <div class="film-panel-head">

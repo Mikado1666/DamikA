@@ -1382,7 +1382,26 @@ function storeFilmGame() {
     const h = {};
     for (const k of ['White', 'Black', 'Date', 'Result']) if (headers[k]) h[k] = String(headers[k]);
     const moves = fullMoveList(game).map((m) => moveNotation({ ...m, annotation: null }));
-    sessionStorage.setItem('damika:film-current', JSON.stringify({ v: 1, moves, headers: h, flipped, savedAt: Date.now() }));
+    // Cartes joueurs (P44) : valeurs DÉJÀ résolues ici (mêmes fonctions que le Bloc 1 : formatPlayerName, lookupPhotoUrl, formatPdnDate,
+    // parseResultScore) ; champ absent = clé absente. Rien de tout cela n'entre dans le cache d'analyse de film.html (clé = coups seuls).
+    const player = (name, elo, title) => {
+      const p = {};
+      if (name) { p.name = formatPlayerName(name); const photo = lookupPhotoUrl(name); if (photo) p.photo = photo; }
+      if (elo) p.elo = String(elo);
+      if (title) p.title = String(title);
+      return p;
+    };
+    const players = {
+      w: player(headers.White, headers.WhiteElo || headers.WhiteRating, headers.WhiteTitle),
+      b: player(headers.Black, headers.BlackElo || headers.BlackRating, headers.BlackTitle),
+    };
+    const info = {};
+    if (headers.Event && headers.Event !== 'Partie libre') info.event = String(headers.Event);
+    if (headers.Round && headers.Round !== '—') info.round = String(headers.Round);
+    if (headers.Date && headers.Date !== '—') info.date = formatPdnDate(String(headers.Date));
+    const [sw, sb] = parseResultScore(headers.Result);
+    if (sw !== null && sb !== null) info.score = `${sw} — ${sb}`;
+    sessionStorage.setItem('damika:film-current', JSON.stringify({ v: 2, moves, headers: h, players, info, flipped, savedAt: Date.now() }));
   } catch { /* stockage indisponible : film.html affichera « aucune partie » */ }
 }
 document.getElementById('link-film').addEventListener('click', storeFilmGame);

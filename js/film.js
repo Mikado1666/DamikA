@@ -9,6 +9,7 @@ import { readUiTheme, applyUiTheme, applySavedBoardSettings } from './render/boa
 import { MIN_PLIES, DEPTH_REF, DEPTH_FROM, CAP, EVAL_TICKS, EVAL_ZONE, evalY, difficultyOf, moveVerdict } from './analysis/film-metrics.js';
 import { replayMoves, planGame, buildFilmGame, canonicalGameText } from './analysis/film-game.js';
 import { createFilmRunner, FilmCancelled } from './analysis/film-runner.js';
+import { storyOf, STORY_TEXT } from './analysis/film-story.js';
 import { playSound } from './sound.js';
 import { hashText, loadAnalysis, saveAnalysis } from './analysis/film-cache.js';
 
@@ -32,7 +33,7 @@ function replay(moves) {
 }
 
 // ---- état ----
-const S = { data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval', touched: false }; // view : 'eval' (défaut) ou 'cum', non persisté
+const S = { cards: null, data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval', touched: false, zoom: null }; // view : 'eval' (défaut) ou 'cum', non persisté
 // Thème d'interface, thème du damier, style et taille des pions : MÊMES réglages que l'appli (js/render/board-settings.js),
 // et MÊME dessin (BoardRenderer, js/render/board.js). Le thème est posé avant la création du renderer (il lit les couleurs CSS).
 applyUiTheme(readUiTheme());
@@ -64,7 +65,17 @@ function drawBoard() {
 const NS = 'http://www.w3.org/2000/svg';
 const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) { if (typeof v === 'string' && v.startsWith('var(')) e.style.setProperty(k, v); else e.setAttribute(k, v); } if (parent) parent.appendChild(e); return e; };
 // Géométrie de la courbe affichée (posée par chaque tracé, lue par le clic et le survol).
-const GEO = { W: 600, H: 230, M: { l: 34, r: 10, t: 26, b: 22 }, n: 0 };
+const GEO = { W: 600, H: 230, M: { l: 34, r: 10, t: 26, b: 22 }, n: 0, a: 0, b: 1 };
+// Zoom (P43) : axe des coups seulement ; plage visible [a, b] en POSITIONS (0..n), S.zoom = null : « Tout voir ». Non persisté.
+const ZOOM = { MIN_SPAN: 12, FACTOR: 1.5, PAN: 0.25, DRAG_PX: 6, PASTILLE_GAP: 27 }; // 12 positions = 6 coups visibles au plus fort ; 1,5 par cran ; ◀ ▶ = 1/4 de la plage
+const plotX = (k) => GEO.M.l + ((k - GEO.a) / Math.max(1e-6, GEO.b - GEO.a)) * (GEO.W - GEO.M.l - GEO.M.r);
+const inView = (k) => k >= GEO.a - 1e-9 && k <= GEO.b + 1e-9;
+// Graduations en coups : le plus petit pas (1, 2, 5, 10, 20, 50) qui laisse au moins 60 px entre deux numéros
+function coupSteps(from, to) {
+  const ppp = (GEO.W - GEO.M.l - GEO.M.r) / Math.max(1e-6, GEO.b - GEO.a), step = [1, 2, 5, 10, 20, 50].find((s) => s * 2 * ppp >= 60) ?? 50, out = [];
+  for (let m = step; 2 * m <= to; m += step) if (2 * m >= from) out.push(m);
+  return out;
+}
 const FS = 14; // taille minimale du texte à l'écran (graduations, numéros de coups, étiquettes)
 function geoFor(view) {
   const r = $('film-chart').getBoundingClientRect();
@@ -92,9 +103,10 @@ function drawChart() {
   $('film-help-chart').textContent = helpOf(S.view);
   hideTip();
   const geo = geoFor(S.view);
-  Object.assign(GEO, geo, { n: g.plies });
+  Object.assign(GEO, geo, { n: g.plies, a: S.zoom ? S.zoom.a : 0, b: S.zoom ? S.zoom.b : g.plies });
   svg.setAttribute('viewBox', `0 0 ${geo.W} ${geo.H}`);
   if (S.view === 'eval') drawEvalChart(g, svg); else drawCumChart(g, svg);
+  updateZoomBar();
 }
 // Redessin quand la taille du cadre de la courbe change (fenêtre, mise en page).
 new ResizeObserver(() => { if (S.data && S.rp) { cancelAnimationFrame(drawChart._raf); drawChart._raf = requestAnimationFrame(drawChart); } }).observe($('film-chart-box'));
@@ -103,25 +115,25 @@ function drawCumChart(g, svg) {
   const { W, H, M } = GEO;
   svg.setAttribute('aria-label', 'Courbe des imprécisions cumulées par camp');
   const n = g.plies, ymax = Math.max(1, ...g.courbe.map((c) => Math.max(c[1], c[2]))) * 1.08;
-  const X = (ply) => M.l + (ply / Math.max(1, n)) * (W - M.l - M.r), Y = (v) => H - M.b - (v / ymax) * (H - M.t - M.b);
+  const X = plotX, Y = (v) => H - M.b - (v / ymax) * (H - M.t - M.b);
   // quadrillage
   const step = ymax > 14 ? 5 : ymax > 6 ? 2 : 1;
   for (let v = 0; v <= ymax; v += step) {
     mk('line', { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: C.border, 'stroke-width': 1 }, svg);
     mk('text', { x: M.l - 8, y: Y(v) + 5, 'text-anchor': 'end', fill: C.muted, 'font-size': FS }, svg).textContent = v;
   }
-  const stepC = Math.ceil(n / 2) > 60 ? 10 : 5;
-  for (let m = stepC; m * 2 <= n; m += stepC) {
-    mk('text', { x: X(m * 2), y: H - 8, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
-  }
+  for (const m of coupSteps(GEO.a, GEO.b)) mk('text', { x: X(m * 2), y: H - 8, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
+  const plot = mk('g', { 'clip-path': 'url(#film-clip-x)' }, svg);
+  mk('rect', { x: M.l, y: 0, width: W - M.l - M.r, height: H }, mk('clipPath', { id: 'film-clip-x' }, mk('defs', {}, svg)));
   // courbes en escalier : le cumul bouge après chaque coup du camp
   for (const [idx, col, side] of [[1, C.text, 'w'], [2, C.gold, 'b']]) {
     let d = `M ${X(0)} ${Y(0)}`;
     for (const c of g.courbe) d += ` L ${X(c[0] + 1)} ${Y(c[idx])}`;
-    mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 3, 'stroke-linejoin': 'round', ...(side === 'b' ? { 'stroke-dasharray': '9 5' } : {}) }, svg);
+    mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 3, 'stroke-linejoin': 'round', ...(side === 'b' ? { 'stroke-dasharray': '9 5' } : {}) }, plot);
   }
   // repères des 3 plus grosses pertes de chaque camp (sur la bande du haut)
   for (const side of ['w', 'b']) g.top[side].forEach((l, i) => {
+    if (!inView(l.ply + 0.5)) return;
     const col = side === 'w' ? C.text : C.gold, x = X(l.ply + 0.5), y = side === 'w' ? 16 : 44;
     const a = mk('g', { class: 'mk', 'data-ply': l.ply, 'data-side': side, 'data-rank': i, style: 'cursor:pointer' }, svg);
     mk('line', { x1: x, x2: x, y1: y + 13, y2: H - M.b, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '2 3', opacity: 0.45 }, a);
@@ -130,8 +142,10 @@ function drawCumChart(g, svg) {
     mk('title', {}, a).textContent = `${l.no}${side === 'w' ? '.' : '…'} ${l.joue} : perte ${fr(l.L)} pion`;
   });
   // curseur : position affichée
-  mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 6, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.6, opacity: 0.9 }, svg);
-  mk('circle', { cx: X(S.ply), cy: H - M.b, r: 4.5, fill: C.gold }, svg);
+  if (inView(S.ply)) {
+    mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 6, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.6, opacity: 0.9 }, svg);
+    mk('circle', { cx: X(S.ply), cy: H - M.b, r: 4.5, fill: C.gold }, svg);
+  }
 }
 
 // Courbe d'évaluation : une valeur par position (vue des Blancs), aire claire côté Blancs / sombre côté Noirs, paliers du
@@ -142,7 +156,7 @@ function drawEvalChart(g, svg) {
   const n = g.plies, evals = g.evals ?? [];
   svg.setAttribute('aria-label', 'Courbe d\'évaluation de la partie, vue des Blancs');
   const plotH = H - M.t - M.b, cy = M.t + plotH / 2, top = evalY(CAP);
-  const X = (k) => M.l + (k / Math.max(1, n)) * (W - M.l - M.r);
+  const X = plotX;
   const Y = (v) => cy - (evalY(v) / top) * (plotH / 2);
   // bande d'équilibre et lignes graduées (paliers du barème de la jauge)
   mk('rect', { x: M.l, y: Y(EVAL_ZONE), width: W - M.l - M.r, height: Y(-EVAL_ZONE) - Y(EVAL_ZONE), fill: 'var(--eval-zone)', opacity: 0.4 }, svg);
@@ -157,56 +171,68 @@ function drawEvalChart(g, svg) {
   const defs = mk('defs', {}, svg);
   mk('rect', { x: 0, y: 0, width: W, height: cy }, mk('clipPath', { id: 'film-clip-up' }, defs));
   mk('rect', { x: 0, y: cy, width: W, height: H - cy }, mk('clipPath', { id: 'film-clip-dn' }, defs));
+  mk('rect', { x: M.l, y: 0, width: W - M.l - M.r, height: H }, mk('clipPath', { id: 'film-clip-x' }, defs));
+  const plot = mk('g', { 'clip-path': 'url(#film-clip-x)' }, svg); // la courbe ne déborde jamais de la zone tracée (zoom)
   const runs = []; let cur = null;
   evals.forEach((v, k) => { if (v === null || v === undefined) { cur = null; return; } if (!cur) { cur = []; runs.push(cur); } cur.push([X(k), Y(v)]); });
   for (const run of runs) {
-    if (run.length < 2) { mk('circle', { cx: run[0][0], cy: run[0][1], r: 3, fill: C.text }, svg); continue; }
+    if (run.length < 2) { mk('circle', { cx: run[0][0], cy: run[0][1], r: 3, fill: C.text }, plot); continue; }
     const line = run.map(([x, y], i) => `${i ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
     const area = `${line} L ${run[run.length - 1][0].toFixed(1)} ${cy} L ${run[0][0].toFixed(1)} ${cy} Z`;
-    mk('path', { d: area, fill: 'var(--eval-white-1)', 'clip-path': 'url(#film-clip-up)' }, svg);
-    mk('path', { d: area, fill: 'var(--eval-dark-1)', 'clip-path': 'url(#film-clip-dn)' }, svg);
+    mk('path', { d: area, fill: 'var(--eval-white-1)', 'clip-path': 'url(#film-clip-up)' }, plot);
+    mk('path', { d: area, fill: 'var(--eval-dark-1)', 'clip-path': 'url(#film-clip-dn)' }, plot);
     // halo (couleur du panneau) sous le trait : reste lisible sur l'aire claire comme sur l'aire sombre, dans les deux thèmes
-    mk('path', { d: line, fill: 'none', stroke: C.bg, 'stroke-width': 6, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
-    mk('path', { d: line, fill: 'none', stroke: C.text, 'stroke-width': 3, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    mk('path', { d: line, fill: 'none', stroke: C.bg, 'stroke-width': 6, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, plot);
+    mk('path', { d: line, fill: 'none', stroke: C.text, 'stroke-width': 3, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, plot);
   }
   // bande des phases (sous la courbe) et petits traits des échanges (coups avec prise) juste au-dessus
   const by = H - M.b + 12, bh = 22;
-  const half = (W - M.l - M.r) / Math.max(1, n) / 2, phaseLabel = { ouverture: 'Ouverture', milieu: 'Milieu de partie', finale: 'Finale' }, phaseOp = { ouverture: 0.16, milieu: 0.3, finale: 0.46 };
+  const half = (W - M.l - M.r) / Math.max(1e-6, GEO.b - GEO.a) / 2, phaseLabel = { ouverture: 'Ouverture', milieu: 'Milieu de partie', finale: 'Finale' }, phaseOp = { ouverture: 0.16, milieu: 0.3, finale: 0.46 };
   for (const s of g.phases ?? []) {
-    const x0 = X(s.from) - (s.from === 0 ? 0 : half), x1 = X(s.to) + (s.to === n ? 0 : half);
+    const x0 = Math.max(M.l, X(s.from) - (s.from === 0 ? 0 : half)), x1 = Math.min(W - M.r, X(s.to) + (s.to === n ? 0 : half));
+    if (x1 <= x0) continue; // phase hors de la plage visible
     mk('rect', { x: x0, y: by, width: Math.max(1, x1 - x0), height: bh, fill: C.muted, opacity: phaseOp[s.phase] }, svg);
     if (x1 - x0 > phaseLabel[s.phase].length * 8 + 12) mk('text', { x: (x0 + x1) / 2, y: by + 16, 'text-anchor': 'middle', fill: C.text, 'font-size': FS, 'font-weight': 600 }, svg).textContent = phaseLabel[s.phase];
   }
-  for (const p of g.echanges ?? []) { const x = X(p + 1); if ((g.pieces ?? [])[p + 1] != null) mk('line', { x1: x, x2: x, y1: by - 8, y2: by - 2, stroke: C.muted, 'stroke-width': 1.6 }, svg); }
+  for (const p of g.echanges ?? []) { const x = X(p + 1); if (inView(p + 1) && (g.pieces ?? [])[p + 1] != null) mk('line', { x1: x, x2: x, y1: by - 8, y2: by - 2, stroke: C.muted, 'stroke-width': 1.6 }, svg); }
   // numéros de coups (un coup = un coup de chaque camp : la position 2m est celle qui suit le coup m des Noirs)
-  const coups = Math.ceil(n / 2), stepC = coups > 60 ? 10 : 5;
-  for (let m = stepC; m <= coups; m += stepC) mk('text', { x: X(2 * m), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
-  // le tournant
-  if (g.tournant) {
-    const t = g.tournant, x = X(t.ply + 1), left = x > W * 0.6;
-    mk('line', { x1: x, x2: x, y1: M.t - 4, y2: H - M.b, stroke: 'var(--fault-major)', 'stroke-width': 2, 'stroke-dasharray': '6 5' }, svg);
-    const tx = mk('text', { x: left ? x - 8 : x + 8, y: M.t + 12, 'text-anchor': left ? 'end' : 'start', fill: 'var(--fault-major)', 'font-size': FS, 'font-weight': 700, 'paint-order': 'stroke', stroke: C.bg, 'stroke-width': 4 }, svg);
-    tx.textContent = `Le tournant · ${t.moveNo}${t.side === 'w' ? '.' : '…'} ${g.moves[t.ply]}`;
-  }
+  for (const m of coupSteps(GEO.a, GEO.b)) mk('text', { x: X(2 * m), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
   // curseur (position affichée) et repère de survol
-  mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 4, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.8, opacity: 0.9 }, svg);
+  if (inView(S.ply)) mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 4, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.8, opacity: 0.9 }, svg);
   const hover = mk('line', { id: 'film-hover', x1: 0, x2: 0, y1: M.t - 4, y2: H - M.b, stroke: C.text, 'stroke-width': 1.2, opacity: 0.55, visibility: 'hidden' }, svg);
   hover.style.pointerEvents = 'none';
-  // pastilles des fautes signalées (ordre de la partie), au point de la courbe après le coup : 26 px de diamètre
-  (g.faults ?? []).forEach((f, i) => {
-    if (displayedMove() === f.ply) return; // dessinée en dernier (par-dessus les autres)
-    drawPastille(svg, g, f, i, X, Y, cy, evals);
-  });
-  (g.faults ?? []).forEach((f, i) => { if (displayedMove() === f.ply) drawPastille(svg, g, f, i, X, Y, cy, evals); });
-}
-function drawPastille(svg, g, f, i, X, Y, cy, evals) {
-  {
-    const v = evals[f.ply + 1], x = X(f.ply + 1), y = v === null || v === undefined ? cy : Y(v);
-    const a = mk('g', { class: 'mk-f', 'data-i': i, style: 'cursor:pointer' }, svg);
-    const sel = displayedMove() === f.ply;
-    mk('circle', { cx: x, cy: y, r: sel ? 16 : 13, fill: graviteVar[f.gravite], stroke: sel ? C.text : C.bg, 'stroke-width': sel ? 3.5 : 2 }, a);
-    mk('text', { x, y: y + 5, 'text-anchor': 'middle', fill: 'var(--fault-on)', 'font-size': FS, 'font-weight': 700 }, a).textContent = i + 1;
+  // pastilles des fautes signalées, au point de la courbe après le coup : 26 px de diamètre. Seules celles de la plage visible sont
+  // dessinées ; deux pastilles qui se chevaucheraient sont décalées verticalement (la sélectionnée garde sa place, dessinée en dernier)
+  const faults = g.faults ?? [], placed = [];
+  const spot = (f) => { const v = evals[f.ply + 1]; return { x: X(f.ply + 1), y: v === null || v === undefined ? cy : Y(v) }; };
+  const order = faults.map((f, i) => i).filter((i) => inView(faults[i].ply + 1)).sort((p, q) => (displayedMove() === faults[q].ply) - (displayedMove() === faults[p].ply));
+  const pos = new Map();
+  for (const i of order) {
+    const base = spot(faults[i]); let best = base;
+    for (const dy of [0, 14, -14, 28, -28, 42, -42, 56, -56]) {
+      const y = Math.max(M.t + 4, Math.min(H - M.b - 4, base.y + dy));
+      if (placed.every((q) => Math.hypot(q.x - base.x, q.y - y) >= ZOOM.PASTILLE_GAP)) { best = { x: base.x, y }; break; }
+    }
+    placed.push(best); pos.set(i, best);
   }
+  faults.forEach((f, i) => { if (pos.has(i) && displayedMove() !== f.ply) drawPastille(svg, g, f, i, pos.get(i)); });
+  faults.forEach((f, i) => { if (pos.has(i) && displayedMove() === f.ply) drawPastille(svg, g, f, i, pos.get(i)); });
+  // le tournant : dessiné APRÈS les pastilles (jamais masqué) ; l'étiquette passe à gauche si elle déborde à droite, sinon est calée dans la zone tracée
+  if (g.tournant && inView(g.tournant.ply + 1)) {
+    const t = g.tournant, x = X(t.ply + 1);
+    mk('line', { x1: x, x2: x, y1: M.t - 4, y2: H - M.b, stroke: 'var(--fault-major)', 'stroke-width': 2, 'stroke-dasharray': '6 5' }, svg);
+    const tx = mk('text', { x: x + 8, y: M.t + 12, 'text-anchor': 'start', fill: 'var(--fault-major)', 'font-size': FS, 'font-weight': 700, 'paint-order': 'stroke', stroke: C.bg, 'stroke-width': 4 }, svg);
+    tx.textContent = `Le tournant · ${t.moveNo}${t.side === 'w' ? '.' : '…'} ${g.moves[t.ply]}`;
+    const w = tx.getComputedTextLength ? tx.getComputedTextLength() : 150, lo = M.l + 2, hi = W - M.r - 2;
+    if (x + 8 + w <= hi) { /* à droite du trait */ } else if (x - 8 - w >= lo) { tx.setAttribute('text-anchor', 'end'); tx.setAttribute('x', x - 8); }
+    else { tx.setAttribute('x', Math.max(lo, hi - w)); }
+  }
+}
+function drawPastille(svg, g, f, i, { x, y }) {
+  const a = mk('g', { class: 'mk-f', 'data-i': i, style: 'cursor:pointer' }, svg);
+  const sel = displayedMove() === f.ply;
+  mk('circle', { cx: x, cy: y, r: sel ? 16 : 13, fill: graviteVar[f.gravite], stroke: sel ? C.text : C.bg, 'stroke-width': sel ? 3.5 : 2 }, a);
+  mk('text', { x, y: y + 5, 'text-anchor': 'middle', fill: 'var(--fault-on)', 'font-size': FS, 'font-weight': 700 }, a).textContent = i + 1;
 }
 
 // Position (0..n) sous le pointeur ; tient compte du redimensionnement (viewBox = taille du SVG, échelle 1).
@@ -214,7 +240,12 @@ function positionAt(e) {
   const svg = $('film-chart'), r = svg.getBoundingClientRect();
   const scale = Math.min(r.width / GEO.W, r.height / GEO.H), ox = (r.width - GEO.W * scale) / 2;
   const vx = (e.clientX - r.left - ox) / scale;
-  return Math.max(0, Math.min(S.rp.steps.length, Math.round(((vx - GEO.M.l) / (GEO.W - GEO.M.l - GEO.M.r)) * GEO.n)));
+  return Math.max(0, Math.min(S.rp.steps.length, Math.round(GEO.a + ((vx - GEO.M.l) / (GEO.W - GEO.M.l - GEO.M.r)) * (GEO.b - GEO.a))));
+}
+// même chose, non arrondie et sans borne (zoom : glisser, molette)
+function posFloat(e) {
+  const r = $('film-chart').getBoundingClientRect(), scale = Math.min(r.width / GEO.W, r.height / GEO.H), ox = (r.width - GEO.W * scale) / 2;
+  return GEO.a + (((e.clientX - r.left - ox) / scale - GEO.M.l) / (GEO.W - GEO.M.l - GEO.M.r)) * (GEO.b - GEO.a);
 }
 
 // ---- infobulle de survol : mini-damier (BoardRenderer de l'appli, mêmes réglages), coup, évaluation, faute ----
@@ -246,16 +277,17 @@ function showTip(k, e) {
   tip.style.left = `${Math.max(8, left)}px`;
   tip.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, e.clientY - h / 2))}px`;
   const hl = document.getElementById('film-hover');
-  if (hl) { const x = GEO.M.l + (k / Math.max(1, GEO.n)) * (GEO.W - GEO.M.l - GEO.M.r); hl.setAttribute('x1', x); hl.setAttribute('x2', x); hl.setAttribute('visibility', 'visible'); }
+  if (hl) { const x = plotX(k); hl.setAttribute('x1', x); hl.setAttribute('x2', x); hl.setAttribute('visibility', 'visible'); }
 }
 $('film-chart').addEventListener('mousemove', (e) => {
-  if (!S.rp || S.view !== 'eval') return;
+  if (!S.rp || S.view !== 'eval' || drag?.on) return;
   const pf = e.target.closest && e.target.closest('.mk-f');
   const k = pf ? S.data.parties[S.g].faults[Number(pf.dataset.i)].ply + 1 : positionAt(e);
   showTip(k, e);
 });
 $('film-chart').addEventListener('mouseleave', hideTip);
 $('film-chart').addEventListener('click', (e) => {
+  if (dragEnded) return; // le clic qui suit un glisser de sélection n'est pas un clic sur la courbe
   const pf = e.target.closest('.mk-f');
   if (pf) { focusLoss(S.data.parties[S.g].faults[Number(pf.dataset.i)]); return; }
   const mkEl = e.target.closest('.mk');
@@ -263,6 +295,64 @@ $('film-chart').addEventListener('click', (e) => {
   goTo(positionAt(e));
 });
 document.querySelectorAll('.film-toggle button').forEach((b) => b.addEventListener('click', () => { S.view = b.dataset.view; drawChart(); }));
+
+// ---- zoom (P43) ----
+const clampZoom = (a, b) => {
+  const n = S.data.parties[S.g].plies, span = Math.min(n, Math.max(Math.min(ZOOM.MIN_SPAN, n), b - a)), na = Math.max(0, Math.min(n - span, a));
+  return span >= n - 1e-6 ? null : { a: na, b: na + span };
+};
+function setZoom(a, b) { S.zoom = clampZoom(a, b); drawChart(); }
+function zoomBy(f, center) {
+  const n = S.data.parties[S.g].plies, a = S.zoom ? S.zoom.a : 0, b = S.zoom ? S.zoom.b : n, c = center ?? (a + b) / 2, ratio = Math.max(0, Math.min(1, (c - a) / (b - a))), span = (b - a) * f;
+  setZoom(c - ratio * span, c - ratio * span + span);
+}
+function panBy(dir) { if (!S.zoom) return; const d = (S.zoom.b - S.zoom.a) * ZOOM.PAN * dir; setZoom(S.zoom.a + d, S.zoom.b + d); }
+// Le moment affiché hors de la plage : la plage se recentre dessus, sans changer le niveau de zoom.
+function revealCurrent() {
+  if (!S.zoom || !S.rp) return;
+  const k = S.focus ? S.focus.ply + 1 : S.ply;
+  if (k >= S.zoom.a && k <= S.zoom.b) return;
+  const half = (S.zoom.b - S.zoom.a) / 2; S.zoom = clampZoom(k - half, k + half);
+}
+function updateZoomBar() {
+  const n = S.data ? S.data.parties[S.g].plies : 0, z = S.zoom, tiny = n <= ZOOM.MIN_SPAN;
+  $('film-zoom-in').disabled = tiny || (z ? z.b - z.a <= ZOOM.MIN_SPAN + 1e-6 : false);
+  $('film-zoom-out').disabled = !z;
+  $('film-zoom-all').hidden = !z; $('film-zoomnav').hidden = !z;
+  if (z) { const th = $('film-nav-thumb'); th.style.left = `${(z.a / n) * 100}%`; th.style.width = `${((z.b - z.a) / n) * 100}%`; }
+}
+$('film-zoom-in').addEventListener('click', () => zoomBy(1 / ZOOM.FACTOR));
+$('film-zoom-out').addEventListener('click', () => zoomBy(ZOOM.FACTOR));
+$('film-zoom-all').addEventListener('click', () => { S.zoom = null; drawChart(); });
+$('film-pan-l').addEventListener('click', () => panBy(-1));
+$('film-pan-r').addEventListener('click', () => panBy(1));
+// Molette + Ctrl : zoom autour du pointeur (sans Ctrl, la page garde la molette)
+$('film-chart-box').addEventListener('wheel', (e) => { if (!e.ctrlKey || !S.rp) return; e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 / ZOOM.FACTOR : ZOOM.FACTOR, posFloat(e)); }, { passive: false });
+// Glisser sur la courbe : zone sélectionnée → zoom ; un simple clic reste un clic
+let drag = null, dragEnded = false;
+$('film-chart').addEventListener('pointerdown', (e) => { if (e.button !== 0 || !S.rp) return; drag = { x0: e.clientX, v0: posFloat(e), on: false }; });
+window.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (!drag.on && Math.abs(e.clientX - drag.x0) > ZOOM.DRAG_PX) { drag.on = true; hideTip(); }
+  if (drag.on) { const box = $('film-chart-box').getBoundingClientRect(), s = $('film-sel'), l = Math.min(drag.x0, e.clientX), r = Math.max(drag.x0, e.clientX); s.hidden = false; s.style.left = `${l - box.left}px`; s.style.width = `${r - l}px`; }
+});
+window.addEventListener('pointerup', (e) => {
+  if (!drag) return;
+  const d = drag; drag = null; $('film-sel').hidden = true;
+  if (!d.on) return;
+  dragEnded = true; setTimeout(() => { dragEnded = false; }, 0);
+  const v1 = posFloat(e); setZoom(Math.min(d.v0, v1), Math.max(d.v0, v1));
+});
+// Bande de navigation (quand on est zoomé) : glisser le curseur, ou cliquer à côté pour y centrer la plage
+let navDrag = null;
+$('film-nav-thumb').addEventListener('pointerdown', (e) => { if (!S.zoom) return; e.stopPropagation(); navDrag = { x0: e.clientX, a0: S.zoom.a, span: S.zoom.b - S.zoom.a }; });
+window.addEventListener('pointermove', (e) => { if (!navDrag) return; const n = S.data.parties[S.g].plies, w = $('film-nav').getBoundingClientRect().width, a = navDrag.a0 + ((e.clientX - navDrag.x0) / w) * n; setZoom(a, a + navDrag.span); });
+window.addEventListener('pointerup', () => { navDrag = null; });
+$('film-nav').addEventListener('pointerdown', (e) => {
+  if (!S.zoom || e.target.id === 'film-nav-thumb') return;
+  const r = $('film-nav').getBoundingClientRect(), n = S.data.parties[S.g].plies, c = ((e.clientX - r.left) / r.width) * n, h = (S.zoom.b - S.zoom.a) / 2;
+  setZoom(c - h, c + h);
+});
 
 // ---- listes et navigation ----
 // ---- moments critiques (P42) : frise des fautes signalées des deux camps + carte du moment sélectionné ----
@@ -347,7 +437,7 @@ function renderMomentCard(g, all) {
     const main = el('div', 'mc-main'), side = el('div', 'mc-side');
     if (over) main.appendChild(el('div', 'mc-over', over));
     if (big) { const b = el('div', 'mc-big'); b.appendChild(el('span', 'mc-move', big)); main.appendChild(b); }
-    main.appendChild(el('p', 'mc-sentence', text)); side.appendChild(nav()); box.append(main, side);
+    main.appendChild(el('p', 'mc-sentence', text)); box.append(main, side, nav());
   };
   delete box.dataset.simple;
   if (!g.rows || !g.rows.length && !all.length) { box.append(el('p', 'mc-empty', 'Aucun coup à décrire.')); return; }
@@ -368,7 +458,8 @@ function renderMomentCard(g, all) {
     const loss = el('span', 'mc-loss', `−${fr(f.L, 1)} pion`); loss.style.color = graviteVar[f.gravite];
     const badge = el('span', 'mc-badge', gravLabel[f.gravite]); badge.style.background = graviteVar[f.gravite];
     big.append(el('span', 'mc-move', moveLabel(f)), loss, badge, el('span', 'mc-trait', `${sideName[f.side]} au trait`));
-    main.append(big, line('sw-played', 'Coup joué', f.joue), line('sw-best', 'Meilleur coup', f.meilleur ?? '—'), evalLine());
+    const pair = el('div', 'mc-pair'); pair.append(line('sw-played', 'Coup joué', f.joue), line('sw-best', 'Meilleur coup', f.meilleur ?? '—')); // deux repères sur une ligne (P42C-2 : gagne de la hauteur)
+    main.append(big, pair, evalLine());
     const dif = difficultyOf(f.type, f.latence);
     if (dif) {
       const d = el('div', 'mc-diff');
@@ -389,9 +480,45 @@ function renderMomentCard(g, all) {
     main.appendChild(evalLine());
     if (!row.same && row.best && row.best !== row.played) main.appendChild(line('sw-best', 'Meilleur coup selon Scan', row.best));
   }
-  side.appendChild(nav());
-  box.append(main, side);
+  box.append(main, side, nav()); // les boutons « Moment précédent / suivant » occupent toute la largeur, sous les deux colonnes
 }
+
+// ---- le récit de la partie (P42C) : phrases de js/analysis/film-story.js, mentions de coups cliquables ----
+// Un clic sur une mention affiche ce coup : une faute signalée comme un clic sur sa pastille, sinon comme un clic sur la courbe.
+function showMoveAt(ply) {
+  const f = (S.data.parties[S.g].faults ?? []).find((x) => x.ply === ply);
+  if (f) focusLoss(f); else goTo(Math.min(S.rp.steps.length, ply + 1));
+}
+function fillStory(box, story) {
+  box.replaceChildren();
+  for (const sentence of story.sentences) {
+    const p = document.createElement('p');
+    for (const part of sentence) {
+      if (part.ply === undefined) { p.appendChild(document.createTextNode(part.t)); continue; }
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'story-link'; b.textContent = part.t;
+      b.addEventListener('click', () => { closeStoryPop(); showMoveAt(part.ply); });
+      p.appendChild(b);
+    }
+    box.appendChild(p);
+  }
+}
+// Par défaut : la phrase 1 seule (deux lignes au plus) + « Lire la suite » ; le récit complet s'ouvre dans un panneau POSÉ PAR-DESSUS
+// le haut de la courbe (rien n'est poussé). À 950 px de haut ou plus, le récit complet est affiché directement (CSS).
+function closeStoryPop() { const pop = $('film-story-pop'); if (pop) pop.hidden = true; const m = $('film-story-more'); if (m) m.setAttribute('aria-expanded', 'false'); }
+function renderStory() {
+  const box = $('film-story-text'); if (!box || !S.data) return;
+  closeStoryPop();
+  const g = S.data.parties[S.g];
+  const story = (DEMO || L.state === 'done') ? storyOf(g) : null; // jamais avant la fin de l'analyse
+  $('film-story-more').hidden = !story || story.sentences.length < 2;
+  if (!story) { box.replaceChildren(); const p = document.createElement('p'); p.className = 'story-wait'; p.textContent = STORY_TEXT.attente; box.appendChild(p); return; }
+  fillStory(box, story);
+  fillStory($('film-story-pop-text'), story);
+}
+$('film-story-more').addEventListener('click', (e) => { e.stopPropagation(); const pop = $('film-story-pop'); pop.hidden = !pop.hidden; e.currentTarget.setAttribute('aria-expanded', String(!pop.hidden)); });
+$('film-story-close').addEventListener('click', closeStoryPop);
+document.addEventListener('click', (e) => { const pop = $('film-story-pop'); if (pop && !pop.hidden && !pop.contains(e.target) && e.target !== $('film-story-more')) closeStoryPop(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStoryPop(); });
 
 // Sélection automatique à la fin de l'analyse, si l'utilisateur n'a rien touché : le tournant, sinon la faute la plus coûteuse.
 function autoSelectMoment() {
@@ -404,16 +531,52 @@ function autoSelectMoment() {
   setFocus(f);
 }
 
+// Cartes joueurs (P44) : mêmes classes que la « Plaque tournoi » de l'appli. Données : S.cards (mode normal, déjà résolues par main.js :
+// { w|b: { name, elo, title, photo }, info: { event, round, date, score } }) ou, à défaut (mode test), le seul nom du jeu de données.
+// Champ absent = rien d'affiché ; photo absente ou qui ne charge pas = avatar lettré.
+function playerCard(side, p) {
+  const white = side === 'w', box = el('div', 'player-card film-pcard');
+  const ring = el('div', 'player-avatar-ring'); ring.dataset.sideRing = white ? 'white' : 'black';
+  const inner = el('div', 'player-avatar-inner'); inner.dataset.sideAvatar = white ? 'white' : 'black';
+  const letter = el('span', 'avatar-letter', (p.name || (white ? 'B' : 'N')).trim().charAt(0).toUpperCase());
+  inner.append(letter);
+  if (p.photo) {
+    const img = el('img', 'avatar-photo'); img.hidden = true; img.alt = '';
+    img.onload = () => { letter.hidden = true; img.hidden = false; };
+    img.onerror = () => { img.remove(); letter.hidden = false; };
+    img.src = p.photo; inner.append(img);
+  }
+  ring.append(inner);
+  const body = el('div', 'player-card-body'), row = el('div', 'player-name-row');
+  row.append(el('span', 'film-pname', p.name || (white ? 'Blancs' : 'Noirs')), el('span', 'side-tag', white ? 'Blancs' : 'Noirs'));
+  body.append(row);
+  if (p.elo || p.title) {
+    const meta = el('div', 'film-pmeta');
+    if (p.elo) meta.append(el('span', 'elo-badge', `Elo ${p.elo}`));
+    if (p.title) meta.append(el('span', 'film-ptitle', p.title));
+    body.append(meta);
+  }
+  box.append(ring, body);
+  return box;
+}
 function renderHeader() {
-  const g = S.data.parties[S.g];
-  const top = S.flipped ? g.blancs : g.noirs, bottom = S.flipped ? g.noirs : g.blancs;
-  const fill = (box, nm, white) => { // noms issus d'un PDN : jamais en innerHTML
-    const a = document.createElement('span'); a.className = 'nm'; a.textContent = nameOf(nm);
-    const b = document.createElement('span'); b.className = 'tag'; b.textContent = `${white ? 'Blancs' : 'Noirs'}${g.joueur === (white ? 'w' : 'b') ? ' · Mickaël' : ''}`;
-    box.replaceChildren(a, b);
+  const g = S.data.parties[S.g], live = S.cards && !DEMO;
+  const sideOf = (white) => {
+    const c = live ? (S.cards.players?.[white ? 'w' : 'b'] ?? {}) : {};
+    return { ...c, name: c.name || nameOf(white ? g.blancs : g.noirs) };
   };
-  fill($('film-top'), top, S.flipped);
-  fill($('film-bottom'), bottom, !S.flipped);
+  const topWhite = S.flipped, bottomWhite = !S.flipped; // même ordre que le damier : retourné → Blancs en haut
+  $('film-top').replaceChildren(playerCard(topWhite ? 'w' : 'b', sideOf(topWhite)));
+  $('film-bottom').replaceChildren(playerCard(bottomWhite ? 'w' : 'b', sideOf(bottomWhite)));
+  // Bandeau de la partie (P44B), en tête de la colonne du damier : tournoi en premier, puis « Ronde N · date · Score » ; champ absent = rien
+  const inf = live ? (S.cards.info ?? {}) : {}, sub = [];
+  if (inf.round) sub.push(`Ronde ${inf.round}`);
+  if (inf.date) sub.push(inf.date);
+  if (inf.score) sub.push(`Score ${inf.score}`);
+  const box = $('film-info'); box.replaceChildren();
+  if (inf.event) box.append(el('div', 'film-info-event', inf.event));
+  if (sub.length) box.append(el('div', 'film-info-sub', sub.join(' · ')));
+  box.hidden = !box.children.length;
   const when = `${g.date ? g.date.split('.').reverse().join('/') + ' · ' : ''}${g.resultat ? `résultat ${resText(g.resultat)} · ` : ''}${Math.ceil(g.plies / 2)} coups. `;
   const foot = $('film-foot'); foot.replaceChildren();
   const l = document.createElement('span');
@@ -429,7 +592,7 @@ function renderPly() {
   else t = k === 0 ? 'Position de départ' : `Après ${Math.floor((k - 1) / 2) + 1}${(k - 1) % 2 === 0 ? '.' : '…'} ${g.moves[k - 1]}`;
   $('film-ply').textContent = t;
 }
-function refresh() { renderPly(); drawBoard(); drawChart(); renderMoments(); }
+function refresh() { renderPly(); drawBoard(); revealCurrent(); drawChart(); renderMoments(); }
 function goTo(ply) { S.touched = true; S.focus = null; S.ply = ply; refresh(); } // la carte du bas suit le coup affiché
 // Son (js/sound.js, mêmes réglages que l'appli). Règle RELEVÉE dans main.js (goToNextMove, goToPrevMove, boutons début / fin,
 // jumpToPly) : l'appli joue un son SEULEMENT en avançant d'un coup (bouton ▶ et flèche →) : 'capture' si le coup est une prise,
@@ -453,12 +616,12 @@ function setFocus(l) { // position AVANT le coup en cause ; une faute signalée 
 }
 function focusLoss(l) { S.touched = true; setFocus(l); }
 function selectGame(i) {
-  const g = S.data.parties[i]; S.g = i; S.focus = null; S.touched = false; FRISE.page = 0; FRISE.last = null;
+  const g = S.data.parties[i]; S.g = i; S.zoom = null; S.focus = null; S.touched = false; FRISE.page = 0; FRISE.last = null;
   S.rp = replay(g.moves);
   if (DEMO) S.flipped = g.joueur === 'b'; else S.flipped = !!g.flipped;
   S.ply = 0;
-  document.querySelectorAll('.film-game-btn').forEach((b, j) => b.classList.toggle('active', j === i));
-  renderHeader(); refresh(); autoSelectMoment();
+  document.querySelectorAll('#film-games .film-game-btn').forEach((b, j) => b.classList.toggle('active', j === i));
+  renderHeader(); renderStory(); refresh(); autoSelectMoment();
   if (S.rp.error) $('film-foot').textContent = `Partie non rejouable : ${S.rp.error}`;
 }
 
@@ -501,13 +664,13 @@ function renderProgress() {
 function applyRecs() {
   const g = buildFilmGame(L.plan, L.recs, L.meta);
   S.data.parties[0] = g;
-  renderMoments(); drawChart(); renderProgress();
+  renderMoments(); drawChart(); renderProgress(); renderStory();
 }
 function setState(state) {
   L.state = state;
   clearInterval(L.timer); L.timer = null;
   if (state === 'running') L.timer = setInterval(renderProgress, 1000);
-  renderProgress();
+  renderProgress(); renderStory();
 }
 function publishStats(mode, stats, totalMs) {
   const mem = performance.memory ? performance.memory.usedJSHeapSize : null;
@@ -542,6 +705,7 @@ async function initLive() {
   const plan = planGame(raw.moves);
   if (!plan.ok) { showMessage('Partie impossible à rejouer', `${plan.error}. Les règles de DamikA ne rejouent pas cette partie : elle ne peut pas être analysée.`); return; }
   const h = raw.headers || {};
+  S.cards = { players: raw.players ?? null, info: raw.info ?? null };
   L.plan = plan;
   L.meta = { blancs: h.White || '', noirs: h.Black || '', date: h.Date || '', resultat: h.Result || '', joueur: null, flipped: !!raw.flipped };
   S.data = { parties: [buildFilmGame(plan, [], L.meta)] };

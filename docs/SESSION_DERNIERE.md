@@ -2399,3 +2399,176 @@ Réalisé, **non commité, non déployé**. Affichage seulement, aucune formule 
 
 ### Commit (P42D)
 P42 et P42B commités : `4948eef`, poussés sur main. Non déployé.
+
+## P42C — Le récit de la partie (12/11/2026)
+
+Réalisé, **non commité, non déployé**. Aucune mesure ni seuil existant ne change. **Le texte de la consigne était coupé après « deux thèmes, »** : j'ai appliqué les contraintes habituelles du chantier (aucun défilement de page, polices ≥ 14 px, pas de commit, section dans la doc).
+
+**Fait**
+- `js/analysis/film-story.js` (nouveau, fonctions pures) : la banque de phrases `STORY_TEXT` est en tête du fichier et NULLE PART ailleurs (emplacements {camp}, {autreCamp}, {coup}, {n}, {notation}, {nbCoups}, {nbFois} ; j'ai séparé les nombres en lettres {nbCoups} / {nbFois} du numéro de coup {n}, qui reste en chiffres) ; tous les seuils juste en dessous (`NET` 1,0, `EQUAL` 0,5, `SWINGS_MIN` 3, `BAD_FAULTS_MIN` 2, `WASTED` 1,5, `FINAL_COUNT` 3). Scénarios dans l'ordre imposé (`scenarioOf`), moment clé (`keyMoment`), occasion manquée (`missedChance`), phase la plus coûteuse (`worstPhase`), composition (`storyOf`, `plainText`). `storyOf` renvoie `null` tant que l'analyse n'est pas terminée.
+- Bandeau « Le récit de la partie » en haut de la colonne d'analyse, au-dessus de la courbe (16 px, 14 px sous 760 px de haut ; titre masqué visuellement dans ce cas). Pendant le calcul : « Le récit s'écrira à la fin de l'analyse. ». Les mentions de coups sont des boutons (`.story-link`) : une faute signalée s'affiche comme au clic sur sa pastille, un autre coup comme au clic sur la courbe (position après le coup). Masqué dans la mise en page étroite (≤ 900 px).
+- Hauteurs : lignes de la colonne `auto / minmax(140px, 1fr) / auto` : le récit et les moments critiques prennent leur hauteur, la courbe absorbe le reste ; la carte du moment a une hauteur minimale (176 px, 188 px sous 760 px de haut).
+- Tests : `node tests/film-story.mjs` (30 contrôles : chaque scénario, l'ordre, les phrases 1 à 3, les nombres en lettres, les liens, l'absence de récit tant que l'analyse n'est pas finie, vocabulaire). Autres tests de l'analyse verts.
+
+**À savoir (écarts et limites, pour Mickaël)**
+- **Le scénario 6 « partie propre … mais les {camp} finissent mieux » est inatteignable** : le scénario 5 (« petit à petit », avantage net final sans tournant) passe avant dans l'ordre imposé et reconnaît déjà ces parties. La variante est codée et testée (B10 montre le chevauchement) ; à décider : mettre 6 avant 5, ou exiger une faute pour le 5.
+- **« Trois lignes au plus »** : les trois PHRASES tiennent, mais à l'écran elles prennent de 4 à 7 lignes selon la largeur (la phrase 2 peut en regrouper deux ou trois : moment clé, difficulté, occasion manquée). À 1280×720 la courbe tombe alors à ≈ 100 à 155 px de haut (mesuré, aucun défilement ni débordement) ; à 1456×819 : 150 à 195 px ; à 1920×1080 : 450 à 500 px. Piste si c'est trop : retirer l'occasion manquée du récit, ou un récit à deux phrases sous 760 px de haut.
+- « Partie équilibrée jusqu'au coup {n}. Au coup {coup}… » : avec la définition choisie, {n} = dernier coup de la position avant la faute et {coup} = le coup de la faute (par exemple 40 puis 41 pour une faute des Blancs au coup 41) ; pour une faute des Noirs, les deux numéros sont égaux.
+
+**Fichiers** : `js/analysis/film-story.js`, `tests/film-story.mjs`, `js/film.js`, `film.html`, `css/film.css`, `CLAUDE.md`.
+
+**Vérification** (`film.html?demo=1`, trois tailles, deux thèmes, six parties) : 0 erreur JS, aucun défilement de page, carte du moment sans débordement, plus petite police du bandeau 14 px (16 px au-dessus de 760 px de haut), un clic sur une mention affiche le coup (carte et damier à jour).
+
+**Comment tester en 2 minutes** : `film.html?demo=1`, « Partie 4 » (tournant) : lire le récit, cliquer « 41 » ou « 48-42 » dans la première phrase, puis « Partie 1 » (sans tournant : « Le coup le plus coûteux est … »). Les phrases se retravaillent uniquement dans `STORY_TEXT`.
+
+## P42C-2 — Récit compact, la courbe reste la vedette (12/11/2026)
+
+Réalisé, **non commité, non déployé**. Aucune mesure ni seuil ne change. (La section P42C ci-dessus est complétée ici : sa vérification finale et son livrable manquaient parce que la consigne était tronquée.)
+
+**Fait**
+1. **Le récit ne pousse plus la courbe.** Par défaut le bandeau n'affiche que la phrase 1 (deux lignes au plus, `line-clamp`) avec un bouton « Lire la suite » (caché quand il n'y a qu'une phrase). Il ouvre le récit complet dans un panneau posé PAR-DESSUS le haut de la courbe (`position: absolute`, mesuré : 0 px de poussée, recouvre bien la courbe, reste dans la fenêtre) avec « Fermer » ; Échap ou un clic en dehors le ferme ; un clic sur un coup du récit affiche ce coup et ferme le panneau. À 950 px de haut ou plus (`@media (min-height: 950px)`), le récit complet est affiché directement, sans bouton ni panneau. Mesuré : bouton, ouverture, Échap, clic extérieur, clic sur un coup : tout fonctionne (1280×720 et 1456×819).
+2. **L'occasion manquée sort du récit** : `storyOf` ne l'appelle plus ; `missedChance` et ses tests restent (C7 vérifie qu'elle est trouvée et qu'elle n'est plus dite) ; la phrase reste dans la banque, marquée « réservée à sa future carte ».
+3. **Textes et ordre** : faute d'un coup des Noirs : « Partie équilibrée jusqu'au coup {n}. Les Noirs répondent {notation} et tout bascule. » et « Les Noirs tenaient encore la partie jusqu'au coup {n}. Ils répondent {notation} et tout bascule. » (tests B12 à B14, numéro non répété, deux liens). « Partie propre » passe avant « Petit à petit » : sa variante « … mais les {camp} finissent mieux » est atteignable (B10) ; « Petit à petit » = au moins une faute « faute » ou « majeure », pas de tournant, avantage net final.
+
+**Garantie : la courbe garde au moins 45 % de la hauteur de la colonne d'analyse.** Mesuré sur les six parties de démo (hauteur du panneau de la courbe / hauteur de la colonne, identique en thème sombre et clair) :
+
+| Fenêtre | Colonne du damier | Colonne d'analyse | Panneau de la courbe | Courbe (SVG) |
+|---|---|---|---|---|
+| 1280×720 | 461 px | 757 px de large | 48 % de la hauteur | 221 px |
+| 1456×819 | 524 px | 870 px de large | 47 % | 275 px |
+| 1920×1080 | 691 px | 1167 px de large | 57 à 60 % (récit complet affiché) | 507 à 530 px |
+
+Pour y arriver sans écraser la carte du moment : lignes de la colonne `auto / minmax(140px, 1fr) / auto`, carte du moment ≥ 142 px de haut (128 px sous 760 px de haut), « Coup joué » et « Meilleur coup » sur une ligne, boutons « Moment précédent / suivant » sous les deux colonnes de la carte, cartes de la frise moins hautes (66 px, 58 px sous 760 px). Aucune carte de moment des 6 parties ne déborde, aucun défilement de page, 0 erreur JS, deux thèmes.
+**Régression trouvée et corrigée au passage** : la colonne du damier mesurait 705 px au lieu de 461 à 1280 px (la ligne du bas, qui couvre les deux colonnes, élargissait la colonne « auto » par sa largeur naturelle, et la colonne d'analyse tombait à 513 px) : `.film-foot, .film-head { contain: inline-size; min-width: 0; }`. La colonne d'analyse retrouve 757 px à 1280 (le damier reste à 36 %).
+
+**Répartition des scénarios** (parties mesurées en P40, sans relancer Scan ; 110 parties analysables sur 112, 2 trop courtes) :
+
+| Scénario | Parties | Part | P28 | Bibliothèque | td-propre |
+|---|---|---|---|---|---|
+| Bascule nette | 61 | 55 % | 2 | 1 | 58 |
+| Partie propre | 16 | 15 % | 1 | 1 | 14 |
+| Avantage gâché | 13 | 12 % | 1 | 1 | 11 |
+| Neutre | 10 | 9 % | 1 | 0 | 9 |
+| Renversement | 6 | 5 % | 1 | 0 | 5 |
+| Petit à petit | 3 | 3 % | 0 | 0 | 3 |
+| Partie mouvementée | 1 | 1 % | 0 | 1 | 0 |
+
+Aucun scénario au-dessus de 60 % (la bascule nette en est proche : 55 % au total, 58 % sur td-propre) et aucun jamais rencontré. Seuils inchangés. À regarder : « petit à petit » (3 %) et « mouvementée » (1 %) sont rares ; dans td-propre la bascule nette domine parce qu'une partie de 50 à 60 coups contient presque toujours une faute après laquelle l'évaluation ne revient pas.
+
+**Les récits complets des 7 parties de test** (aucun nom de joueur ; la partie de 1 coup est trop courte : « Rien à analyser », pas de récit ; les phrases 2 et 3 sont telles qu'affichées dans « Lire la suite ») :
+
+- Partie de 58 coups (propre) : « Partie sérieuse des deux côtés : personne ne commet de vraie faute, et l'équilibre tient du début à la fin. » / « À retenir pour les Noirs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- Partie de 44 coups (neutre) : « Partie disputée, sans coup décisif : les deux camps restent proches jusqu'au bout. » / « Le coup le plus coûteux est 25 (32-28). Même le moteur hésite sur ce coup : la position était vraiment compliquée. »
+- Partie de 61 coups (bascule nette) : « Partie équilibrée jusqu'au coup 40. Au coup 41, les Blancs jouent 48-42 et tout bascule. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Blancs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- Partie de 54 coups (bascule nette) : « Les Blancs tenaient encore la partie jusqu'au coup 22. Au coup 23, les Blancs jouent 32-27 et tout bascule. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Blancs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- Partie de 64 coups (renversement) : « Les Noirs tenaient la partie jusqu'au coup 44. Les Blancs retournent la situation en quelques coups. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Noirs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- Partie de 70 coups (avantage gâché) : « Les Noirs avaient la partie en main au coup 56. Ils laissent filer leur avantage et la partie finit à égalité. » / « Le coup le plus coûteux est 56 (18-12). Le coup avait l'air naturel. Il fallait calculer cinq coups pour voir le danger. »
+
+**Remarques pour la réécriture des phrases** : (1) « À retenir : … la partie était bien menée jusqu'à la finale » est la phrase 3 de quatre récits sur six (les deux autres n'ont pas de phrase 3 : égalité finale) ; c'est la seule phase nommée dans ces parties, ce qui rend le récit répétitif (cause non vérifiée : peut-être la façon dont les pertes se cumulent en finale) ; (2) dans la partie propre, la phrase 3 parle d'une « perte » alors que la phrase 1 dit qu'il n'y a pas de vraie faute (seulement des petites pertes cumulées) ; (3) « Le coup le plus coûteux est 25 (32-28) » ne dit pas quel camp joue (le « … » n'apparaît que pour les Noirs).
+
+**Fichiers touchés** : `js/analysis/film-story.js`, `tests/film-story.mjs` (B10, B12 à B14, C7 mis à jour ou ajoutés), `js/film.js`, `film.html`, `css/film.css`, `training/scan-arena/p42-story-report.mjs` (non suivi, répartition et récits).
+
+## P42C-3 — « À retenir » corrigé et trois formulations (12/11/2026)
+
+Réalisé, **non commité, non déployé**. Corrections dans `js/analysis/film-story.js` et `tests/film-story.mjs` seulement (aucun changement d'affichage, aucune mesure ni seuil existant). Incident de parcours : un remplacement automatique a coupé `film-story.js` au mauvais endroit (un commentaire identique existait dans la banque de phrases) ; le fichier a été réécrit en entier avec toutes les corrections de P42C-2 et P42C-3, tests relancés (tous verts, 45 contrôles).
+
+**Fait**
+1. **« À retenir » (phrase 3)** : s'il y a un moment clé (tournant, sinon faute « faute » / « majeure » la plus coûteuse), la phase nommée est celle de CE coup (nombre de pièces de la position avant le coup : `retainPhase`) ; sinon, `worstPhase` : la phase où le camp perd le plus en ignorant ses pertes faites quand il avait déjà 2,0 pions ou plus de retard (`LOST_BEHIND = 2.0`, en tête du fichier). Pas de phrase 3 dans « Partie propre » ni « Neutre ». « Rien à reprocher… » et « pas de phrase 3 à égalité finale » sont inchangés.
+2. **Bascule nette, variante « tenaient encore »** : « Les Blancs tenaient encore la partie jusqu'au coup 22. Au coup 23, ils jouent 32-27 et tout bascule. »
+3. **Le coup clé est nommé une fois** : quand la phrase 1 ne nomme pas le coup (tous les scénarios sauf la bascule nette), la phrase 2 commence par « Le coup clé est le coup 44 des Noirs (18-12). » (le numéro et la notation sont cliquables), puis enchaîne sur la difficulté ; en bascule nette la phrase 2 ne le répète pas. « Le coup le plus coûteux est … » n'existe plus nulle part (test C18).
+
+**Cause du « toujours la finale »** (vérifiée sur les 77 parties de P40 où un camp finit à plus de 0,5 pion) : les pertes du camp qui finit le moins bien se concentrent en finale (59 % de toutes ses pertes), et la moitié de ces pertes de finale (50 %) sont faites alors que la partie est déjà perdue (≥ 2,0 pions de retard) : l'ancienne règle les comptait (elle nommait la finale pour 66 % de ces parties), alors qu'elles ne disent plus rien sur la façon dont la partie a été perdue.
+
+**Nouvelle répartition de la phrase 3** (110 parties analysables de P40 ; 2 trop courtes) : finale 33 (30 %), milieu de partie 26 (24 %), ouverture 12 (11 %), aucune phrase 3 39 (35 % : parties propres, neutres et égalités finales). Aucune « rien à reprocher ». Répartition des scénarios inchangée (bascule 61, propre 16, gâché 13, neutre 10, renversement 6, petit à petit 3, mouvementée 1).
+
+**Les récits complets des 7 parties de test après correction** (sans nom de joueur ; la partie de 1 coup est trop courte : pas de récit) :
+
+- Partie de 58 coups (propre) : « Partie sérieuse des deux côtés : personne ne commet de vraie faute, et l'équilibre tient du début à la fin. »
+- Partie de 44 coups (neutre) : « Partie disputée, sans coup décisif : les deux camps restent proches jusqu'au bout. » / « Le coup clé est le coup 25 des Blancs (32-28). Même le moteur hésite sur ce coup : la position était vraiment compliquée. »
+- Partie de 61 coups (bascule nette) : « Partie équilibrée jusqu'au coup 40. Au coup 41, les Blancs jouent 48-42 et tout bascule. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Blancs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- Partie de 54 coups (bascule nette) : « Les Blancs tenaient encore la partie jusqu'au coup 22. Au coup 23, ils jouent 32-27 et tout bascule. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Blancs : c'est en milieu de partie que tout se joue, l'ouverture et la finale sont tenues. »
+- Partie de 64 coups (renversement) : « Les Noirs tenaient la partie jusqu'au coup 44. Les Blancs retournent la situation en quelques coups. » / « Le coup clé est le coup 62 des Noirs (49-16). La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Noirs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- Partie de 70 coups (avantage gâché) : « Les Noirs avaient la partie en main au coup 56. Ils laissent filer leur avantage et la partie finit à égalité. » / « Le coup clé est le coup 56 des Blancs (18-12). Le coup avait l'air naturel. Il fallait calculer cinq coups pour voir le danger. »
+
+**À regarder** : (1) dans la partie de 61 coups la phrase 3 nomme encore la finale (le coup clé est bien joué en finale : cette fois c'est exact) ; (2) dans la partie de 64 coups, le coup clé (62, des Noirs) n'est pas le moment où la partie a basculé (coup 44) : il vient de la règle « le tournant, sinon… » appliquée à un renversement ; si cela gêne, le récit pourrait citer la faute la plus coûteuse AVANT le renversement ; (3) « À retenir pour les {camp} » prend le camp qui finit le moins bien même quand le moment clé est une faute de l'autre camp (cas possible, non rencontré sur les 7 parties).
+
+**Fichiers touchés** : `js/analysis/film-story.js`, `tests/film-story.mjs` (B15, C4, C15 à C23), `training/scan-arena/p42-story-report.mjs` (non suivi : répartition des scénarios et des phases, cause).
+
+## P42C-4 — Récit : camp concerné et coup clé cohérent avec le scénario (13/11/2026)
+
+Réalisé, **non commité, non déployé**. Fichiers : `js/analysis/film-story.js`, `tests/film-story.mjs`, `training/scan-arena/p42-story-report.mjs` (non suivi). Ni la mesure ni `METRICS_VERSION` ne changent. Aucun incident d'outil, `film-story.js` n'a PAS été réécrit en entier (modifications ciblées) ; seules des erreurs de guillemets dans mes nouveaux tests ont été corrigées.
+
+**Fait**
+- `scenarioOf` renvoie maintenant, par scénario, le **camp concerné** et la **fenêtre** (en numéros de coups joués) : renversement = camp qui perd son avantage, du meilleur moment du leader (`k`) jusqu'à la position précédant l'avantage net de l'autre camp ; gâché = camp qui gâche, du meilleur moment à la fin ; petit à petit = camp qui finit le plus mal, toute la partie ; bascule = camp du tournant, fenêtre tournant ± `TURN_WINDOW` (2, nouvelle constante) ; mouvementée / neutre : pas de camp, toute la partie ; propre : pas de phrase 2.
+- `keyMoment(g, { camp, from, to, prefer })` : faute « faute » / « majeure » la plus coûteuse du camp dans la fenêtre ; à défaut la plus coûteuse signalée ; à défaut rien. Bascule nette : le coup du tournant est toujours préféré (la phrase 1 le nomme déjà ; sinon phrases 1 et 2 pourraient se contredire).
+- {n} de « Renversement » = meilleur moment du camp concerné (même règle que « Gâché »).
+- Phrase 3 adressée au camp concerné, avec la phase du coup clé ; « Avantage gâché » : « À retenir pour les {camp} : un avantage ne suffit pas, il faut encore le concrétiser. » (`STORY_TEXT.retenir.gache`). **Plus de phrase 3 dans « Mouvementée » et « Neutre »** (pas de camp). « Rien à reprocher » reste pour un camp concerné sans aucune faute signalée.
+- Tests : `node tests/film-story.mjs` vert (E1 à E11 ajoutés ; C5, C13, C19 et la fixture `rev` adaptés à la nouvelle règle) ; `film-metrics` et `analysis-format` verts.
+
+**Récits complets des 7 parties de test** (sans nom ; la partie de 1 coup : pas de récit)
+- 58 coups (propre) : « Partie sérieuse des deux côtés : personne ne commet de vraie faute, et l'équilibre tient du début à la fin. »
+- 44 coups (neutre) : « Partie disputée, sans coup décisif : les deux camps restent proches jusqu'au bout. » / « Le coup clé est le coup 25 des Blancs (32-28). Même le moteur hésite sur ce coup : la position était vraiment compliquée. »
+- 61 coups (bascule) : « Partie équilibrée jusqu'au coup 40. Au coup 41, les Blancs jouent 48-42 et tout bascule. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Blancs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- 54 coups (bascule) : « Les Blancs tenaient encore la partie jusqu'au coup 22. Au coup 23, ils jouent 32-27 et tout bascule. » / « La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Blancs : c'est en milieu de partie que tout se joue, l'ouverture et la finale sont tenues. »
+- 64 coups (renversement) : « Les Noirs tenaient la partie jusqu'au coup 44. Les Blancs retournent la situation en quelques coups. » / « Le coup clé est le coup 44 des Noirs (21-27). La punition se voyait en deux coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Noirs : la partie était bien menée jusqu'à la finale, c'est là qu'elle se perd. »
+- 70 coups (gâché) : « Les Noirs avaient la partie en main au coup 56. Ils laissent filer leur avantage et la partie finit à égalité. » / « Le coup clé est le coup 56 des Noirs (48-39). La punition se voyait en trois coups : c'est une faute d'attention, pas de calcul. » / « À retenir pour les Noirs : un avantage ne suffit pas, il faut encore le concrétiser. »
+
+**Récits sans phrase 2, sur les 110 parties analysables de P40** (hors « propre », qui n'en a jamais : 16) : **gâché 3 sur 13** ; 0 pour bascule (61), renversement (6), petit à petit (3), mouvementée (1), neutre (10). Phrase 3 : aucune 27, finale 44, milieu 27, ouverture 12. Répartition des scénarios inchangée.
+
+**À regarder** : (1) le coup clé du renversement de 64 coups est maintenant le coup 44 (21-27), au moment du renversement, comme voulu ; sa phrase 3 dit pourtant « finale » : la phase vient du nombre de pièces au coup 44, pas du numéro de coup. (2) Dans les 3 « gâché » sans phrase 2, le camp n'a signalé aucune faute après son meilleur moment (l'avantage s'évapore par petites pertes non signalées).
+
+## P42D — Mode test : contour de la partie sélectionnée (13/11/2026)
+
+Réalisé, **non commité**. Cause : `#film-cancel` porte aussi `.film-game-btn`, donc `selectGame()` (`js/film.js`, ligne 498) comptait le bouton Annuler à l'index 0 et le contour tombait sur la partie précédente. Correction : sélecteur restreint à `#film-games .film-game-btn` (une seule ligne ; classe du bouton Annuler inchangée). Vérification navigateur de `film.html?demo=1` : à faire par Mickaël (je n'ai pas lancé le navigateur).
+
+## P43 — Zoom sur la courbe de l'écran « Analyse de la partie » (13/11/2026)
+
+Réalisé, **non commité, non déployé**. Fichiers : `film.html` (barre de zoom sous la courbe), `js/film.js`, `css/film.css`. Ni la mesure ni `METRICS_VERSION` ne changent ; `js/analysis/*` non touché. Incident d'outil : un premier script de modification (heredoc) n'a rien appliqué (erreur de guillemets du shell) ; refait par un script Python écrit dans le scratchpad, appliqué en une fois ; aucun fichier réécrit en entier.
+
+**Fait**
+- Zoom sur l'axe des coups seulement (échelle des pions inchangée). Plage visible `S.zoom = {a, b}` en positions (`null` = « Tout voir »), non persistée, remise à zéro à chaque changement de partie ; les deux onglets (Évaluation / Imprécisions cumulées) la partagent.
+- Commandes : glisser sur la courbe (zone dorée pendant le glisser, un simple clic reste un clic) ; Ctrl + molette (autour du pointeur) ; boutons « − » / « + » ; « Tout voir » (visible seulement zoomé) ; quand on est zoomé : bande de navigation (curseur glissable, clic à côté pour y centrer la plage) et flèches ◀ ▶.
+- Tout suit la plage : courbe (coupée à la zone tracée), graduations en coups (pas 1, 2, 5, 10, 20 ou 50 : le plus petit laissant ≥ 60 px entre deux numéros), bande des phases tronquée, traits d'échanges, curseur, repères des « plus grosses pertes » (onglet cumulé), survol et clic en coordonnées de la plage. Pastilles hors plage non dessinées, atteignables par la frise ; choisir un moment (frise, récit, flèches du clavier) hors plage recentre la plage sans changer le zoom (`revealCurrent()` dans `refresh()`).
+- Pastilles : décalées verticalement (pas de 14 px, jusqu'à ±56) si elles sont à moins de 27 px l'une de l'autre ; la sélectionnée garde sa place. « Le tournant » est dessiné après les pastilles (jamais masqué) ; étiquette à droite du trait, sinon à gauche, sinon calée dans la zone tracée.
+- Constantes (`ZOOM` en tête de la section courbes de `film.js`) : `MIN_SPAN` 12 positions (6 coups visibles au plus fort), `FACTOR` 1,5 par cran, `PAN` 0,25 de la plage, `DRAG_PX` 6, `PASTILLE_GAP` 27. Couleurs : variables de l'appli uniquement.
+
+**Vérifié** (`film.html?demo=1`, Partie 6, fenêtre 1788×937, par script de page ; pas de capture) : 0 erreur JS ; glisser 72 → 98 % : zoomé, « Tout voir » et bande apparus, 10 pastilles, tournant présent ; zoom maximal : « + » désactivé, pastilles ≥ 84 px les unes des autres sur les 40 fenêtres parcourues avec ◀ ▶, pastilles 10 à 15 visibles (par groupes de 2 à 4) ; « Tout voir » : 15 pastilles, bouton masqué ; en vue complète les 15 pastilles restent à ≥ 28 px ; étiquette « Le tournant » entièrement dans la zone tracée (805-963 sur 1052, limite 1036) ; pas de défilement de page. Tests Node verts (`film-metrics`, `film-story`, `analysis-format`).
+
+**Limites / à regarder par Mickaël** : tailles 1280×720, 1456×819, 1920×1080 et mise en page ≤ 900 px non mesurées (la barre de zoom ajoute ≈ 34 px sous la courbe : vérifier qu'elle garde ≥ 45 % de la colonne) ; Ctrl + molette à tester à la vraie souris ; au zoom maximal, un clic sur la courbe fonctionne mais le glisser sur une pastille démarre une sélection (le clic sur la pastille, lui, reste un clic) ; zoom tactile (pincer) non géré.
+
+## P44 — Cartes joueurs dans l'écran « Analyse de la partie » + boutons de zoom plus visibles (13/11/2026)
+
+Réalisé, **non commité, non déployé**. Fichiers : `js/main.js`, `film.html`, `js/film.js`, `css/film.css`. Ni la mesure ni `METRICS_VERSION` ne changent. Incident d'outil : aucun fichier réécrit en entier (modifications par script Python depuis le scratchpad).
+
+**A. Zoom** : « − », « + » et « Tout voir » sont dans l'en-tête de la courbe, à droite de la ligne des onglets (≥ 34 px de haut, 18 px / 14 px de police, bordure dorée, fond du panneau ; au survol fond `--gold-chip` / texte `--on-gold`, variables de l'appli, deux thèmes). Infobulle du groupe : « Zoom : Ctrl + molette, ou glisser sur la courbe ». Seule la bande de navigation ◀ ▶ reste sous la courbe (visible zoomé). Comportement du zoom inchangé.
+
+**B. Cartes joueurs**
+- **Champs transmis** (`sessionStorage['damika:film-current']`, version 2, écrits par `storeFilmGame()` de `main.js` avec les MÊMES fonctions que le Bloc 1 : `formatPlayerName`, `lookupPhotoUrl`, `formatPdnDate`, `parseResultScore`) : `players.w|b = { name, elo, title, photo }` et `info = { event, round, date (JJ/MM/AAAA), score ("1 — 0") }`. Champ absent = clé absente = rien d'affiché (pas de « — »). Aucune logique de correspondance nom → photo dans `film.js`.
+- **Écran** : une carte par joueur (classes de la Plaque tournoi : `.player-card`, `.player-avatar-ring/inner`, `.side-tag`, `.elo-badge`), avatar lettré en repli (pas de photo ou image qui ne charge pas), nom, pastille Blancs / Noirs, Elo et titre ; au-dessus et au-dessous du damier dans l'ordre du damier (retourné : Blancs en haut) ; ligne « tournoi · Ronde N · date · Score » sous la carte du bas. Damier recentré verticalement dans sa colonne ; `--bsz = min(100dvh − 300px, 36vw)` (280 px de retrait à ≤ 760 px de haut).
+- **Mode test** : noms du jeu de données avec avatar lettré, ni Elo ni photo ni ligne d'infos (rien d'inventé). La mention « · Mickaël » de l'ancien en-tête a disparu avec l'ancien code.
+- **Confidentialité** : noms et photos ne vivent que dans `sessionStorage` et à l'écran ; le cache IndexedDB (clé = empreinte des coups) n'est pas modifié (aucun nom ni photo).
+
+**Vérifié** (navigateur, partie de test avec noms fictifs injectés dans `sessionStorage`, pas la vraie bibliothèque) : photo affichée ; image introuvable → avatar lettré ; Elo + titre ; joueur sans Elo ni titre → rien ; ronde et tournoi absents → ligne réduite à « date · Score » ; damier retourné → cartes inversées ; thème clair ; sans défilement (vertical ni horizontal) à 1280×720 (damier 34 %), 1456×819 et 1920×1080 (36 %) et à 800 px de large ; plus petite police 14 px (13 px à 800 px) ; boutons de zoom 34 px. Tests Node verts (`film-metrics`, `film-story`, `analysis-format`).
+
+**Non vérifié / à regarder par Mickaël** : le vrai flux (partie de la bibliothèque avec photos réelles, clic sur « Analyse ») et le thème sombre sur les cartes en situation réelle ; photo locale (data URL) très lourde : `sessionStorage` est limité (≈ 5 Mo), l'écriture échouerait en silence (« aucune partie ») ; retouche à envisager si les photos Toernooibase portrait (ratio 0,75) paraissent petites dans le cadre de 40 × 52 px.
+
+## P44B — Tournoi bien visible, Elo lisible sur les cartes joueurs (13/11/2026)
+
+Réalisé, **non commité, non déployé**. Fichiers : `film.html`, `js/film.js`, `css/film.css` (`main.js` n'a pas eu besoin de changer). Ni la mesure ni `METRICS_VERSION` ne changent. Aucun fichier réécrit en entier.
+
+**Cause de l'Elo « manquant » : ce n'était ni l'écriture ni l'absence de donnée, mais un bug de couleur.** Vérifié : `storeFilmGame()` écrit bien `players.w.elo` / `players.b.elo` (test dans l'appli sur l'origine 127.0.0.1 : saisie de l'Elo et du titre dans le Bloc 1 → `sessionStorage` contient `elo: "1850"`, `title: "MF"`), et `film.js` dessine bien un `.elo-badge` (dans la carte, visible, non coupé). Mais ma règle P44 `color: var(--elo-badge-fg)` donnait, en THÈME SOMBRE, le gris `rgb(140,124,99)` (`--elo-badge-fg` vaut `--text-2` en sombre) sur la pastille dorée `rgb(212,175,105)` : le texte était présent mais pratiquement illisible. Correction : plus de surcharge ; la couleur est celle de `.elo-badge` (`#241a0d`, mesurée `rgb(36,26,13)` dans les deux thèmes). Une partie sans Elo n'affiche rien (pas de « — », pas de trou). *Remarque : en sombre, `.meta-field.elo-badge` du Bloc 1 de l'appli utilise la même variable grise ; non touché ici (hors périmètre), à regarder si le badge du Bloc 1 paraît terne en sombre.*
+
+**Bandeau de la partie** : remplace la petite ligne sous la carte du bas ; placé en tête de la colonne du damier (au-dessus de la carte du haut), dans le style de la Plaque tournoi (fond dégradé `--plaque-*`, liseré `--gold-dim`). Ligne 1 : nom du tournoi (16 px, gras 800, `--text-0`, 2 lignes au plus, 15 px à ≤ 760 px de haut) ; ligne 2 : « Ronde N · date · Score X — Y » (14 px, 600, `--text-2`). Champ absent = rien ; aucun champ = pas de bandeau.
+
+**Effet sur le damier** (retraits `--bsz` : 350 px, 330 px à ≤ 760 px de haut) : 390 px (30 %) à 1280×720 (440 avant), 469 px (32 %) à 1456×819 (519 avant), 691 px (36 %) à 1920×1080 (inchangé). À regarder : si Mickaël préfère un damier plus grand à 1280×720, on peut réduire les retraits (la marge réelle n'a pas été mesurée finement).
+
+**Vérifié** (navigateur, partie de test à noms et tournoi fictifs injectés dans `sessionStorage`, pas la bibliothèque réelle) : cartes avec Elo lisible en sombre et en clair ; sans Elo : aucune pastille ; sans tournoi : bandeau absent ; retourné : cartes inversées ; sans défilement à 1280×720, 1456×819, 1920×1080 et 800×900 ; plus petite police 14 px (13 px à 800 px de large) ; bandeau de 44 à 50 px de haut ; nom de tournoi long : tient sur une ligne à ces largeurs. Tests Node verts (`film-metrics`, `film-story`, `analysis-format`). Mes saisies de test dans le Bloc 1 de l'appli (origine 127.0.0.1, partie libre) ont été remises à vide ; la clé `damika:film-current` de test a été supprimée.
+
+**Non vérifié** : le vrai flux avec la bibliothèque de Mickaël (une tentative d'y écrire une bibliothèque de test a été refusée à juste titre par le système, j'ai donc passé par `sessionStorage`) ; nom de tournoi sur 2 lignes (non rencontré à ces largeurs) ; photos réelles.
+
+**P44B — complément (tailles agrandies, 13/11/2026)** — `css/film.css` seulement.
+- **Appliqué** : bandeau : tournoi 18 px gras, « Ronde · date · Score » 15 px ; cartes : photo 44 × 58 px (cadre), nom 17 px gras, Elo et titre 15 px, pastille Blancs / Noirs 12 px, hauteur 73 à 76 px (grands écrans).
+- **Arbitrages à 1280×720** (le damier devait rester ≥ 30 % et ≈ 420 px) : avec les tailles demandées le damier tombait à 340 px (27 %). Dans l'ordre : (1) marges réduites (page 6/20/3 px, écarts 6 px, boutons du bas 28 px) → 380 px ; (2) pied de page (« Évaluation indicative… ») forcé sur UNE ligne (il en prenait deux) → gain 19 px ; (3) photo ramenée à 38 × 48 px, carte de 58 px (au lieu de 72 à 80), pour ce seul cas. Résultat : **415 px (32 %)**, ≈ 420, sans défilement. Le nom et l'Elo gardent 17 / 15 px, le bandeau 18 / 15 px.
+- **Gabarit compact** : fenêtres de 780 px de haut ou moins (1280×720, 1366×768) ; au-dessus, photo 56 à 58 px et cartes de 76 px.
+- **Mesuré** (iframes, sans défilement ni débordement dans tous les cas) : 1280×720 → 415 px (32 %), 1366×768 → 463 px (34 %), 1456×819 → 429 px (29 %), 1536×864 → 474 px (31 %), 1920×1080 → 690 px (36 %). À 1456×819 le damier est à 29 % (< 30 %) mais à 429 px : la règle « 30 % » n'était exigée qu'à 1280×720.
+- **À regarder par Mickaël** : la photo à 38 × 48 px sur petit écran ; le bandeau passe sur 2 lignes si le nom du tournoi est long (70 px de haut à 1280×720).
