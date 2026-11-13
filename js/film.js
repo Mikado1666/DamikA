@@ -368,6 +368,7 @@ const faultsOf = (g) => (g.faults ?? []).map((f, i) => ({ ...f, n: i + 1 }));
 const selectedPly = () => displayedMove(); // mise en évidence (frise, courbe) : seulement si le coup affiché est un moment critique
 
 function renderMoments() {
+  stopReplay(); // la carte est reconstruite : toute lecture en cours s'arrête
   const g = S.data.parties[S.g], all = faultsOf(g);
   const list = all.filter((f) => FRISE.side === 'all' || f.side === FRISE.side);
   document.querySelectorAll('.film-seg button').forEach((b) => { const on = b.dataset.side === FRISE.side; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
@@ -416,6 +417,63 @@ document.querySelectorAll('.film-seg button').forEach((b) => b.addEventListener(
 // Une sélection (S.focus) montre la position AVANT son coup ; sinon la position k est celle qui suit le coup k − 1.
 function displayedMove() { if (!S.rp) return null; return S.focus ? S.focus.ply : (S.ply > 0 ? S.ply - 1 : null); }
 
+// ---- réfutation animée (P46) : la suite RÉELLE de la partie à partir du coup en cause, sur le damier de gauche ----
+// Le coup fautif et les 5 suivants au plus, un coup toutes les 950 ms ; la carte du bas ne change pas (seule la ligne d'évaluation est
+// remplacée par la ligne de coups, qui s'allonge). Toute reconstruction de la carte (refresh) arrête la lecture : voir stopReplay().
+const REPLAY = { STEP_MS: 950, MAX_PLIES: 6 };
+let replay_ = null; // { f, count, i, timer }
+const prefersReduced = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+function stopReplay() {
+  if (!replay_) return;
+  clearInterval(replay_.timer); replay_ = null;
+  if (canvas.classList.contains('replay-neutral')) { canvas.classList.remove('replay-neutral'); renderer.applyUiTheme(); }
+}
+function replayLine(g, r) {
+  const box = $('mc-eval'); if (!box) return;
+  box.replaceChildren();
+  for (let k = 0; k <= r.i; k++) {
+    const ply = r.f.ply + k, side = ply % 2 === 0 ? 'w' : 'b';
+    const t = el('span', k === 0 ? 'mc-rep-fault' : '', `${Math.floor(ply / 2) + 1}${side === 'w' ? '.' : '…'} ${g.moves[ply]}`);
+    if (k === 0) t.style.color = graviteVar[r.f.gravite];
+    if (k) box.append(document.createTextNode(' · '));
+    box.append(t);
+  }
+  const v = (g.evals ?? [])[r.f.ply + r.i + 1];
+  if (v !== null && v !== undefined) box.append(document.createTextNode(' · évaluation '), el('b', '', signed(v, 1)));
+}
+function replayAdvance() {
+  const r = replay_; if (!r) return;
+  if (r.i + 1 >= r.count) { clearInterval(r.timer); r.timer = null; return; }
+  r.i++;
+  const g = S.data.parties[S.g], ply = r.f.ply + r.i, st = S.rp.steps[ply];
+  const neutral = r.i > 0;
+  if (canvas.classList.contains('replay-neutral') !== neutral) { canvas.classList.toggle('replay-neutral', neutral); renderer.applyUiTheme(); }
+  renderer.setFlipped(S.flipped); renderer.showArrow = true; renderer.bestMove = null;
+  renderer.setState({ board: S.rp.boards[ply + 1], lastMove: { squares: [st.from, st.to] } });
+  replayLine(g, r);
+  const n = (b) => b.reduce((c, p) => c + (p ? 1 : 0), 0);
+  playSound(n(S.rp.boards[ply]) !== n(S.rp.boards[ply + 1]) ? 'capture' : 'move');
+  const { captures, simples } = generateLegalMoves(S.rp.boards[ply + 1], (ply + 1) % 2 === 0 ? 'w' : 'b');
+  if (captures.length === 0 && simples.length === 0) playSound('game-end');
+}
+function replayButtons(g, f) {
+  const count = Math.min(REPLAY.MAX_PLIES, S.rp.steps.length - f.ply);
+  const go = el('button', 'mc-btn mc-btn-main', '▶ Montre-moi pourquoi'), back = el('button', 'mc-btn', 'Revenir à la position');
+  go.type = back.type = 'button'; back.disabled = !(replay_ && replay_.f === f);
+  if (count < 2) { go.disabled = true; go.title = 'Rien à rejouer après ce coup'; back.disabled = true; }
+  go.addEventListener('click', () => {
+    const reduced = prefersReduced();
+    if (reduced && replay_ && replay_.f === f && replay_.i + 1 < replay_.count) { replayAdvance(); return; } // sans animation : un coup par clic
+    if (replay_) { clearInterval(replay_.timer); replay_ = null; }
+    replay_ = { f, count, i: -1, timer: null };
+    replayAdvance();
+    if (!reduced) replay_.timer = setInterval(replayAdvance, REPLAY.STEP_MS);
+    back.disabled = false;
+  });
+  back.addEventListener('click', () => refresh()); // rebâtit la carte et redessine la position du moment
+  return [go, back];
+}
+
 // Une seule carte, deux contenus : moment critique (P42) ou coup ordinaire (verdict allégé) ; cas à part en texte simple.
 function renderMomentCard(g, all) {
   const box = $('film-moment'); box.replaceChildren();
@@ -425,11 +483,12 @@ function renderMomentCard(g, all) {
     const n = el('div', 'mc-nav'), prev = el('button', 'mc-btn', '◀ Moment précédent'), next = el('button', 'mc-btn', 'Moment suivant ▶');
     prev.type = next.type = 'button'; prev.disabled = !prevF; next.disabled = !nextF;
     prev.addEventListener('click', () => focusLoss(prevF)); next.addEventListener('click', () => focusLoss(nextF));
+    if (f) { const grp = el('div', 'mc-replay-btns'); grp.append(...replayButtons(g, f)); n.append(grp); }
     n.append(prev, next); return n;
   };
   const evalLine = () => {
     const ev = g.evals ?? [], fmtV = (v) => (v === null || v === undefined ? 'non analysée' : signed(v, 1));
-    const evl = el('div', 'mc-line'); evl.append(document.createTextNode('Évaluation : de '), el('b', '', fmtV(ev[m])), document.createTextNode(' à '), el('b', '', fmtV(ev[m + 1])), el('small', '', ' (vue des Blancs)')); return evl;
+    const evl = el('div', 'mc-line'); evl.id = 'mc-eval'; evl.append(document.createTextNode('Évaluation : de '), el('b', '', fmtV(ev[m])), document.createTextNode(' à '), el('b', '', fmtV(ev[m + 1])), el('small', '', ' (vue des Blancs)')); return evl;
   };
   const line = (swatch, label, value) => { const d = el('div', 'mc-line'); if (swatch) d.appendChild(el('span', `sw ${swatch}`)); d.append(document.createTextNode(`${label} : `), el('b', '', value)); return d; };
   const simple = (over, big, text) => { // cas à part : sur-titre, coup, phrase
@@ -534,7 +593,10 @@ function autoSelectMoment() {
 // Cartes joueurs (P44) : mêmes classes que la « Plaque tournoi » de l'appli. Données : S.cards (mode normal, déjà résolues par main.js :
 // { w|b: { name, elo, title, photo }, info: { event, round, date, score } }) ou, à défaut (mode test), le seul nom du jeu de données.
 // Champ absent = rien d'affiché ; photo absente ou qui ne charge pas = avatar lettré.
+// Elo ou titre : jamais un tiret ou un séparateur orphelin (« 2500— ») ; un champ vide ou réduit à des tirets n'affiche rien (P46)
+const cleanField = (v) => { const t = String(v ?? '').replace(/^[\s—–\-·|:,;]+|[\s—–\-·|:,;]+$/g, ''); return t || null; };
 function playerCard(side, p) {
+  p = { ...p, elo: cleanField(p.elo), title: cleanField(p.title) };
   const white = side === 'w', box = el('div', 'player-card film-pcard');
   const ring = el('div', 'player-avatar-ring'); ring.dataset.sideRing = white ? 'white' : 'black';
   const inner = el('div', 'player-avatar-inner'); inner.dataset.sideAvatar = white ? 'white' : 'black';
@@ -592,7 +654,7 @@ function renderPly() {
   else t = k === 0 ? 'Position de départ' : `Après ${Math.floor((k - 1) / 2) + 1}${(k - 1) % 2 === 0 ? '.' : '…'} ${g.moves[k - 1]}`;
   $('film-ply').textContent = t;
 }
-function refresh() { renderPly(); drawBoard(); revealCurrent(); drawChart(); renderMoments(); }
+function refresh() { stopReplay(); renderPly(); drawBoard(); revealCurrent(); drawChart(); renderMoments(); }
 function goTo(ply) { S.touched = true; S.focus = null; S.ply = ply; refresh(); } // la carte du bas suit le coup affiché
 // Son (js/sound.js, mêmes réglages que l'appli). Règle RELEVÉE dans main.js (goToNextMove, goToPrevMove, boutons début / fin,
 // jumpToPly) : l'appli joue un son SEULEMENT en avançant d'un coup (bouton ▶ et flèche →) : 'capture' si le coup est une prise,

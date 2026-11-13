@@ -1387,8 +1387,9 @@ function storeFilmGame() {
     const player = (name, elo, title) => {
       const p = {};
       if (name) { p.name = formatPlayerName(name); const photo = lookupPhotoUrl(name); if (photo) p.photo = photo; }
-      if (elo) p.elo = String(elo);
-      if (title) p.title = String(title);
+      const clean = (v) => String(v ?? '').replace(/^[\s—–\-·|:,;]+|[\s—–\-·|:,;]+$/g, ''); // pas de tiret orphelin (P46)
+      if (clean(elo)) p.elo = clean(elo);
+      if (clean(title)) p.title = clean(title);
       return p;
     };
     const players = {

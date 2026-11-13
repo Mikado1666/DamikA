@@ -283,3 +283,11 @@ button { font: inherit; color: inherit; }
   .film-info-event { font-size: 16px; } .film-info-sub { font-size: 14px; }
   .film-zoom { margin-left: 0; }
 }
+
+/* P46 : réfutation animée */
+:root { --film-neutral-arrow: var(--arrow-color); } /* flèche neutre de l'appli (la flèche du coup joué est rouge dans le Film) */
+#film-board.replay-neutral { --arrow-color: var(--film-neutral-arrow); }
+.mc-nav { flex-wrap: wrap; }
+.mc-replay-btns { display: flex; gap: 8px; margin-right: auto; }
+.mc-btn-main { border-color: var(--gold); }
+@media (max-height: 760px) { .mc-nav .mc-btn { padding: 4px 10px; } }
