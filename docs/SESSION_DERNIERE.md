@@ -2591,3 +2591,7 @@ Réalisé, **non commité, non déployé**. Fichiers : `js/film.js`, `js/main.js
 - **Limite (point 8)** : la suite montrée est la suite RÉELLE de la partie, pas la ligne de Scan. **Le cache et le runner ne gardent PAS la variante principale** : `film-runner.js` ne conserve par position que les scores, le meilleur coup (`best`), la position après ce coup (`bestPos`) et le nombre de pièces ; `film-cache.js` stocke ces mêmes champs. Rien utilisé.
 
 **Vérifié** (`film.html?demo=1`, Partie 6, 0 erreur JS) : lecture complète (6 coups, ligne qui s'allonge, flèche neutre dès le 2ᵉ coup, évaluation finale affichée, carte inchangée) ; interruption par « Revenir », par un autre moment, par ▶ du damier, par changement de partie (flèche neutre retirée à chaque fois) ; 1280×720, thèmes clair et sombre : aucun défilement, couleur du coup fautif lisible dans les deux thèmes. Tests Node verts (`film-metrics`, `film-story`, `analysis-format`). **Non vérifié** : partie de la bibliothèque réelle ; mode « mouvement réduit » (code écrit, non essayé) ; bouton désactivé en fin de partie ; l'oreille sur les sons.
+
+## P47 — Commit de P46 (13/11/2026)
+
+Commit `c7a21ec` poussé sur `main` (réfutation animée, Elo sans tiret). Non déployé.
