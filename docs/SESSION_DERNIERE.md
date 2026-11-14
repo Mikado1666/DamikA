@@ -2729,7 +2729,7 @@ Remarque : une perte de 0,5 à 1,4 pion s'écrit « l'équivalent de 1 pion » (
 
 Commit `936ea1f` poussé sur `main`. Non déployé.
 
-## P49 — Visite guidée de l'écran « Analyse de la partie » (14/11/2026) : réalisé, NON commité, NON déployé
+## P49 — Visite guidée de l'écran « Analyse de la partie » (14/11/2026) : commité (`55ce7fa`), poussé, NON déployé
 
 **Plan** : module pur `js/analysis/film-tour.js` (`TOUR_TEXT` = tous les textes, `TOUR_ORDER`, `buildTour(has)`, `tournantLabel`) + test `tests/film-tour.mjs` ; bouton `#film-tour-btn` à droite du titre (bordure `--gold`) ; couche `#film-tour` (voile SVG à trous + contours + bulle `role="dialog"`) ; code dans `js/film.js` (section « visite guidée », avant `init()`) ; styles en fin de `css/film.css` ; variables `--tour-veil` et `--tour-ring` définies dans les DEUX thèmes de `css/style.css`.
 
