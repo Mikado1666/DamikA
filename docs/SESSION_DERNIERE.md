@@ -2724,3 +2724,7 @@ Remarque : une perte de 0,5 à 1,4 pion s'écrit « l'équivalent de 1 pion » (
 **C. Accord « pion(s) »** : `pionsLabel(v, décimales)` = nombre + unité, le pluriel dès que la valeur ARRONDIE À L'AFFICHAGE est ≥ 2. Appliquée à tous les endroits où un nombre décimal de pions est affiché : bulle (« −2,6 pions », « −1,2 pion »), infobulle de survol (« perte 5,97 pions »), infobulle des repères de l'onglet cumulé. Test `node tests/film-pions.mjs` : 0,7 → « 0,7 pion » ; 1,0 → « 1,0 pion » ; 1,9 → « 1,9 pion » ; 1,96 → « 2,0 pions » (une décimale) ; 2,0 → « 2,0 pions » ; 2,6 → « 2,6 pions » ; 2,58 à deux décimales → « 2,58 pions » ; 1,96 à deux décimales → « 1,96 pion » ; signe négatif, entrée non numérique, `pionsRond`.
 
 **Vérifié** (navigateur, partie courte simulée et Partie 6 du mode test) : récit, bulle, ligne sous le damier, infobulles des pastilles en « Ne coup » ; aucun mot ordinal en lettres dans le texte ni dans les `title` de la page ; clic sur une mention d'ordinal toujours actif ; pluriel / singulier de la bulle et de l'infobulle corrects (« −1,2 pion » / « −4,3 pions » / « perte 5,97 pions ») ; 1280×720 : aucun défilement ni débordement. Tests Node verts : `film-ordinal`, `film-pions`, `film-story`, `film-metrics`, `analysis-format`, `analysis-controller`.
+
+## P48 à P48G commités
+
+Commit `936ea1f` poussé sur `main`. Non déployé.
