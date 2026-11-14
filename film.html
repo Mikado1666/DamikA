@@ -15,6 +15,7 @@
   <header class="film-head">
     <a class="film-back" href="index.html" title="Revenir à la partie dans DamikA">← Retour à la partie</a>
     <h1 class="film-title">Analyse de la partie</h1>
+    <button type="button" class="film-tour-btn" id="film-tour-btn" disabled title="Disponible quand l'analyse est terminée">Visite guidée</button>
     <div class="film-progress" id="film-progress" role="status" hidden>
       <span class="film-progress-label" id="film-progress-label"></span>
       <span class="film-progress-bar"><span class="film-progress-fill" id="film-progress-fill"></span></span>
@@ -87,6 +88,19 @@
   <div class="tip-move" id="film-tip-move"></div>
   <div class="tip-eval" id="film-tip-eval"></div>
   <div class="tip-fault" id="film-tip-fault" hidden></div>
+</div>
+<div class="film-tour" id="film-tour" hidden>
+  <svg class="tour-veil" id="tour-veil" aria-hidden="true"></svg>
+  <div class="tour-bubble" id="tour-bubble" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text" tabindex="-1">
+    <div class="tour-step" id="tour-step"></div>
+    <h2 class="tour-title" id="tour-title"></h2>
+    <p class="tour-text" id="tour-text"></p>
+    <div class="tour-btns">
+      <button type="button" class="mc-btn tour-quit" id="tour-quit">Quitter</button>
+      <button type="button" class="mc-btn tour-prev" id="tour-prev">Précédent</button>
+      <button type="button" class="mc-btn tour-next" id="tour-next">Suivant</button>
+    </div>
+  </div>
 </div>
 <script type="module" src="js/film.js"></script>
 </body>

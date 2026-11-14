@@ -12,6 +12,7 @@ import { createFilmRunner, FilmCancelled } from './analysis/film-runner.js';
 import { storyOf, STORY_TEXT } from './analysis/film-story.js';
 import { ordinalCoup } from './analysis/film-ordinal.js';
 import { pionsLabel } from './analysis/film-pions.js';
+import { TOUR_TEXT, buildTour, tournantLabel } from './analysis/film-tour.js';
 import { playSound } from './sound.js';
 import { hashText, loadAnalysis, saveAnalysis } from './analysis/film-cache.js';
 
@@ -241,7 +242,7 @@ function drawEvalChart(g, svg) {
     // chaque position occupe la case du dernier coup joué : de la case de départ (u = from − 1, ou 0 au départ) à la fin de la case de `to` (u = to)
     const x0 = Math.max(M.l, plotX(s.from === 0 ? 0 : s.from - 1)), x1 = Math.min(W - M.r, plotX(s.to));
     if (x1 <= x0) continue; // phase hors de la plage visible
-    mk('rect', { x: x0, y: by, width: Math.max(1, x1 - x0), height: bh, fill: C.muted, opacity: phaseOp[s.phase] }, svg);
+    mk('rect', { class: 'film-phase', x: x0, y: by, width: Math.max(1, x1 - x0), height: bh, fill: C.muted, opacity: phaseOp[s.phase] }, svg);
     if (x1 - x0 > phaseLabel[s.phase].length * 8 + 12) mk('text', { x: (x0 + x1) / 2, y: by + 16, 'text-anchor': 'middle', fill: C.text, 'font-size': FS, 'font-weight': 600 }, svg).textContent = phaseLabel[s.phase];
   }
   for (const p of g.echanges ?? []) { const x = plotX(p + 0.5); if (inView(p + 0.5) && (g.pieces ?? [])[p + 1] != null) mk('line', { x1: x, x2: x, y1: by - 8, y2: by - 2, stroke: C.muted, 'stroke-width': 1.6 }, svg); }
@@ -270,9 +271,9 @@ function drawEvalChart(g, svg) {
   // le tournant : dessiné APRÈS les pastilles (jamais masqué) ; l'étiquette passe à gauche si elle déborde à droite, sinon est calée dans la zone tracée
   if (g.tournant && inView(g.tournant.ply + 0.5)) {
     const t = g.tournant, x = plotX(t.ply + 0.5);
-    mk('line', { x1: x, x2: x, y1: M.t - 4, y2: H - M.b, stroke: 'var(--fault-major)', 'stroke-width': 2, 'stroke-dasharray': '6 5' }, svg);
-    const tx = mk('text', { x: x + 8, y: M.t + 12, 'text-anchor': 'start', fill: 'var(--fault-major)', 'font-size': FS, 'font-weight': 700, 'paint-order': 'stroke', stroke: C.bg, 'stroke-width': 4 }, svg);
-    tx.textContent = `Le tournant · ${t.moveNo}${t.side === 'w' ? '.' : '…'} ${g.moves[t.ply]}`;
+    mk('line', { class: 'film-tournant', x1: x, x2: x, y1: M.t - 4, y2: H - M.b, stroke: 'var(--fault-major)', 'stroke-width': 2, 'stroke-dasharray': '6 5' }, svg);
+    const tx = mk('text', { class: 'film-tournant', x: x + 8, y: M.t + 12, 'text-anchor': 'start', fill: 'var(--fault-major)', 'font-size': FS, 'font-weight': 700, 'paint-order': 'stroke', stroke: C.bg, 'stroke-width': 4 }, svg);
+    tx.textContent = tournantLabel(t.moveNo); // P49 : « Le tournant · 4e coup » (la notation reste dans la ligne sous le damier et la bulle du coup)
     const w = tx.getComputedTextLength ? tx.getComputedTextLength() : 150, lo = M.l + 2, hi = W - M.r - 2;
     if (x + 8 + w <= hi) { /* à droite du trait */ } else if (x - 8 - w >= lo) { tx.setAttribute('text-anchor', 'end'); tx.setAttribute('x', x - 8); }
     else { tx.setAttribute('x', Math.max(lo, hi - w)); }
@@ -712,7 +713,7 @@ function renderPly() { // ligne sous le damier : décrit TOUJOURS le coup affich
   const g = S.data.parties[S.g], m = displayedMove();
   $('film-ply').textContent = m === null ? 'Position de départ' : `${ordinalCoup(Math.floor(m / 2) + 1, { capital: true })} · ${sideName[m % 2 === 0 ? 'w' : 'b']} · ${g.moves[m]}`;
 }
-function refresh() { stopReplay(); renderPly(); drawBoard(); revealCurrent(); buildBubble(); drawChart(); renderMoments(); }
+function refresh() { stopReplay(); renderPly(); drawBoard(); revealCurrent(); buildBubble(); drawChart(); renderMoments(); updateTourBtn(); }
 function goTo(ply) { S.touched = true; S.focus = null; S.ply = ply; refresh(); } // la carte du bas suit le coup affiché
 // Son (js/sound.js, mêmes réglages que l'appli). Règle RELEVÉE dans main.js (goToNextMove, goToPrevMove, boutons début / fin,
 // jumpToPly) : l'appli joue un son SEULEMENT en avançant d'un coup (bouton ▶ et flèche →) : 'capture' si le coup est une prise,
@@ -753,6 +754,7 @@ function showMessage(title, text) {
   $('film-msg-title').textContent = title;
   $('film-msg-text').textContent = text;
   $('film-foot').replaceChildren();
+  updateTourBtn();
 }
 
 // ---- mode normal : analyse en direct de la partie transmise par DamikA ----
@@ -790,7 +792,7 @@ function setState(state) {
   L.state = state;
   clearInterval(L.timer); L.timer = null;
   if (state === 'running') L.timer = setInterval(renderProgress, 1000);
-  renderProgress(); renderStory();
+  renderProgress(); renderStory(); updateTourBtn();
 }
 function publishStats(mode, stats, totalMs) {
   const mem = performance.memory ? performance.memory.usedJSHeapSize : null;
@@ -879,6 +881,132 @@ async function initDemo() {
   const first = parties.findIndex((p) => p.plies >= MIN_PLIES);
   selectGame(first < 0 ? 0 : first);
 }
+
+// ---- visite guidée (P49) : présentation de l'écran en étapes, seulement par le bouton « Visite guidée » (jamais d'ouverture automatique) ----
+// L'écran est FIGÉ pendant la visite : une couche transparente plein écran intercepte les clics, le contenu derrière est `inert`, le clavier est capté
+// (→ ← Échap) ; rien n'est modifié (ni la partie, ni la courbe, ni le zoom). Textes et construction de la liste d'étapes : js/analysis/film-tour.js.
+// Une étape dont l'élément n'existe pas à l'écran (aucune faute, pas de tournant, vue « Imprécisions cumulées »…) est sautée.
+const TOUR_TARGETS = { // chaque groupe de sélecteurs donne UN rectangle (union) ; l'étape n'existe que si TOUS ses groupes sont présents et visibles
+  recit: [['#film-story-panel']],
+  courbe: [['#film-chart-box']],
+  pastilles: [['#film-chart .mk-f'], ['#film-pills']],
+  tournant: [['#film-chart .film-tournant']],
+  damier: [['.film-board-wrap'], ['.film-nav']],
+  phases: [['#film-chart .film-phase'], ['.film-zoom']],
+  pertes: [['#film-chart .mk']], // n'existe que dans la vue « Imprécisions cumulées » : sautée dans la vue par défaut
+};
+const TOUR = { open: false, steps: [], i: 0 };
+function unionRect(sel) {
+  const rs = [...document.querySelectorAll(sel)].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+  if (!rs.length) return null;
+  return { left: Math.min(...rs.map((r) => r.left)), top: Math.min(...rs.map((r) => r.top)), right: Math.max(...rs.map((r) => r.right)), bottom: Math.max(...rs.map((r) => r.bottom)) };
+}
+function tourRects(id) {
+  const pad = 6, W = window.innerWidth, H = window.innerHeight, out = [];
+  for (const group of TOUR_TARGETS[id]) {
+    const r = unionRect(group.join(','));
+    if (!r) return [];
+    out.push({ left: Math.max(2, r.left - pad), top: Math.max(2, r.top - pad), right: Math.min(W - 2, r.right + pad), bottom: Math.min(H - 2, r.bottom + pad) });
+  }
+  return out;
+}
+const tourHas = (id) => tourRects(id).length > 0 && (id !== 'recit' || !!document.querySelector('#film-story-text p:not(.story-wait)'));
+function updateTourBtn() {
+  const b = $('film-tour-btn'); if (!b) return;
+  const ready = !!S.data && !!S.rp && !S.rp.error && S.data.parties[S.g].plies >= MIN_PLIES && (DEMO || L.state === 'done') && $('film-side').dataset.state !== 'msg';
+  b.disabled = !ready;
+  b.title = ready ? TOUR_TEXT.boutonActif : TOUR_TEXT.boutonInactif;
+}
+function placeTourBubble(rects) {
+  const b = $('tour-bubble'), W = window.innerWidth, H = window.innerHeight, m = 8, gap = 14;
+  b.style.left = '0px'; b.style.top = '0px';
+  const bw = b.offsetWidth, bh = b.offsetHeight, cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const overlap = (c) => rects.reduce((s, r) => s + Math.max(0, Math.min(c.x + bw, r.right) - Math.max(c.x, r.left)) * Math.max(0, Math.min(c.y + bh, r.bottom) - Math.max(c.y, r.top)), 0);
+  const inside = (c) => c.x >= m && c.y >= m && c.x + bw <= W - m && c.y + bh <= H - m;
+  let pos;
+  if (!rects.length) pos = { x: (W - bw) / 2, y: (H - bh) / 2 };
+  else {
+    const U = { left: Math.min(...rects.map((r) => r.left)), top: Math.min(...rects.map((r) => r.top)), right: Math.max(...rects.map((r) => r.right)), bottom: Math.max(...rects.map((r) => r.bottom)) };
+    const cx = (U.left + U.right) / 2 - bw / 2, cy = (U.top + U.bottom) / 2 - bh / 2;
+    const cands = [ // à côté de la zone : droite, dessous, gauche, dessus ; sinon le coin / bord de la fenêtre qui en recouvre le moins
+      { x: U.right + gap, y: cl(cy, m, H - bh - m) }, { x: cl(cx, m, W - bw - m), y: U.bottom + gap },
+      { x: U.left - gap - bw, y: cl(cy, m, H - bh - m) }, { x: cl(cx, m, W - bw - m), y: U.top - gap - bh },
+    ];
+    pos = cands.find((c) => inside(c) && overlap(c) === 0);
+    if (!pos) {
+      const xs = [m, (W - bw) / 2, W - bw - m], ys = [m, (H - bh) / 2, H - bh - m], all = [];
+      for (const x of xs) for (const y of ys) all.push({ x, y });
+      pos = all.reduce((best, c) => (overlap(c) < overlap(best) ? c : best), all[0]);
+    }
+  }
+  b.style.left = `${Math.round(cl(pos.x, m, Math.max(m, W - bw - m)))}px`;
+  b.style.top = `${Math.round(cl(pos.y, m, Math.max(m, H - bh - m)))}px`;
+}
+function tourShow() {
+  const st = TOUR.steps[TOUR.i], W = window.innerWidth, H = window.innerHeight, svg = $('tour-veil');
+  const rects = tourRects(st.id);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.replaceChildren();
+  const d = [`M0 0H${W}V${H}H0Z`, ...rects.map((r) => `M${r.left} ${r.top}H${r.right}V${r.bottom}H${r.left}Z`)].join(' ');
+  mk('path', { class: 'veil', d }, svg);
+  for (const r of rects) mk('rect', { class: 'ring', x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top, rx: 6 }, svg);
+  const prev = $('tour-prev'), next = $('tour-next'), prevHadFocus = document.activeElement === prev;
+  $('tour-step').textContent = st.label; $('tour-title').textContent = st.titre; $('tour-text').textContent = st.texte;
+  prev.hidden = st.first; prev.textContent = TOUR_TEXT.precedent; next.textContent = st.nextLabel; $('tour-quit').textContent = TOUR_TEXT.quitter;
+  if (prevHadFocus && st.first) next.focus();
+  placeTourBubble(rects);
+}
+function tourOpen() {
+  if (TOUR.open || $('film-tour-btn').disabled) return;
+  const steps = buildTour(tourHas);
+  if (!steps.length) return;
+  hideTip();
+  TOUR.open = true; TOUR.steps = steps; TOUR.i = 0;
+  $('film').inert = true; // le contenu derrière la visite ne reçoit ni clic, ni focus
+  $('film-tour').hidden = false;
+  tourShow();
+  $('tour-next').focus();
+}
+function tourClose() {
+  if (!TOUR.open) return;
+  TOUR.open = false;
+  $('film-tour').hidden = true; $('tour-veil').replaceChildren();
+  $('film').inert = false;
+  $('film-tour-btn').focus({ preventScroll: true });
+}
+function tourStep(dir) {
+  const j = TOUR.i + dir;
+  if (j >= TOUR.steps.length) { tourClose(); return; }
+  if (j < 0) return;
+  TOUR.i = j; tourShow();
+}
+$('film-tour-btn').addEventListener('click', tourOpen);
+$('tour-next').addEventListener('click', () => tourStep(1));
+$('tour-prev').addEventListener('click', () => tourStep(-1));
+$('tour-quit').addEventListener('click', tourClose);
+// couche d'interception : aucun clic, ni autre événement de pointeur, n'atteint l'écran (les écouteurs du document ne les voient jamais)
+for (const type of ['click', 'dblclick', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'contextmenu', 'wheel']) {
+  $('film-tour').addEventListener(type, (e) => { e.stopPropagation(); if (type === 'wheel' || type === 'contextmenu') e.preventDefault(); }, { passive: false });
+}
+// clavier : → suivant, ← précédent, Échap quitte, Tab piégé dans la bulle ; tout le reste est avalé (capture sur window : avant tous les autres écouteurs)
+window.addEventListener('keydown', (e) => {
+  if (!TOUR.open) return;
+  const inBubble = !!(e.target.closest && e.target.closest('#tour-bubble'));
+  if (e.key === 'Tab') {
+    const btns = [...$('tour-bubble').querySelectorAll('button')].filter((x) => !x.hidden && !x.disabled);
+    const first = btns[0], last = btns[btns.length - 1], a = document.activeElement;
+    if (!inBubble) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+    else if (e.shiftKey && a === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && a === last) { e.preventDefault(); first.focus(); }
+    e.stopPropagation(); return;
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && inBubble) { e.stopPropagation(); return; } // activation native du bouton de la bulle
+  if (e.key === 'ArrowRight') { e.preventDefault(); tourStep(1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); tourStep(-1); }
+  else if (e.key === 'Escape') { e.preventDefault(); tourClose(); }
+  e.stopPropagation();
+}, true);
+window.addEventListener('resize', () => { if (TOUR.open) requestAnimationFrame(() => requestAnimationFrame(() => { if (TOUR.open) tourShow(); })); });
 
 async function init() {
   $('film-first').onclick = () => goTo(0);

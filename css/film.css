@@ -278,3 +278,27 @@ button { font: inherit; color: inherit; }
 .mc-btn-main { border-color: var(--gold); }
 @media (max-height: 760px) { .mc-nav .mc-btn { padding: 4px 10px; } }
 .film-board-wrap { flex: none; }
+
+/* P49 : visite guidée. Bouton à droite du titre (bordure dorée), voile + contour doré de la zone expliquée, bulle (dialog).
+   Couleurs : variables de css/style.css (--tour-veil, --tour-ring définies dans les deux thèmes). L'écran derrière est figé (couche transparente + inert). */
+.film-tour-btn { font-size: 14px; font-weight: 600; padding: 4px 14px; cursor: pointer; background: transparent; border: 1px solid var(--gold); border-radius: 999px; color: var(--gold-text); white-space: nowrap; }
+.film-tour-btn:hover:not(:disabled) { background: var(--gold-chip); color: var(--on-gold); }
+.film-tour-btn:disabled { opacity: .5; cursor: default; }
+.film-tour { position: fixed; inset: 0; z-index: 100; background: transparent; }
+.film-tour[hidden] { display: none; }
+.tour-veil { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.tour-veil .veil { fill: var(--tour-veil); fill-rule: evenodd; }
+.tour-veil .ring { fill: none; stroke: var(--tour-ring); stroke-width: 3; }
+.tour-bubble { position: fixed; z-index: 101; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; padding: 12px 16px 14px; background: var(--panel); color: var(--text-0); border: 1.5px solid var(--gold); border-radius: 10px; box-shadow: 0 8px 22px rgba(0, 0, 0, .4); outline: none; font-size: 15px; line-height: 1.4; }
+.tour-bubble:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 8px 22px rgba(0, 0, 0, .4); }
+.tour-step { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.tour-title { font-size: 19px; font-weight: 700; margin: 2px 0 6px; color: var(--gold-text); }
+.tour-text { margin: 0 0 12px; }
+.tour-btns { display: flex; align-items: center; gap: 8px; }
+.tour-quit { margin-right: auto; }
+.tour-prev[hidden] { display: none; }
+.tour-next { background: var(--gold-chip); border-color: var(--chip-border); color: var(--on-gold); }
+.tour-next:hover:not(:disabled) { color: var(--on-gold); filter: brightness(1.08); }
+.tour-bubble .mc-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+@media (max-height: 760px) { .tour-bubble { padding: 8px 14px 10px; font-size: 14px; } .tour-title { font-size: 17px; } .tour-text { margin-bottom: 8px; } }
+@media (prefers-reduced-motion: no-preference) { .tour-veil .veil, .tour-veil .ring { transition: d .2s ease; } }

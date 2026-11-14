@@ -72,6 +72,9 @@
   --fault-mid: #f08a3c;
   --fault-major: #ff6a55;
   --fault-on: #1a120a;
+  /* Visite guidée de l'écran d'analyse (P49) : voile sur le reste de l'écran, contour doré de la zone expliquée (clair sur le voile, 3:1 exigé). */
+  --tour-veil: rgba(6, 4, 2, 0.74);
+  --tour-ring: #f0cf85;
   /* Plaque de score (grand nombre sous le damier) : un fond par camp qui a l'avantage. */
   --plate-white-bg: linear-gradient(180deg, #fff8e6 0%, #ecdcb6 100%);
   --plate-white-fg: #2a1c0a;
@@ -186,6 +189,9 @@
   --fault-mid: #a1500a;
   --fault-major: #9c1c14;
   --fault-on: #fff8ea;
+  /* Visite guidée (P49) : voile brun sombre sur le beige (contour #f5d58a contre le voile ≈ 5:1) ; bulle = --panel / --text-0 (contrastes de l'appli). */
+  --tour-veil: rgba(34, 22, 8, 0.66);
+  --tour-ring: #f5d58a;
   --plate-white-bg: linear-gradient(180deg, #efe5cd 0%, #dccca3 100%);
   --plate-white-fg: #3a2408;
   --plate-black-bg: linear-gradient(180deg, #5a4838 0%, #2a2018 100%);
