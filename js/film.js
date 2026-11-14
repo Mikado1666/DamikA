@@ -6,10 +6,12 @@
 import { initialBoard, generateLegalMoves } from './engine/rules.js';
 import { BoardRenderer } from './render/board.js';
 import { readUiTheme, applyUiTheme, applySavedBoardSettings } from './render/board-settings.js';
-import { MIN_PLIES, DEPTH_REF, DEPTH_FROM, CAP, EVAL_TICKS, EVAL_ZONE, evalY, difficultyOf, moveVerdict } from './analysis/film-metrics.js';
+import { MIN_PLIES, DEPTH_REF, DEPTH_FROM, CAP, EVAL_TICKS, EVAL_ZONE, evalY, difficultyOf } from './analysis/film-metrics.js';
 import { replayMoves, planGame, buildFilmGame, canonicalGameText } from './analysis/film-game.js';
 import { createFilmRunner, FilmCancelled } from './analysis/film-runner.js';
 import { storyOf, STORY_TEXT } from './analysis/film-story.js';
+import { ordinalCoup } from './analysis/film-ordinal.js';
+import { pionsLabel } from './analysis/film-pions.js';
 import { playSound } from './sound.js';
 import { hashText, loadAnalysis, saveAnalysis } from './analysis/film-cache.js';
 
@@ -33,7 +35,7 @@ function replay(moves) {
 }
 
 // ---- état ----
-const S = { cards: null, data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval', touched: false, zoom: null }; // view : 'eval' (défaut) ou 'cum', non persisté
+const S = { cards: null, data: null, g: 0, ply: 0, focus: null, rp: null, flipped: false, view: 'eval', touched: false, zoom: null, bubble: null }; // view : 'eval' (défaut) ou 'cum', non persisté
 // Thème d'interface, thème du damier, style et taille des pions : MÊMES réglages que l'appli (js/render/board-settings.js),
 // et MÊME dessin (BoardRenderer, js/render/board.js). Le thème est posé avant la création du renderer (il lit les couleurs CSS).
 applyUiTheme(readUiTheme());
@@ -42,7 +44,10 @@ const renderer = new BoardRenderer(canvas);
 applySavedBoardSettings(renderer);
 
 const nameOf = (s) => { const [n, p] = String(s ?? '').split(',').map((x) => x.trim()); return p ? `${p} ${n}` : n; };
-const resText = (r) => (r === '2-0' || r === '1-0' ? '1-0' : r === '0-2' || r === '0-1' ? '0-1' : r === '1-1' ? '½-½' : '*');
+// Résultat AFFICHÉ en notation dames (P48C) : victoire des Blancs 2-0, nulle 1-1, victoire des Noirs 0-2, « * » si inconnu. Une notation d'échecs
+// (1-0, 0-1, 1/2-1/2, ½-½) est convertie à l'affichage ; la valeur stockée (en-tête Result) ne change jamais.
+const RESULT_DISPLAY = { '2-0': '2-0', '1-0': '2-0', '0-2': '0-2', '0-1': '0-2', '1-1': '1-1', '1/2-1/2': '1-1' };
+const resText = (r) => RESULT_DISPLAY[String(r ?? '').trim().replace(/½/g, '1/2')] ?? '*';
 const gravText = { majeure: 'faute majeure', faute: 'faute', 'légère': 'faute légère', gagnant: 'position restée largement gagnante' };
 
 // ---- damier (BoardRenderer de l'appli) ----
@@ -65,16 +70,53 @@ function drawBoard() {
 const NS = 'http://www.w3.org/2000/svg';
 const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) { if (typeof v === 'string' && v.startsWith('var(')) e.style.setProperty(k, v); else e.setAttribute(k, v); } if (parent) parent.appendChild(e); return e; };
 // Géométrie de la courbe affichée (posée par chaque tracé, lue par le clic et le survol).
-const GEO = { W: 600, H: 230, M: { l: 34, r: 10, t: 26, b: 22 }, n: 0, a: 0, b: 1 };
+const GEO = { W: 600, H: 230, M: { l: 34, r: 10, t: 26, b: 22 }, n: 0, a: 0, b: 1, anchors: new Map() }; // anchors : coup → point de la pastille / du repère sur la courbe (pixels du cadre), pour la bulle
 // Zoom (P43) : axe des coups seulement ; plage visible [a, b] en POSITIONS (0..n), S.zoom = null : « Tout voir ». Non persisté.
 const ZOOM = { MIN_SPAN: 12, FACTOR: 1.5, PAN: 0.25, DRAG_PX: 6, PASTILLE_GAP: 27 }; // 12 positions = 6 coups visibles au plus fort ; 1,5 par cran ; ◀ ▶ = 1/4 de la plage
-const plotX = (k) => GEO.M.l + ((k - GEO.a) / Math.max(1e-6, GEO.b - GEO.a)) * (GEO.W - GEO.M.l - GEO.M.r);
-const inView = (k) => k >= GEO.a - 1e-9 && k <= GEO.b + 1e-9;
+// Axe des coups (P48E) : abscisse « u » de 0 à n (n = nombre de coups joués par les deux camps) ; le coup numéro m (Blancs puis Noirs) occupe la zone
+// [2m − 2, 2m] ; le coup joué d'indice p (p = 0 : 1er coup des Blancs) est au CENTRE de sa case [p, p + 1], donc à u = p + 0,5 ; la position k (k coups
+// joués, point de la courbe) est au même endroit que le dernier coup joué, u = k − 0,5 ; la position de départ est au bord gauche (u = 0). Les
+// numéros de coups sont centrés dans leur zone (u = 2m − 1), les traits fins sont aux frontières (u = 2m) : « coup m » ne tombe jamais entre deux numéros.
+// La plage du zoom (S.zoom, GEO.a / GEO.b) est exprimée en u.
+const ux = (k) => (k <= 0 ? 0 : k - 0.5);
+const plotX = (u) => GEO.M.l + ((u - GEO.a) / Math.max(1e-6, GEO.b - GEO.a)) * (GEO.W - GEO.M.l - GEO.M.r);
+const posX = (k) => plotX(ux(k));
+const inView = (u) => u >= GEO.a - 1e-9 && u <= GEO.b + 1e-9;
+// Abscisse du moment AFFICHÉ (même coup que le texte et que la pastille) : case du coup affiché, bord gauche au départ.
+const cursorU = () => { const m = displayedMove(); return m === null ? 0 : m + 0.5; };
+// Écartement automatique des pastilles qui se chevauchent (P48B) : glouton, dans l'ordre de la partie (la disposition ne dépend donc pas du moment
+// choisi), chaque pastille prend la position libre la plus proche de son point réel. Aucune n'est cachée. `mode` : 'eval' (vertical d'abord, puis
+// en diagonale) ou 'cum' (horizontal, dans la ligne du haut). Renvoie un tableau de { x, y, moved } dans l'ordre reçu.
+function spreadPastilles(items, box, mode) {
+  const placed = [], out = [], gap = ZOOM.PASTILLE_GAP;
+  const order = items.map((it, k) => k).sort((p, q) => items[p].x - items[q].x || p - q);
+  for (const k of order) {
+    const it = items[k], bx = (v) => Math.max(box.x0, Math.min(box.x1, v)), by = (v) => Math.max(box.y0, Math.min(box.y1, v));
+    let best = null;
+    const cands = [];
+    if (mode === 'cum') for (let d = 0; d <= 1200; d += 3) { cands.push([d, 0]); if (d) cands.push([-d, 0]); }
+    else for (let dy = 0; dy <= 400; dy += 3) for (const dx of [0, -9, 9, -18, 18, -27, 27, -36, 36]) { cands.push([dx, dy]); if (dy) cands.push([dx, -dy]); }
+    cands.sort((p, q) => Math.hypot(p[0], p[1]) - Math.hypot(q[0], q[1]));
+    for (const [dx, dy] of cands) {
+      const x = bx(it.x + dx), y = by(it.y + dy);
+      if (placed.every((q) => Math.hypot(q.x - x, q.y - y) >= gap)) { best = { x, y }; break; }
+    }
+    if (!best) best = { x: bx(it.x), y: by(it.y) }; // plus aucune place (cadre minuscule) : position réelle
+    best.moved = Math.hypot(best.x - it.x, best.y - it.y) > 1.5;
+    placed.push(best); out[k] = best;
+  }
+  return out;
+}
 // Graduations en coups : le plus petit pas (1, 2, 5, 10, 20, 50) qui laisse au moins 60 px entre deux numéros
 function coupSteps(from, to) {
   const ppp = (GEO.W - GEO.M.l - GEO.M.r) / Math.max(1e-6, GEO.b - GEO.a), step = [1, 2, 5, 10, 20, 50].find((s) => s * 2 * ppp >= 60) ?? 50, out = [];
-  for (let m = step; 2 * m <= to; m += step) if (2 * m >= from) out.push(m);
+  for (let m = step; 2 * m - 1 <= to; m += step) if (2 * m - 1 >= from) out.push(m);
   return out;
+}
+// Traits fins entre les coups (frontières u = 2m) : tous si les zones sont assez larges, sinon seulement à la fin de chaque coup numéroté.
+function coupSeparators(svg, from, to, y1, y2) {
+  const ppu = (GEO.W - GEO.M.l - GEO.M.r) / Math.max(1e-6, GEO.b - GEO.a), every = 2 * ppu >= 14 ? 1 : (coupSteps(from, to)[0] ?? 1);
+  for (let m = every; 2 * m <= to + 1e-9; m += every) if (2 * m >= from - 1e-9) mk('line', { x1: plotX(2 * m), x2: plotX(2 * m), y1, y2, stroke: C.muted, 'stroke-width': 1, opacity: 0.55 }, svg);
 }
 const FS = 14; // taille minimale du texte à l'écran (graduations, numéros de coups, étiquettes)
 function geoFor(view) {
@@ -85,7 +127,7 @@ function geoFor(view) {
 const signed = (v, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fr(Math.abs(v), d)}`;
 const graviteVar = { 'légère': 'var(--fault-light)', faute: 'var(--fault-mid)', majeure: 'var(--fault-major)' };
 const helpOf = (view) => (view === 'eval'
-  ? 'La courbe montre qui est mieux placé à chaque coup : au-dessus de zéro, les Blancs ; en dessous, les Noirs. Les pastilles numérotées sont les coups où un camp a mal joué (jaune : petite faute, orange : faute, rouge : grosse faute). Sous la courbe : les phases de la partie, et un trait à chaque échange de pièces.'
+  ? 'La courbe montre qui est mieux placé à chaque coup : au-dessus de zéro, les Blancs ; en dessous, les Noirs. Les pastilles numérotées sont les coups où un camp a mal joué (jaune : petite faute, orange : faute, rouge : grosse faute). Sous la courbe : les phases de la partie, et un trait à chaque échange de pièces. Cliquer sur une pastille (ou sur son numéro, sous la courbe) ouvre le détail du coup.'
   : 'Chaque palier est une petite imprécision de l\'un des camps (trop petite pour être une faute), additionnée coup après coup : plus la ligne monte, plus le camp a laissé filer d\'avantage petit à petit. Les cercles numérotés marquent les trois plus grosses pertes de chaque camp.');
 const legendOf = (view, box) => {
   box.replaceChildren();
@@ -103,10 +145,11 @@ function drawChart() {
   $('film-help-chart').textContent = helpOf(S.view);
   hideTip();
   const geo = geoFor(S.view);
-  Object.assign(GEO, geo, { n: g.plies, a: S.zoom ? S.zoom.a : 0, b: S.zoom ? S.zoom.b : g.plies });
+  Object.assign(GEO, geo, { n: g.plies, a: S.zoom ? S.zoom.a : 0, b: S.zoom ? S.zoom.b : g.plies, anchors: new Map() });
   svg.setAttribute('viewBox', `0 0 ${geo.W} ${geo.H}`);
   if (S.view === 'eval') drawEvalChart(g, svg); else drawCumChart(g, svg);
   updateZoomBar();
+  positionBubble();
 }
 // Redessin quand la taille du cadre de la courbe change (fenêtre, mise en page).
 new ResizeObserver(() => { if (S.data && S.rp) { cancelAnimationFrame(drawChart._raf); drawChart._raf = requestAnimationFrame(drawChart); } }).observe($('film-chart-box'));
@@ -122,29 +165,35 @@ function drawCumChart(g, svg) {
     mk('line', { x1: M.l, x2: W - M.r, y1: Y(v), y2: Y(v), stroke: C.border, 'stroke-width': 1 }, svg);
     mk('text', { x: M.l - 8, y: Y(v) + 5, 'text-anchor': 'end', fill: C.muted, 'font-size': FS }, svg).textContent = v;
   }
-  for (const m of coupSteps(GEO.a, GEO.b)) mk('text', { x: X(m * 2), y: H - 8, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
+  coupSeparators(svg, GEO.a, GEO.b, H - 22, H - 4);
+  for (const m of coupSteps(GEO.a, GEO.b)) mk('text', { x: plotX(2 * m - 1), y: H - 8, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
   const plot = mk('g', { 'clip-path': 'url(#film-clip-x)' }, svg);
   mk('rect', { x: M.l, y: 0, width: W - M.l - M.r, height: H }, mk('clipPath', { id: 'film-clip-x' }, mk('defs', {}, svg)));
   // courbes en escalier : le cumul bouge après chaque coup du camp
   for (const [idx, col, side] of [[1, C.text, 'w'], [2, C.gold, 'b']]) {
-    let d = `M ${X(0)} ${Y(0)}`;
-    for (const c of g.courbe) d += ` L ${X(c[0] + 1)} ${Y(c[idx])}`;
+    let d = `M ${posX(0)} ${Y(0)}`;
+    for (const c of g.courbe) d += ` L ${posX(c[0] + 1)} ${Y(c[idx])}`;
     mk('path', { d, fill: 'none', stroke: col, 'stroke-width': 3, 'stroke-linejoin': 'round', ...(side === 'b' ? { 'stroke-dasharray': '9 5' } : {}) }, plot);
   }
-  // repères des 3 plus grosses pertes de chaque camp (sur la bande du haut)
-  for (const side of ['w', 'b']) g.top[side].forEach((l, i) => {
-    if (!inView(l.ply + 0.5)) return;
-    const col = side === 'w' ? C.text : C.gold, x = X(l.ply + 0.5), y = side === 'w' ? 16 : 44;
+  // repères des 3 plus grosses pertes de chaque camp (sur la bande du haut) ; écartés horizontalement quand ils se chevauchent (P48B),
+  // chacun relié par un petit trait au haut de sa ligne en pointillé (position réelle)
+  const marks = [];
+  for (const side of ['w', 'b']) g.top[side].forEach((l, i) => { if (inView(l.ply + 0.5)) marks.push({ l, side, i, x: X(l.ply + 0.5), y: side === 'w' ? 16 : 44 }); });
+  const sp = spreadPastilles(marks, { x0: M.l + 13, x1: W - M.r - 13, y0: 0, y1: H }, 'cum');
+  marks.forEach((m, k) => {
+    const { l, side, i } = m, col = side === 'w' ? C.text : C.gold, x = sp[k].x, y = m.y;
+    GEO.anchors.set(l.ply, { x, y });
     const a = mk('g', { class: 'mk', 'data-ply': l.ply, 'data-side': side, 'data-rank': i, style: 'cursor:pointer' }, svg);
-    mk('line', { x1: x, x2: x, y1: y + 13, y2: H - M.b, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '2 3', opacity: 0.45 }, a);
+    mk('line', { x1: m.x, x2: m.x, y1: y + 13, y2: H - M.b, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '2 3', opacity: 0.45 }, a);
+    if (sp[k].moved) mk('line', { x1: x, y1: y, x2: m.x, y2: y + 13, stroke: col, 'stroke-width': 1.2, opacity: 0.9, class: 'leader' }, a);
     mk('circle', { cx: x, cy: y, r: 13, fill: C.bg, stroke: col, 'stroke-width': 2 }, a);
     mk('text', { x, y: y + 5, 'text-anchor': 'middle', fill: col, 'font-size': FS, 'font-weight': 700 }, a).textContent = i + 1;
-    mk('title', {}, a).textContent = `${l.no}${side === 'w' ? '.' : '…'} ${l.joue} : perte ${fr(l.L)} pion`;
+    mk('title', {}, a).textContent = `${l.no}${side === 'w' ? '.' : '…'} ${l.joue} : perte ${pionsLabel(l.L, 2)}`;
   });
   // curseur : position affichée
-  if (inView(S.ply)) {
-    mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 6, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.6, opacity: 0.9 }, svg);
-    mk('circle', { cx: X(S.ply), cy: H - M.b, r: 4.5, fill: C.gold }, svg);
+  if (inView(cursorU())) {
+    mk('line', { x1: plotX(cursorU()), x2: plotX(cursorU()), y1: M.t - 6, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.6, opacity: 0.9 }, svg);
+    mk('circle', { cx: plotX(cursorU()), cy: H - M.b, r: 4.5, fill: C.gold }, svg);
   }
 }
 
@@ -174,7 +223,7 @@ function drawEvalChart(g, svg) {
   mk('rect', { x: M.l, y: 0, width: W - M.l - M.r, height: H }, mk('clipPath', { id: 'film-clip-x' }, defs));
   const plot = mk('g', { 'clip-path': 'url(#film-clip-x)' }, svg); // la courbe ne déborde jamais de la zone tracée (zoom)
   const runs = []; let cur = null;
-  evals.forEach((v, k) => { if (v === null || v === undefined) { cur = null; return; } if (!cur) { cur = []; runs.push(cur); } cur.push([X(k), Y(v)]); });
+  evals.forEach((v, k) => { if (v === null || v === undefined) { cur = null; return; } if (!cur) { cur = []; runs.push(cur); } cur.push([posX(k), Y(v)]); });
   for (const run of runs) {
     if (run.length < 2) { mk('circle', { cx: run[0][0], cy: run[0][1], r: 3, fill: C.text }, plot); continue; }
     const line = run.map(([x, y], i) => `${i ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
@@ -187,45 +236,53 @@ function drawEvalChart(g, svg) {
   }
   // bande des phases (sous la courbe) et petits traits des échanges (coups avec prise) juste au-dessus
   const by = H - M.b + 12, bh = 22;
-  const half = (W - M.l - M.r) / Math.max(1e-6, GEO.b - GEO.a) / 2, phaseLabel = { ouverture: 'Ouverture', milieu: 'Milieu de partie', finale: 'Finale' }, phaseOp = { ouverture: 0.16, milieu: 0.3, finale: 0.46 };
+  const phaseLabel = { ouverture: 'Ouverture', milieu: 'Milieu de partie', finale: 'Finale' }, phaseOp = { ouverture: 0.16, milieu: 0.3, finale: 0.46 };
   for (const s of g.phases ?? []) {
-    const x0 = Math.max(M.l, X(s.from) - (s.from === 0 ? 0 : half)), x1 = Math.min(W - M.r, X(s.to) + (s.to === n ? 0 : half));
+    // chaque position occupe la case du dernier coup joué : de la case de départ (u = from − 1, ou 0 au départ) à la fin de la case de `to` (u = to)
+    const x0 = Math.max(M.l, plotX(s.from === 0 ? 0 : s.from - 1)), x1 = Math.min(W - M.r, plotX(s.to));
     if (x1 <= x0) continue; // phase hors de la plage visible
     mk('rect', { x: x0, y: by, width: Math.max(1, x1 - x0), height: bh, fill: C.muted, opacity: phaseOp[s.phase] }, svg);
     if (x1 - x0 > phaseLabel[s.phase].length * 8 + 12) mk('text', { x: (x0 + x1) / 2, y: by + 16, 'text-anchor': 'middle', fill: C.text, 'font-size': FS, 'font-weight': 600 }, svg).textContent = phaseLabel[s.phase];
   }
-  for (const p of g.echanges ?? []) { const x = X(p + 1); if (inView(p + 1) && (g.pieces ?? [])[p + 1] != null) mk('line', { x1: x, x2: x, y1: by - 8, y2: by - 2, stroke: C.muted, 'stroke-width': 1.6 }, svg); }
+  for (const p of g.echanges ?? []) { const x = plotX(p + 0.5); if (inView(p + 0.5) && (g.pieces ?? [])[p + 1] != null) mk('line', { x1: x, x2: x, y1: by - 8, y2: by - 2, stroke: C.muted, 'stroke-width': 1.6 }, svg); }
   // numéros de coups (un coup = un coup de chaque camp : la position 2m est celle qui suit le coup m des Noirs)
-  for (const m of coupSteps(GEO.a, GEO.b)) mk('text', { x: X(2 * m), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
+  coupSeparators(svg, GEO.a, GEO.b, H - 20, H - 3);
+  for (const m of coupSteps(GEO.a, GEO.b)) mk('text', { x: plotX(2 * m - 1), y: H - 6, 'text-anchor': 'middle', fill: C.muted, 'font-size': FS }, svg).textContent = m;
   // curseur (position affichée) et repère de survol
-  if (inView(S.ply)) mk('line', { x1: X(S.ply), x2: X(S.ply), y1: M.t - 4, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.8, opacity: 0.9 }, svg);
+  if (inView(cursorU())) mk('line', { x1: plotX(cursorU()), x2: plotX(cursorU()), y1: M.t - 4, y2: H - M.b, stroke: C.gold, 'stroke-width': 1.8, opacity: 0.9 }, svg);
   const hover = mk('line', { id: 'film-hover', x1: 0, x2: 0, y1: M.t - 4, y2: H - M.b, stroke: C.text, 'stroke-width': 1.2, opacity: 0.55, visibility: 'hidden' }, svg);
   hover.style.pointerEvents = 'none';
   // pastilles des fautes signalées, au point de la courbe après le coup : 26 px de diamètre. Seules celles de la plage visible sont
-  // dessinées ; deux pastilles qui se chevaucheraient sont décalées verticalement (la sélectionnée garde sa place, dessinée en dernier)
-  const faults = g.faults ?? [], placed = [];
-  const spot = (f) => { const v = evals[f.ply + 1]; return { x: X(f.ply + 1), y: v === null || v === undefined ? cy : Y(v) }; };
-  const order = faults.map((f, i) => i).filter((i) => inView(faults[i].ply + 1)).sort((p, q) => (displayedMove() === faults[q].ply) - (displayedMove() === faults[p].ply));
+  // dessinées ; celles qui se chevaucheraient sont écartées (spreadPastilles) et reliées à leur point réel ; la sélectionnée est dessinée en dernier
+  const faults = g.faults ?? [];
+  const spot = (f) => { const v = evals[f.ply + 1]; return { x: plotX(f.ply + 0.5), y: v === null || v === undefined ? cy : Y(v) }; };
+  const vis = faults.map((f, i) => i).filter((i) => inView(faults[i].ply + 0.5));
+  const spread = spreadPastilles(vis.map((i) => spot(faults[i])), { x0: M.l + 13, x1: W - M.r - 13, y0: M.t + 13, y1: H - M.b - 13 }, 'eval');
   const pos = new Map();
-  for (const i of order) {
-    const base = spot(faults[i]); let best = base;
-    for (const dy of [0, 14, -14, 28, -28, 42, -42, 56, -56]) {
-      const y = Math.max(M.t + 4, Math.min(H - M.b - 4, base.y + dy));
-      if (placed.every((q) => Math.hypot(q.x - base.x, q.y - y) >= ZOOM.PASTILLE_GAP)) { best = { x: base.x, y }; break; }
-    }
-    placed.push(best); pos.set(i, best);
+  vis.forEach((i, k) => { pos.set(i, { ...spread[k], real: spot(faults[i]) }); GEO.anchors.set(faults[i].ply, spread[k]); });
+  // petit trait fin entre chaque pastille écartée et son point réel sur la courbe (sous les pastilles)
+  for (const [i, p] of pos) if (p.moved) {
+    mk('line', { x1: p.real.x, y1: p.real.y, x2: p.x, y2: p.y, stroke: C.muted, 'stroke-width': 1.2, opacity: 0.85, class: 'leader' }, svg);
+    mk('circle', { cx: p.real.x, cy: p.real.y, r: 2.5, fill: C.muted, class: 'leader' }, svg);
   }
   faults.forEach((f, i) => { if (pos.has(i) && displayedMove() !== f.ply) drawPastille(svg, g, f, i, pos.get(i)); });
   faults.forEach((f, i) => { if (pos.has(i) && displayedMove() === f.ply) drawPastille(svg, g, f, i, pos.get(i)); });
   // le tournant : dessiné APRÈS les pastilles (jamais masqué) ; l'étiquette passe à gauche si elle déborde à droite, sinon est calée dans la zone tracée
-  if (g.tournant && inView(g.tournant.ply + 1)) {
-    const t = g.tournant, x = X(t.ply + 1);
+  if (g.tournant && inView(g.tournant.ply + 0.5)) {
+    const t = g.tournant, x = plotX(t.ply + 0.5);
     mk('line', { x1: x, x2: x, y1: M.t - 4, y2: H - M.b, stroke: 'var(--fault-major)', 'stroke-width': 2, 'stroke-dasharray': '6 5' }, svg);
     const tx = mk('text', { x: x + 8, y: M.t + 12, 'text-anchor': 'start', fill: 'var(--fault-major)', 'font-size': FS, 'font-weight': 700, 'paint-order': 'stroke', stroke: C.bg, 'stroke-width': 4 }, svg);
     tx.textContent = `Le tournant · ${t.moveNo}${t.side === 'w' ? '.' : '…'} ${g.moves[t.ply]}`;
     const w = tx.getComputedTextLength ? tx.getComputedTextLength() : 150, lo = M.l + 2, hi = W - M.r - 2;
     if (x + 8 + w <= hi) { /* à droite du trait */ } else if (x - 8 - w >= lo) { tx.setAttribute('text-anchor', 'end'); tx.setAttribute('x', x - 8); }
     else { tx.setAttribute('x', Math.max(lo, hi - w)); }
+    // l'étiquette ne recouvre aucune pastille (écartées ou non) : première hauteur libre, en haut puis en bas de la zone tracée
+    const spots = [...pos.values()];
+    for (const ty of [M.t + 12, M.t + 40, H - M.b - 10, H - M.b - 38]) {
+      tx.setAttribute('y', ty);
+      const bb = tx.getBBox();
+      if (!spots.some((p) => p.x + 17 > bb.x && p.x - 17 < bb.x + bb.width && p.y + 17 > bb.y && p.y - 17 < bb.y + bb.height)) break;
+    }
   }
 }
 function drawPastille(svg, g, f, i, { x, y }) {
@@ -240,7 +297,8 @@ function positionAt(e) {
   const svg = $('film-chart'), r = svg.getBoundingClientRect();
   const scale = Math.min(r.width / GEO.W, r.height / GEO.H), ox = (r.width - GEO.W * scale) / 2;
   const vx = (e.clientX - r.left - ox) / scale;
-  return Math.max(0, Math.min(S.rp.steps.length, Math.round(GEO.a + ((vx - GEO.M.l) / (GEO.W - GEO.M.l - GEO.M.r)) * (GEO.b - GEO.a))));
+  const u = GEO.a + ((vx - GEO.M.l) / (GEO.W - GEO.M.l - GEO.M.r)) * (GEO.b - GEO.a); // u → position : le départ en dessous de u = 0,25, sinon la case du coup joué
+  return Math.max(0, Math.min(S.rp.steps.length, u < 0.25 ? 0 : Math.round(u + 0.5)));
 }
 // même chose, non arrondie et sans borne (zoom : glisser, molette)
 function posFloat(e) {
@@ -265,7 +323,7 @@ function showTip(k, e) {
   $('film-tip-eval').textContent = v === null || v === undefined ? 'Position non analysée' : `Évaluation ${signed(v, 1)}${Math.abs(v) >= CAP ? ' (gain forcé)' : ''}`;
   const fb = $('film-tip-fault'); fb.replaceChildren();
   if (f) {
-    const a = document.createElement('div'); a.className = 'tip-g'; a.style.color = graviteVar[f.gravite]; a.textContent = `${gravText[f.gravite][0].toUpperCase()}${gravText[f.gravite].slice(1)} : perte ${fr(f.L)} pion`;
+    const a = document.createElement('div'); a.className = 'tip-g'; a.style.color = graviteVar[f.gravite]; a.textContent = `${gravText[f.gravite][0].toUpperCase()}${gravText[f.gravite].slice(1)} : perte ${pionsLabel(f.L, 2)}`;
     const b = document.createElement('div'); b.textContent = `Meilleur coup : ${f.meilleur ?? '—'}`;
     fb.append(a, b);
   }
@@ -277,7 +335,7 @@ function showTip(k, e) {
   tip.style.left = `${Math.max(8, left)}px`;
   tip.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, e.clientY - h / 2))}px`;
   const hl = document.getElementById('film-hover');
-  if (hl) { const x = plotX(k); hl.setAttribute('x1', x); hl.setAttribute('x2', x); hl.setAttribute('visibility', 'visible'); }
+  if (hl) { const x = posX(k); hl.setAttribute('x1', x); hl.setAttribute('x2', x); hl.setAttribute('visibility', 'visible'); }
 }
 $('film-chart').addEventListener('mousemove', (e) => {
   if (!S.rp || S.view !== 'eval' || drag?.on) return;
@@ -289,9 +347,9 @@ $('film-chart').addEventListener('mouseleave', hideTip);
 $('film-chart').addEventListener('click', (e) => {
   if (dragEnded) return; // le clic qui suit un glisser de sélection n'est pas un clic sur la courbe
   const pf = e.target.closest('.mk-f');
-  if (pf) { focusLoss(S.data.parties[S.g].faults[Number(pf.dataset.i)]); return; }
+  if (pf) { openMoment(S.data.parties[S.g].faults[Number(pf.dataset.i)]); return; }
   const mkEl = e.target.closest('.mk');
-  if (mkEl) { const side = mkEl.dataset.side; focusLoss(S.data.parties[S.g].top[side][Number(mkEl.dataset.rank)]); return; }
+  if (mkEl) { const side = mkEl.dataset.side, l = S.data.parties[S.g].top[side][Number(mkEl.dataset.rank)], ft = (S.data.parties[S.g].faults ?? []).find((x) => x.ply === l.ply); if (ft) openMoment(ft); else focusLoss(l); return; }
   goTo(positionAt(e));
 });
 document.querySelectorAll('.film-toggle button').forEach((b) => b.addEventListener('click', () => { S.view = b.dataset.view; drawChart(); }));
@@ -310,9 +368,9 @@ function panBy(dir) { if (!S.zoom) return; const d = (S.zoom.b - S.zoom.a) * ZOO
 // Le moment affiché hors de la plage : la plage se recentre dessus, sans changer le niveau de zoom.
 function revealCurrent() {
   if (!S.zoom || !S.rp) return;
-  const k = S.focus ? S.focus.ply + 1 : S.ply;
-  if (k >= S.zoom.a && k <= S.zoom.b) return;
-  const half = (S.zoom.b - S.zoom.a) / 2; S.zoom = clampZoom(k - half, k + half);
+  const u = cursorU();
+  if (u >= S.zoom.a && u <= S.zoom.b) return;
+  const half = (S.zoom.b - S.zoom.a) / 2; S.zoom = clampZoom(u - half, u + half);
 }
 function updateZoomBar() {
   const n = S.data ? S.data.parties[S.g].plies : 0, z = S.zoom, tiny = n <= ZOOM.MIN_SPAN;
@@ -321,8 +379,10 @@ function updateZoomBar() {
   $('film-zoom-all').hidden = !z; $('film-zoomnav').hidden = !z;
   if (z) { const th = $('film-nav-thumb'); th.style.left = `${(z.a / n) * 100}%`; th.style.width = `${((z.b - z.a) / n) * 100}%`; }
 }
-$('film-zoom-in').addEventListener('click', () => zoomBy(1 / ZOOM.FACTOR));
-$('film-zoom-out').addEventListener('click', () => zoomBy(ZOOM.FACTOR));
+// bulle ouverte : les boutons « + » / « − » zooment autour du moment choisi (sa pastille reste donc visible)
+const zoomCenter = () => (S.bubble !== null && S.focus ? S.focus.ply + 0.5 : undefined);
+$('film-zoom-in').addEventListener('click', () => zoomBy(1 / ZOOM.FACTOR, zoomCenter()));
+$('film-zoom-out').addEventListener('click', () => zoomBy(ZOOM.FACTOR, zoomCenter()));
 $('film-zoom-all').addEventListener('click', () => { S.zoom = null; drawChart(); });
 $('film-pan-l').addEventListener('click', () => panBy(-1));
 $('film-pan-r').addEventListener('click', () => panBy(1));
@@ -355,71 +415,39 @@ $('film-nav').addEventListener('pointerdown', (e) => {
 });
 
 // ---- listes et navigation ----
-// ---- moments critiques (P42) : frise des fautes signalées des deux camps + carte du moment sélectionné ----
+// ---- moments critiques (P48) : rangée de pastilles numérotées sous la courbe ; le détail d'un moment est dans la bulle ancrée sur la courbe ----
 // Données : g.faults (film-game.js, un coup identique au meilleur coup n'y figure jamais), numérotées dans l'ordre de la partie
 // comme les pastilles de la courbe. La sélection pilote le grand damier (position AVANT le coup, flèche rouge du coup joué,
-// flèche verte du meilleur coup) : c'est `S.focus`, comme avant. P42B : la carte du bas décrit TOUJOURS le coup affiché (displayedMove), critique ou non.
-const FRISE = { page: 0, side: 'all', ensure: false, last: null };
+// flèche verte du meilleur coup) : c'est `S.focus`, comme avant. Il n'y a plus de carte du bas : seule une ligne sous le damier décrit le coup affiché.
 const gravLabel = { 'légère': 'Légère', faute: 'Faute', majeure: 'Majeure' };
 const sideName = { w: 'Blancs', b: 'Noirs' };
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 const moveLabel = (f) => `${f.no}${f.side === 'w' ? '.' : '…'} ${f.joue}`;
 const faultsOf = (g) => (g.faults ?? []).map((f, i) => ({ ...f, n: i + 1 }));
-const selectedPly = () => displayedMove(); // mise en évidence (frise, courbe) : seulement si le coup affiché est un moment critique
+const selectedPly = () => displayedMove(); // mise en évidence (pastilles) : seulement si le coup affiché est un moment critique
 
 function renderMoments() {
-  stopReplay(); // la carte est reconstruite : toute lecture en cours s'arrête
-  const g = S.data.parties[S.g], all = faultsOf(g);
-  const list = all.filter((f) => FRISE.side === 'all' || f.side === FRISE.side);
-  document.querySelectorAll('.film-seg button').forEach((b) => { const on = b.dataset.side === FRISE.side; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
-  const track = $('film-frise-track'); track.replaceChildren();
-  $('film-frise').hidden = all.length === 0;
-  const dm = displayedMove();
-  if (dm !== null && dm !== FRISE.last && list.some((f) => f.ply === dm)) FRISE.ensure = true;
-  FRISE.last = dm;
-  list.forEach((f) => {
-    const b = el('button', 'film-card'); b.type = 'button'; b.dataset.ply = f.ply;
-    const tour = !!g.tournant && g.tournant.ply === f.ply;
-    if (tour) b.classList.add('tournant');
-    if (selectedPly() === f.ply) b.classList.add('active');
-    const dot = el('span', 'fc-dot', String(f.n)); dot.style.background = graviteVar[f.gravite];
-    const txt = el('span', 'fc-txt');
-    txt.append(el('b', '', moveLabel(f)), el('small', '', `${sideName[f.side]} · −${fr(f.L, 1)}`));
-    if (tour) txt.append(el('small', 'fc-tour', 'Le tournant'));
-    b.append(dot, txt);
-    b.addEventListener('click', () => focusLoss(f));
-    track.appendChild(b);
+  const g = S.data.parties[S.g], all = faultsOf(g), box = $('film-pills');
+  box.replaceChildren(); box.hidden = all.length === 0;
+  all.forEach((f) => {
+    const b = el('button', 'pill', String(f.n)); b.type = 'button'; b.dataset.ply = f.ply;
+    const label = `${ordinalCoup(f.no, { capital: true })} · ${sideName[f.side]} · ${gravLabel[f.gravite]}`;
+    b.title = label; b.setAttribute('aria-label', label);
+    b.style.background = graviteVar[f.gravite];
+    if (g.tournant && g.tournant.ply === f.ply) b.classList.add('tournant');
+    if (selectedPly() === f.ply) { b.classList.add('active'); b.setAttribute('aria-current', 'true'); }
+    b.addEventListener('click', () => openMoment(f));
+    box.appendChild(b);
   });
-  layoutFrise(list);
-  renderMomentCard(g, all);
 }
-
-// Pagination de la frise : les cartes ne tiennent pas → deux flèches font défiler par pages (aucune barre de défilement).
-function layoutFrise(list) {
-  const view = $('film-frise-view'), cards = [...$('film-frise-track').children];
-  const frise = $('film-frise');
-  frise.classList.remove('single');
-  if (!cards.length) return;
-  const step = cards[0].offsetWidth + 8, vw = view.clientWidth;
-  const per = Math.max(1, Math.floor((vw + 8) / step)), pages = Math.max(1, Math.ceil(cards.length / per));
-  if (pages === 1) frise.classList.add('single');
-  if (FRISE.ensure) { const i = list.findIndex((f) => f.ply === selectedPly()); if (i >= 0) FRISE.page = Math.floor(i / per); FRISE.ensure = false; }
-  FRISE.page = Math.max(0, Math.min(pages - 1, FRISE.page));
-  $('film-frise-track').style.transform = `translateX(${-FRISE.page * per * step}px)`;
-  $('frise-prev').disabled = FRISE.page === 0; $('frise-next').disabled = FRISE.page >= pages - 1;
-}
-new ResizeObserver(() => { if (S.data && S.rp) { const g = S.data.parties[S.g]; layoutFrise(faultsOf(g).filter((f) => FRISE.side === 'all' || f.side === FRISE.side)); } }).observe($('film-frise-view'));
-$('frise-prev').addEventListener('click', () => { FRISE.page--; layoutFrise(faultsOf(S.data.parties[S.g]).filter((f) => FRISE.side === 'all' || f.side === FRISE.side)); });
-$('frise-next').addEventListener('click', () => { FRISE.page++; layoutFrise(faultsOf(S.data.parties[S.g]).filter((f) => FRISE.side === 'all' || f.side === FRISE.side)); });
-document.querySelectorAll('.film-seg button').forEach((b) => b.addEventListener('click', () => { FRISE.side = b.dataset.side; FRISE.page = 0; renderMoments(); }));
 
 // Le coup AFFICHÉ sur le grand damier : indice du demi-coup (index de g.rows), null à la position de départ.
 // Une sélection (S.focus) montre la position AVANT son coup ; sinon la position k est celle qui suit le coup k − 1.
 function displayedMove() { if (!S.rp) return null; return S.focus ? S.focus.ply : (S.ply > 0 ? S.ply - 1 : null); }
 
 // ---- réfutation animée (P46) : la suite RÉELLE de la partie à partir du coup en cause, sur le damier de gauche ----
-// Le coup fautif et les 5 suivants au plus, un coup toutes les 950 ms ; la carte du bas ne change pas (seule la ligne d'évaluation est
-// remplacée par la ligne de coups, qui s'allonge). Toute reconstruction de la carte (refresh) arrête la lecture : voir stopReplay().
+// Le coup fautif et les 5 suivants au plus, un coup toutes les 950 ms ; la bulle ne change pas (seule la ligne d'évaluation est
+// remplacée par la ligne de coups, qui s'allonge, DANS la bulle). Toute reconstruction de la bulle (refresh) arrête la lecture : voir stopReplay().
 const REPLAY = { STEP_MS: 950, MAX_PLIES: 6 };
 let replay_ = null; // { f, count, i, timer }
 const prefersReduced = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -470,83 +498,86 @@ function replayButtons(g, f) {
     if (!reduced) replay_.timer = setInterval(replayAdvance, REPLAY.STEP_MS);
     back.disabled = false;
   });
-  back.addEventListener('click', () => refresh()); // rebâtit la carte et redessine la position du moment
+  back.addEventListener('click', () => refresh()); // rebâtit la bulle et redessine la position du moment
   return [go, back];
 }
 
-// Une seule carte, deux contenus : moment critique (P42) ou coup ordinaire (verdict allégé) ; cas à part en texte simple.
-function renderMomentCard(g, all) {
-  const box = $('film-moment'); box.replaceChildren();
-  const m = displayedMove(), f = m === null ? null : all.find((x) => x.ply === m), row = m === null ? null : (g.rows ?? [])[m];
-  const nav = () => { // « Moment précédent / suivant » partent du coup affiché, même ordinaire : toujours visibles
-    const base = m === null ? -1 : m, prevF = [...all].reverse().find((x) => x.ply < base), nextF = all.find((x) => x.ply > base);
-    const n = el('div', 'mc-nav'), prev = el('button', 'mc-btn', '◀ Moment précédent'), next = el('button', 'mc-btn', 'Moment suivant ▶');
-    prev.type = next.type = 'button'; prev.disabled = !prevF; next.disabled = !nextF;
-    prev.addEventListener('click', () => focusLoss(prevF)); next.addEventListener('click', () => focusLoss(nextF));
-    if (f) { const grp = el('div', 'mc-replay-btns'); grp.append(...replayButtons(g, f)); n.append(grp); }
-    n.append(prev, next); return n;
-  };
-  const evalLine = () => {
-    const ev = g.evals ?? [], fmtV = (v) => (v === null || v === undefined ? 'non analysée' : signed(v, 1));
-    const evl = el('div', 'mc-line'); evl.id = 'mc-eval'; evl.append(document.createTextNode('Évaluation : de '), el('b', '', fmtV(ev[m])), document.createTextNode(' à '), el('b', '', fmtV(ev[m + 1])), el('small', '', ' (vue des Blancs)')); return evl;
-  };
-  const line = (swatch, label, value) => { const d = el('div', 'mc-line'); if (swatch) d.appendChild(el('span', `sw ${swatch}`)); d.append(document.createTextNode(`${label} : `), el('b', '', value)); return d; };
-  const simple = (over, big, text) => { // cas à part : sur-titre, coup, phrase
-    box.dataset.simple = '1';
-    const main = el('div', 'mc-main'), side = el('div', 'mc-side');
-    if (over) main.appendChild(el('div', 'mc-over', over));
-    if (big) { const b = el('div', 'mc-big'); b.appendChild(el('span', 'mc-move', big)); main.appendChild(b); }
-    main.appendChild(el('p', 'mc-sentence', text)); box.append(main, side, nav());
-  };
-  delete box.dataset.simple;
-  if (!g.rows || !g.rows.length && !all.length) { box.append(el('p', 'mc-empty', 'Aucun coup à décrire.')); return; }
-  if (m === null) { simple('', '', 'Position de départ : à toi de dérouler la partie.'); return; }
-  if (!row) { simple('', '', 'Analyse en cours…'); return; }
-  const who = sideName[row.side], mv = `${row.moveNo}${row.side === 'w' ? '.' : '…'} ${row.played}`, over = `Coup ${row.moveNo} des ${who}`;
-  if (row.pending) { simple(over, mv, 'Analyse en cours…'); return; }
-  if (row.skipped) {
-    const t = row.skipped === 'forcé' ? (row.played.includes('x') ? 'Coup forcé : une seule prise possible.' : 'Coup forcé : un seul coup possible.')
-      : (String(row.skipped).startsWith('finale') ? 'Position non analysée : il reste trop peu de pièces.' : 'Position non analysée.');
-    simple(over, mv, t); return;
-  }
-  const main = el('div', 'mc-main'), side = el('div', 'mc-side');
-  if (f) { // moment critique : contenu de P42
-    const tour = !!g.tournant && g.tournant.ply === f.ply;
-    main.append(el('div', 'mc-over', tour ? 'Le coup qui a tout changé' : `Moment critique n° ${f.n}`));
-    const big = el('div', 'mc-big');
-    const loss = el('span', 'mc-loss', `−${fr(f.L, 1)} pion`); loss.style.color = graviteVar[f.gravite];
-    const badge = el('span', 'mc-badge', gravLabel[f.gravite]); badge.style.background = graviteVar[f.gravite];
-    big.append(el('span', 'mc-move', moveLabel(f)), loss, badge, el('span', 'mc-trait', `${sideName[f.side]} au trait`));
-    const pair = el('div', 'mc-pair'); pair.append(line('sw-played', 'Coup joué', f.joue), line('sw-best', 'Meilleur coup', f.meilleur ?? '—')); // deux repères sur une ligne (P42C-2 : gagne de la hauteur)
-    main.append(big, pair, evalLine());
-    const dif = difficultyOf(f.type, f.latence);
-    if (dif) {
-      const d = el('div', 'mc-diff');
-      const head = el('div', 'mc-diff-head'); head.append(el('span', 'mc-diff-label', dif.label));
-      const gauge = el('span', 'gauge'); gauge.setAttribute('role', 'img'); gauge.setAttribute('aria-label', `Difficulté : ${dif.points} sur 5`);
-      for (let i = 1; i <= 5; i++) gauge.appendChild(el('span', 'gd' + (i <= dif.points ? ' on' : '')));
-      head.appendChild(gauge);
-      d.append(head, el('p', 'mc-sentence', dif.text));
-      side.appendChild(d);
-    }
-  } else { // coup ordinaire : verdict allégé, pas de difficulté
-    const v = moveVerdict({ same: row.same, L: row.Lraw ?? row.L });
-    main.append(el('div', 'mc-over', over));
-    const big = el('div', 'mc-big'), badge = el('span', `mc-badge verdict-${v.kind}`, v.label);
-    big.append(el('span', 'mc-move', mv), badge);
-    if (v.kind === 'small') big.appendChild(el('span', 'mc-loss mc-loss-small', `−${fr(row.Lraw ?? row.L, 1)} pion`));
-    main.appendChild(big);
-    main.appendChild(evalLine());
-    if (!row.same && row.best && row.best !== row.played) main.appendChild(line('sw-best', 'Meilleur coup selon Scan', row.best));
-  }
-  box.append(main, side, nav()); // les boutons « Moment précédent / suivant » occupent toute la largeur, sous les deux colonnes
+// ---- bulle ancrée sur la courbe (P48) : détail du moment critique choisi ----
+// Ouverte par un clic sur une pastille (courbe, rangée du bas, mention du récit) ; fermée par un clic ailleurs, Échap, ou en changeant de coup affiché.
+// Contenu : « Coup N · Camp » + gravité, phrase pédagogique, « de X à Y », meilleur coup, boutons de la réfutation animée (P46).
+function openMoment(f) {
+  S.bubble = f.ply; focusLoss(f);
+  const b = $('film-bubble'); if (b && !b.hidden) b.focus({ preventScroll: true });
 }
+function closeBubble() {
+  if (S.bubble === null) return;
+  const was = !!replay_;
+  S.bubble = null; stopReplay();
+  const b = $('film-bubble'); b.hidden = true; b.replaceChildren();
+  if (was) drawBoard();
+  renderMoments();
+}
+const VIEW_NOTE = 'Évaluation vue des Blancs : un nombre positif est un avantage pour les Blancs, un nombre négatif pour les Noirs.';
+function buildBubble() {
+  const b = $('film-bubble'), g = S.data.parties[S.g], dm = displayedMove();
+  const f = S.bubble !== null && dm === S.bubble ? faultsOf(g).find((x) => x.ply === dm) : null;
+  if (!f) { S.bubble = null; b.hidden = true; b.replaceChildren(); return; }
+  const ev = g.evals ?? [], fmtV = (v) => (v === null || v === undefined ? 'non analysée' : signed(v, 1));
+  const tour = !!g.tournant && g.tournant.ply === f.ply;
+  const body = el('div', 'bb-body');
+  if (tour) body.append(el('div', 'bb-over', 'Le coup qui a tout changé'));
+  const head = el('div', 'bb-head');
+  const badge = el('span', 'mc-badge', gravLabel[f.gravite]); badge.style.background = graviteVar[f.gravite];
+  const loss = el('span', 'bb-loss', `−${pionsLabel(f.L, 1)}`); loss.style.color = graviteVar[f.gravite];
+  head.append(el('span', 'bb-title', `${ordinalCoup(f.no, { capital: true })} · ${sideName[f.side]}`), badge, loss);
+  body.append(head);
+  const dif = difficultyOf(f.type, f.latence);
+  if (dif) {
+    const d = el('div', 'bb-diff'), gauge = el('span', 'gauge'); gauge.setAttribute('role', 'img'); gauge.setAttribute('aria-label', `Difficulté : ${dif.points} sur 5`);
+    for (let i = 1; i <= 5; i++) gauge.appendChild(el('span', 'gd' + (i <= dif.points ? ' on' : '')));
+    d.append(el('b', '', dif.label), gauge); body.append(d, el('p', 'bb-sentence', dif.text));
+  }
+  const line = (swatch, label, value) => { const d = el('div', 'bb-line'); d.appendChild(el('span', `sw ${swatch}`)); d.append(document.createTextNode(`${label} : `), el('b', '', value)); return d; };
+  const evl = el('div', 'bb-line'); evl.id = 'mc-eval';
+  evl.append(document.createTextNode('Évaluation : de '), el('b', '', fmtV(ev[f.ply])), document.createTextNode(' à '), el('b', '', fmtV(ev[f.ply + 1])));
+  const info = el('span', 'bb-i', 'i'); info.tabIndex = 0; info.title = VIEW_NOTE; info.setAttribute('role', 'img'); info.setAttribute('aria-label', VIEW_NOTE); evl.append(info);
+  body.append(line('sw-played', 'Coup joué', f.joue), line('sw-best', 'Meilleur coup', f.meilleur ?? '—'), evl);
+  const btns = el('div', 'bb-btns'); btns.append(...replayButtons(g, f)); body.append(btns);
+  b.replaceChildren(body); b.hidden = false;
+}
+function positionBubble() {
+  const b = $('film-bubble'); if (!b || S.bubble === null || b.hidden) return;
+  const box = $('film-chart-box'), a = GEO.anchors.get(S.bubble);
+  b.classList.remove('bb-r', 'bb-l', 'bb-d', 'bb-u', 'bb-off');
+  if (!a) { b.classList.add('bb-off'); return; } // pastille hors de la plage visible (zoom) : bulle masquée, elle revient avec la pastille
+  b.style.removeProperty('--bb-max');
+  if (getComputedStyle(b).position === 'fixed') return; // mise en page étroite : feuille posée en bas de la fenêtre, sans ancrage
+  const W = box.clientWidth, H = box.clientHeight, gap = 22, m = 4;
+  b.style.setProperty('--bb-max', `${H - 2 * m}px`); // la bulle ne dépasse jamais le cadre de la courbe : son contenu défile au besoin
+  const bw = b.offsetWidth, bh = b.offsetHeight;
+  const fitsR = a.x + gap + bw <= W - m, fitsL = a.x - gap - bw >= m;
+  let left, top, cls;
+  if (fitsR || fitsL) { // à côté de la pastille : elle reste visible
+    const right = fitsR && (!fitsL || a.x <= W - a.x);
+    left = right ? a.x + gap : a.x - gap - bw; cls = right ? 'bb-r' : 'bb-l';
+    top = Math.max(m, Math.min(H - bh - m, a.y - bh / 2));
+  } else { // cadre étroit : dessous ou dessus
+    const below = a.y + gap + bh <= H - m || a.y < H / 2;
+    top = below ? a.y + gap : a.y - gap - bh; cls = below ? 'bb-d' : 'bb-u';
+    top = Math.max(m, Math.min(H - bh - m, top)); left = Math.max(m, Math.min(W - bw - m, a.x - bw / 2));
+  }
+  b.style.left = `${Math.round(left)}px`; b.style.top = `${Math.round(top)}px`; b.classList.add(cls);
+  b.style.setProperty('--ax', `${Math.round(Math.max(16, Math.min(bw - 16, a.x - left)))}px`);
+  b.style.setProperty('--ay', `${Math.round(Math.max(16, Math.min(bh - 16, a.y - top)))}px`);
+}
+document.addEventListener('click', (e) => { if (S.bubble !== null && !e.target.closest('.film-bubble, .mk-f, .mk, .pill, .story-link, .film-zoom, .film-zoomnav')) closeBubble(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.bubble !== null) { e.stopPropagation(); closeBubble(); } }, true);
 
 // ---- le récit de la partie (P42C) : phrases de js/analysis/film-story.js, mentions de coups cliquables ----
 // Un clic sur une mention affiche ce coup : une faute signalée comme un clic sur sa pastille, sinon comme un clic sur la courbe.
 function showMoveAt(ply) {
   const f = (S.data.parties[S.g].faults ?? []).find((x) => x.ply === ply);
-  if (f) focusLoss(f); else goTo(Math.min(S.rp.steps.length, ply + 1));
+  if (f) openMoment(f); else goTo(Math.min(S.rp.steps.length, ply + 1));
 }
 function fillStory(box, story) {
   box.replaceChildren();
@@ -586,14 +617,13 @@ function autoSelectMoment() {
   const g = S.data.parties[S.g], all = g.faults ?? [];
   if (!all.length) return;
   const f = (g.tournant && all.find((x) => x.ply === g.tournant.ply)) || all.reduce((m, x) => (x.L > m.L ? x : m), all[0]);
-  FRISE.ensure = true;
   setFocus(f);
 }
 
-// Cartes joueurs (P44) : mêmes classes que la « Plaque tournoi » de l'appli. Données : S.cards (mode normal, déjà résolues par main.js :
-// { w|b: { name, elo, title, photo }, info: { event, round, date, score } }) ou, à défaut (mode test), le seul nom du jeu de données.
-// Champ absent = rien d'affiché ; photo absente ou qui ne charge pas = avatar lettré.
-// Elo ou titre : jamais un tiret ou un séparateur orphelin (« 2500— ») ; un champ vide ou réduit à des tirets n'affiche rien (P46)
+// Cartes joueurs (P44, rétablies en P48B) : mêmes classes que la « Plaque tournoi » de l'appli ; une carte au-dessus du damier, une en dessous,
+// dans l'ordre du damier. Données : S.cards (mode normal, déjà résolues par main.js : { w|b: { name, elo, title, photo }, info: { event, round,
+// date, score } }) ou, à défaut (mode test), le seul nom du jeu de données. Champ absent = rien d'affiché ; photo absente ou qui ne charge pas = avatar lettré.
+// Elo ou titre : jamais un tiret ou un séparateur orphelin (« 2500— ») ; un champ vide ou réduit à des tirets n'affiche rien (P46).
 const cleanField = (v) => { const t = String(v ?? '').replace(/^[\s—–\-·|:,;]+|[\s—–\-·|:,;]+$/g, ''); return t || null; };
 function playerCard(side, p) {
   p = { ...p, elo: cleanField(p.elo), title: cleanField(p.title) };
@@ -621,6 +651,34 @@ function playerCard(side, p) {
   box.append(ring, body);
   return box;
 }
+// Taille du damier (P48C) : MESURÉE, plus de retraits constants. Le damier prend toute la hauteur que laissent les autres éléments de la colonne
+// (bandeau, cartes joueurs, navigation : leur hauteur varie avec la longueur des noms), plafonné à 36 % de la largeur de la fenêtre ; boucle courte
+// car la largeur du damier change le retour à la ligne des noms. Mise en page étroite (≤ 900 px) : tailles du CSS.
+let fitting = false;
+function fitBoard() {
+  if (fitting) return; fitting = true;
+  try {
+    const col = document.querySelector('.film-board-col'), wrap = col.querySelector('.film-board-wrap');
+    if (matchMedia('(max-width: 900px)').matches) { col.style.removeProperty('--bsz'); return; }
+    const maxW = Math.floor(document.documentElement.clientWidth * 0.36), gap = parseFloat(getComputedStyle(col).rowGap) || 0;
+    let b = maxW;
+    for (let i = 0; i < 8; i++) {
+      col.style.setProperty('--bsz', `${b}px`);
+      const kids = [...col.children].filter((e) => e !== wrap && !e.hidden && getComputedStyle(e).display !== 'none');
+      const others = kids.reduce((s, e) => s + e.getBoundingClientRect().height, 0) + gap * kids.length;
+      const nb = Math.max(240, Math.min(maxW, Math.floor(col.clientHeight - others)));
+      if (nb === b) break;
+      b = nb;
+    }
+    // contrôle final : si le retour à la ligne des noms a changé la hauteur avec la nouvelle largeur, on réduit du dépassement mesuré
+    for (let i = 0; i < 8 && col.scrollHeight > col.clientHeight && b > 240; i++) { b = Math.max(240, b - (col.scrollHeight - col.clientHeight)); col.style.setProperty('--bsz', `${b}px`); }
+    col.style.setProperty('--bsz', `${b}px`);
+  } finally { fitting = false; }
+}
+window.addEventListener('resize', fitBoard);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitBoard);
+// la page ne défile jamais (aucune barre) : un défilement programmatique éventuel est annulé
+window.addEventListener('scroll', () => { const s = document.scrollingElement; if (s && (s.scrollLeft || s.scrollTop)) s.scrollTo(0, 0); });
 function renderHeader() {
   const g = S.data.parties[S.g], live = S.cards && !DEMO;
   const sideOf = (white) => {
@@ -630,13 +688,15 @@ function renderHeader() {
   const topWhite = S.flipped, bottomWhite = !S.flipped; // même ordre que le damier : retourné → Blancs en haut
   $('film-top').replaceChildren(playerCard(topWhite ? 'w' : 'b', sideOf(topWhite)));
   $('film-bottom').replaceChildren(playerCard(bottomWhite ? 'w' : 'b', sideOf(bottomWhite)));
-  // Bandeau de la partie (P44B), en tête de la colonne du damier : tournoi en premier, puis « Ronde N · date · Score » ; champ absent = rien
+  // Bandeau de la partie, en tête de la colonne du damier : tournoi (gras, 2 lignes au plus, nom complet en infobulle), puis « Ronde N · date · Score X — Y ».
+  // Un champ absent est omis ; le séparateur n'est inséré qu'ENTRE deux champs présents (jamais seul en début ou fin de ligne).
   const inf = live ? (S.cards.info ?? {}) : {}, sub = [];
-  if (inf.round) sub.push(`Ronde ${inf.round}`);
-  if (inf.date) sub.push(inf.date);
-  if (inf.score) sub.push(`Score ${inf.score}`);
+  const event = cleanField(inf.event), round = cleanField(inf.round), date = cleanField(inf.date), score = cleanField(inf.score);
+  if (round) sub.push(`Ronde ${round}`);
+  if (date) sub.push(date);
+  if (score) sub.push(`Score ${score}`);
   const box = $('film-info'); box.replaceChildren();
-  if (inf.event) box.append(el('div', 'film-info-event', inf.event));
+  if (event) { const ev = el('div', 'film-info-event', event); ev.title = event; box.append(ev); }
   if (sub.length) box.append(el('div', 'film-info-sub', sub.join(' · ')));
   box.hidden = !box.children.length;
   const when = `${g.date ? g.date.split('.').reverse().join('/') + ' · ' : ''}${g.resultat ? `résultat ${resText(g.resultat)} · ` : ''}${Math.ceil(g.plies / 2)} coups. `;
@@ -646,15 +706,13 @@ function renderHeader() {
     ? `${when}Évaluation indicative (Scan 3.1, profondeurs 11 à 14). Mode test : 7 parties déjà mesurées.`
     : `${when}Évaluation indicative (Scan 3.1, profondeurs ${DEPTH_FROM} à ${DEPTH_REF}).`;
   foot.append(l);
+  fitBoard();
 }
-function renderPly() {
-  const g = S.data.parties[S.g], k = S.ply;
-  let t;
-  if (S.focus) { const l = S.focus; t = `Avant ${l.no}${S.rp.steps[l.ply]?.side === 'w' ? '.' : '…'} ${l.joue} · meilleur ${l.meilleur ?? '—'}`; }
-  else t = k === 0 ? 'Position de départ' : `Après ${Math.floor((k - 1) / 2) + 1}${(k - 1) % 2 === 0 ? '.' : '…'} ${g.moves[k - 1]}`;
-  $('film-ply').textContent = t;
+function renderPly() { // ligne sous le damier : décrit TOUJOURS le coup affiché (displayedMove) et rien d'autre
+  const g = S.data.parties[S.g], m = displayedMove();
+  $('film-ply').textContent = m === null ? 'Position de départ' : `${ordinalCoup(Math.floor(m / 2) + 1, { capital: true })} · ${sideName[m % 2 === 0 ? 'w' : 'b']} · ${g.moves[m]}`;
 }
-function refresh() { stopReplay(); renderPly(); drawBoard(); revealCurrent(); drawChart(); renderMoments(); }
+function refresh() { stopReplay(); renderPly(); drawBoard(); revealCurrent(); buildBubble(); drawChart(); renderMoments(); }
 function goTo(ply) { S.touched = true; S.focus = null; S.ply = ply; refresh(); } // la carte du bas suit le coup affiché
 // Son (js/sound.js, mêmes réglages que l'appli). Règle RELEVÉE dans main.js (goToNextMove, goToPrevMove, boutons début / fin,
 // jumpToPly) : l'appli joue un son SEULEMENT en avançant d'un coup (bouton ▶ et flèche →) : 'capture' si le coup est une prise,
@@ -678,7 +736,7 @@ function setFocus(l) { // position AVANT le coup en cause ; une faute signalée 
 }
 function focusLoss(l) { S.touched = true; setFocus(l); }
 function selectGame(i) {
-  const g = S.data.parties[i]; S.g = i; S.zoom = null; S.focus = null; S.touched = false; FRISE.page = 0; FRISE.last = null;
+  const g = S.data.parties[i]; S.g = i; S.zoom = null; S.focus = null; S.touched = false; S.bubble = null;
   S.rp = replay(g.moves);
   if (DEMO) S.flipped = g.joueur === 'b'; else S.flipped = !!g.flipped;
   S.ply = 0;
@@ -716,7 +774,7 @@ function renderProgress() {
   box.hidden = false;
   const n = L.plan.plies.length, x = doneCount();
   let text;
-  if (L.state === 'running') text = L.loading ? 'Chargement de Scan (8,5 Mo)…' : `Analyse : coup ${Math.min(n, x + 1)} sur ${n} · ${fmtDur(performance.now() - L.t0)}`;
+  if (L.state === 'running') text = L.loading ? 'Chargement de Scan (8,5 Mo)…' : `Analyse : position ${Math.min(n, x + 1)} sur ${n} · ${fmtDur(performance.now() - L.t0)}`;
   else if (L.state === 'cancelled') text = `Analyse arrêtée : ${x} coups sur ${n}.`;
   else text = `Analyse impossible : ${L.error}`;
   $('film-progress-label').textContent = text;

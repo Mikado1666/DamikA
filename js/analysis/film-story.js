@@ -2,12 +2,14 @@
 // gravité, difficulté, tournant, phases). Fonctions PURES (aucun DOM) : Node et navigateur. Aucune mesure ni seuil existant n'est touché.
 //
 // TOUTES les phrases sont dans la banque STORY_TEXT ci-dessous (et nulle part ailleurs dans le code) : pour retravailler le ton, on ne
-// modifie que cet objet. Emplacements nommés : {camp} (« Blancs » / « Noirs »), {autreCamp}, {coup} (numéro de coup), {n} (numéro de
-// coup, en chiffres), {notation} (« 40-34 »), {nbCoups} et {nbFois} (nombres de 1 à 9 écrits en lettres). Un emplacement {coup},
+// modifie que cet objet. Emplacements nommés : {camp} (« Blancs » / « Noirs »), {autreCamp}, {coup} (numéro de coup), {n} (ordinal du
+// coup : « 3e », « 41e », avec « coup » écrit dans la phrase : « au {n} coup »), {notation} (« 40-34 »), {nbCoups} et {nbFois} (nombres de 1 à 9 écrits en lettres). Un emplacement {coup},
 // {n} ou {notation} est CLIQUABLE dans l'affichage.
 //
 // Valeurs vues des Blancs, en pions. Le récit n'existe qu'une fois l'analyse terminée (storyOf renvoie null sinon).
 import { phaseName, difficultyOf } from './film-metrics.js';
+import { ordinal } from './film-ordinal.js';
+import { pionsRond } from './film-pions.js';
 
 export const STORY_TEXT = {
   attente: 'Le récit s\'écrira à la fin de l\'analyse.',
@@ -15,14 +17,22 @@ export const STORY_TEXT = {
   nombres: ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'], // de 1 à 9 en lettres, au-delà : chiffres
   // Phrase 1 : l'histoire (une par scénario)
   histoire: {
-    bascule: 'Partie équilibrée jusqu\'au coup {n}. Au coup {coup}, les {camp} jouent {notation} et tout bascule.',
-    basculeInegale: 'Les {camp} tenaient encore la partie jusqu\'au coup {n}. Au coup {coup}, ils jouent {notation} et tout bascule.',
+    bascule: 'Partie équilibrée jusqu\'au {n} coup. Au {coup} coup, les {camp} jouent {notation} et tout bascule.',
+    basculeInegale: 'Les {camp} tenaient encore la partie jusqu\'au {n} coup. Au {coup} coup, ils jouent {notation} et tout bascule.',
     // faute d'un coup des Noirs : le numéro de coup n'est pas répété
-    basculeNoirs: 'Partie équilibrée jusqu\'au coup {n}. Les {camp} répondent {notation} et tout bascule.',
-    basculeInegaleNoirs: 'Les {camp} tenaient encore la partie jusqu\'au coup {n}. Ils répondent {notation} et tout bascule.',
-    petitAPetit: 'Aucun coup ne perd la partie à lui seul. Les {camp} cèdent du terrain petit à petit, et à partir du coup {n} les {autreCamp} ne lâchent plus leur avantage.',
-    renversement: 'Les {camp} tenaient la partie jusqu\'au coup {n}. Les {autreCamp} retournent la situation en quelques coups.',
-    gache: 'Les {camp} avaient la partie en main au coup {n}. Ils laissent filer leur avantage et la partie finit à égalité.',
+    basculeNoirs: 'Partie équilibrée jusqu\'au {n} coup. Les {camp} répondent {notation} et tout bascule.',
+    basculeInegaleNoirs: 'Les {camp} tenaient encore la partie jusqu\'au {n} coup. Ils répondent {notation} et tout bascule.',
+    petitAPetit: 'Aucun coup ne perd la partie à lui seul. Les {camp} cèdent du terrain petit à petit, et à partir du {n} coup les {autreCamp} ne lâchent plus leur avantage.',
+    renversement: 'Les {camp} tenaient la partie jusqu\'au {n} coup. Les {autreCamp} retournent la situation en quelques coups.',
+    gache: 'Les {camp} avaient la partie en main au {n} coup. Ils laissent filer leur avantage et la partie finit à égalité.',
+    // P48F : l'état passé (« équilibrée », « tenaient », « en main ») n'est affirmé QUE s'il est vrai (aucune faute « faute » / « majeure » avant le moment cité) ;
+    // sinon : une occasion manquée (un camp lâche gros, l'autre n'en profite pas) ou une partie « déjà agitée ». {x} = « l'équivalent de 3 pions » (chiffre rond, P48G ; vu du camp qui lâche).
+    basculeOccasion: 'Les {camp} lâchent {x} au {n} coup, mais les {autreCamp} n\'en profitent pas. Au {coup} coup, les {campT} jouent {notation} et cette fois tout bascule.',
+    basculeOccasionNoirs: 'Les {camp} lâchent {x} au {n} coup, mais les {autreCamp} n\'en profitent pas. Les {campT} répondent {notation} et cette fois tout bascule.',
+    basculeAgitee: 'La partie était déjà agitée dès le {n} coup. Au {coup} coup, les {camp} jouent {notation} et tout bascule.',
+    basculeAgiteeNoirs: 'La partie était déjà agitée dès le {n} coup. Les {camp} répondent {notation} et tout bascule.',
+    renversementAgite: 'Après une partie agitée, les {camp} avaient l\'avantage au {n} coup. Les {autreCamp} retournent la situation en quelques coups.',
+    gacheAgite: 'Après une partie agitée, les {camp} avaient la partie en main au {n} coup. Ils laissent filer leur avantage et la partie finit à égalité.',
     propre: 'Partie sérieuse des deux côtés : personne ne commet de vraie faute, et l\'équilibre tient du début à la fin.',
     propreMieux: 'Partie sérieuse des deux côtés : personne ne commet de vraie faute, mais les {camp} finissent mieux.',
     mouvementee: 'Partie agitée : l\'avantage change {nbFois} fois de camp, et chacun a eu sa chance.',
@@ -30,11 +40,11 @@ export const STORY_TEXT = {
   },
   // Phrase 2 : le moment clé
   moment: {
-    coupCle: 'Le coup clé est le coup {coup} des {camp} ({notation}).', // dit toujours le camp ; omis quand la phrase 1 nomme déjà le coup (bascule nette)
+    coupCle: 'Le coup clé est le {coup} coup des {camp} ({notation}).', // dit toujours le camp ; omis quand la phrase 1 nomme déjà le coup (bascule nette)
     visible: 'La punition se voyait en {nbCoups} coups : c\'est une faute d\'attention, pas de calcul.',
     profond: 'Le coup avait l\'air naturel. Il fallait calculer {nbCoups} coups pour voir le danger.',
     instable: 'Même le moteur hésite sur ce coup : la position était vraiment compliquée.',
-    occasion: 'Juste avant, les {autreCamp} s\'étaient trompés au coup {n}, et les {camp} n\'en ont pas profité.', // plus affichée dans le récit (P42C-2) : réservée à sa future carte
+    occasion: 'Juste avant, les {autreCamp} s\'étaient trompés au {n} coup, et les {camp} n\'en ont pas profité.', // plus affichée dans le récit (P42C-2) : réservée à sa future carte
   },
   // Phrase 3 : à retenir
   retenir: {
@@ -42,6 +52,9 @@ export const STORY_TEXT = {
     milieu: 'À retenir pour les {camp} : c\'est en milieu de partie que tout se joue, l\'ouverture et la finale sont tenues.',
     finale: 'À retenir pour les {camp} : la partie était bien menée jusqu\'à la finale, c\'est là qu\'elle se perd.',
     rien: 'Rien à reprocher aux {camp} : les {autreCamp} ont simplement mieux joué.',
+    // P48F : quand le camp a aussi commis de grosses fautes dans une AUTRE phase, on ne dit pas que le reste de la partie était « tenu » / « bien mené »
+    milieuMixte: 'À retenir pour les {camp} : c\'est en milieu de partie que tout se joue, et ce n\'est pas la seule phase où des erreurs ont été commises.',
+    finaleMixte: 'À retenir pour les {camp} : la finale décide de la partie, mais des erreurs plus tôt avaient déjà pesé.',
     gache: 'À retenir pour les {camp} : un avantage ne suffit pas, il faut encore le concrétiser.', // remplace la phase 3 de « Avantage gâché »
   },
 };
@@ -130,7 +143,8 @@ function fill(template, vals) {
   });
 }
 const join = (...lists) => lists.reduce((a, l) => (a.length ? a.concat([{ t: ' ' }], l) : l), []);
-const moveRef = (f) => ({ t: String(f.no ?? f.moveNo), ply: f.ply });
+const ordText = (n) => ordinal(Number(n)) ?? String(n); // « 3e », « 41e » (module film-ordinal.js : seul endroit où un numéro devient un mot)
+const moveRef = (f) => ({ t: ordText(f.no ?? f.moveNo), ply: f.ply });
 const notationRef = (f) => ({ t: f.joue ?? f.played, ply: f.ply });
 
 // Le moment clé : parmi les coups signalés du camp concerné (`focus.camp`, absent = les deux camps) dans la fenêtre `focus.from`..`focus.to`
@@ -146,15 +160,20 @@ export function keyMoment(g, focus = {}) {
 
 // Occasion manquée : une faute « faute » / « majeure » d'un camp suivie, au coup d'après, d'une faute signalée de l'autre camp
 // (celui-ci n'en a pas profité). La plus coûteuse (L de la première faute). null si aucune. (Plus dite dans le récit.)
-export function missedChance(g) {
+// `beforePly` (P48F) : ne regarde que les coups d'indice strictement inférieur (la faute ET la réponse non punie).
+export function missedChance(g, beforePly = Infinity) {
   const faults = g.faults ?? []; let best = null;
   for (const a of faults) {
-    if (!isBad(a)) continue;
-    if (!faults.some((b) => b.ply === a.ply + 1 && b.side !== a.side)) continue;
+    if (!isBad(a) || a.ply >= beforePly) continue;
+    if (!faults.some((b) => b.ply === a.ply + 1 && b.ply < beforePly && b.side !== a.side)) continue;
     if (!best || a.L > best.L) best = a;
   }
   return best;
 }
+
+// Fautes « faute » / « majeure » des DEUX camps commises avant le coup d'indice `ply` (celui-ci exclu), de la plus ancienne à la plus récente :
+// le récit n'affirme un état passé (« équilibrée », « tenaient la partie », « avaient la partie en main ») que si cette liste est vide.
+export const gravesBefore = (g, ply) => (g.faults ?? []).filter((f) => isBad(f) && f.ply < ply).sort((p, q) => p.ply - q.ply);
 
 // Phase où `side` a perdu le plus (somme de ses pertes par phase, phase de la position AVANT le coup), en ignorant les pertes faites
 // quand il avait déjà LOST_BEHIND pions ou plus de retard (partie déjà perdue). null si aucune perte.
@@ -170,6 +189,11 @@ export function worstPhase(g, side) {
   return v > 0 ? name : null;
 }
 
+// Le camp a-t-il commis une faute « faute » / « majeure » dans une phase AUTRE que `ph` ? (la phrase 3 ne dit alors plus « tenue » / « bien menée »)
+export function gravesOutsidePhase(g, side, ph) {
+  return (g.faults ?? []).some((f) => isBad(f) && f.side === side && (g.pieces ?? [])[f.ply] != null && phaseName(g.pieces[f.ply]) !== ph);
+}
+
 // Phase nommée par la phrase 3 : celle du moment clé s'il y en a un, sinon celle où le camp a le plus perdu. null si aucune.
 export function retainPhase(g, loser, km = keyMoment(g)) {
   const pc = km ? (g.pieces ?? [])[km.fault.ply] : null;
@@ -181,16 +205,23 @@ export function retainPhase(g, loser, km = keyMoment(g)) {
 export function storyOf(g) {
   if (!g || !g.rows || g.rows.some((r) => r.pending) || known(g.evals ?? []).length < 2) return null;
   const T = STORY_TEXT, camp = (s) => T.camps[s], sc = scenarioOf(g), sentences = [];
-  const posRef = (k) => ({ t: String(coupOfPos(k)), ply: plyOfPos(k) });
+  const posRef = (k) => ({ t: ordText(coupOfPos(k)), ply: plyOfPos(k) });
   // Phrase 1
   let s1;
   if (sc.id === 'bascule') {
     const t = sc.tournant, ev = (g.evals ?? [])[t.ply], eq = ev === null || ev === undefined || Math.abs(ev) < EQUAL;
-    const key = (eq ? 'bascule' : 'basculeInegale') + (t.side === 'b' ? 'Noirs' : '');
-    s1 = fill(T.histoire[key], { n: { t: String(coupOfPos(t.ply)), ply: Math.max(0, t.ply - 1) }, coup: moveRef({ moveNo: t.moveNo, ply: t.ply }), camp: camp(t.side), notation: notationRef(t) });
+    const noirs = t.side === 'b' ? 'Noirs' : '', graves = gravesBefore(g, t.ply), mc = graves.length ? missedChance(g, t.ply) : null;
+    const tv = { coup: moveRef({ moveNo: t.moveNo, ply: t.ply }), notation: notationRef(t) };
+    if (!graves.length) { // rien de grave avant : « équilibrée » / « tenaient encore » selon l'évaluation juste avant le tournant
+      s1 = fill(T.histoire[(eq ? 'bascule' : 'basculeInegale') + noirs], { ...tv, n: { t: ordText(coupOfPos(t.ply)), ply: Math.max(0, t.ply - 1) }, camp: camp(t.side) });
+    } else if (mc) { // un camp a lâché gros, l'autre n'en a pas profité, puis le tournant
+      s1 = fill(T.histoire['basculeOccasion' + noirs], { ...tv, n: moveRef(mc), x: pionsRond(mc.L), camp: camp(mc.side), autreCamp: camp(other(mc.side)), campT: camp(t.side) });
+    } else { // plusieurs fautes avant, sans occasion manquée identifiable
+      s1 = fill(T.histoire['basculeAgitee' + noirs], { ...tv, n: moveRef(graves[0]), camp: camp(t.side) });
+    }
   } else if (sc.id === 'petitAPetit') s1 = fill(T.histoire.petitAPetit, { camp: camp(sc.camp), autreCamp: camp(other(sc.camp)), n: posRef(sc.k) });
-  else if (sc.id === 'renversement') s1 = fill(T.histoire.renversement, { camp: camp(sc.camp), autreCamp: camp(other(sc.camp)), n: posRef(sc.k) });
-  else if (sc.id === 'gache') s1 = fill(T.histoire.gache, { camp: camp(sc.camp), n: posRef(sc.k) });
+  else if (sc.id === 'renversement') s1 = fill(T.histoire[gravesBefore(g, sc.k).length ? 'renversementAgite' : 'renversement'], { camp: camp(sc.camp), autreCamp: camp(other(sc.camp)), n: posRef(sc.k) });
+  else if (sc.id === 'gache') s1 = fill(T.histoire[gravesBefore(g, sc.k).length ? 'gacheAgite' : 'gache'], { camp: camp(sc.camp), n: posRef(sc.k) });
   else if (sc.id === 'propre') s1 = fill(sc.camp ? T.histoire.propreMieux : T.histoire.propre, { camp: sc.camp ? camp(sc.camp) : '' });
   else if (sc.id === 'mouvementee') s1 = fill(T.histoire.mouvementee, { nbFois: letters(sc.changes) });
   else s1 = fill(T.histoire.neutre, {});
@@ -210,7 +241,7 @@ export function storyOf(g) {
     const c = sc.camp;
     if (sc.id === 'gache') sentences.push(fill(T.retenir.gache, { camp: camp(c) }));
     else if (!(g.faults ?? []).some((f) => f.side === c)) sentences.push(fill(T.retenir.rien, { camp: camp(c), autreCamp: camp(other(c)) }));
-    else { const ph = retainPhase(g, c, km); if (ph) sentences.push(fill(T.retenir[ph], { camp: camp(c) })); }
+    else { const ph = retainPhase(g, c, km); if (ph) sentences.push(fill(T.retenir[(ph === 'milieu' || ph === 'finale') && gravesOutsidePhase(g, c, ph) ? `${ph}Mixte` : ph], { camp: camp(c) })); }
   }
   return { scenario: sc.id, sentences };
 }

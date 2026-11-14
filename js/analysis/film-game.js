@@ -9,11 +9,14 @@
 
 import { initialBoard, generateLegalMoves, applyCaptureSequence, applySimpleMove } from '../engine/rules.js';
 import { toHubPosition } from '../ai/scan-protocol.js';
+import { ordinalCoup } from './film-ordinal.js';
 import { CAP, MIN_PIECES, DEPTH_REF, classifyMove, erosionCurve, topLosses, valueSeries, turningPoint, phaseSegments } from './film-metrics.js';
 
 export const countAll = (board) => { let n = 0; for (let s = 1; s <= 50; s++) if (board[s]) n++; return n; };
 export const other = (s) => (s === 'w' ? 'b' : 'w');
 
+// Où se trouve le coup d'indice i de la liste (Blancs puis Noirs, un coup = les deux camps) : « le 12e coup des Blancs » (messages d'erreur affichés).
+const where = (i) => `le ${ordinalCoup(Math.floor(i / 2) + 1)} des ${i % 2 === 0 ? 'Blancs' : 'Noirs'}`;
 // Rejoue une liste de coups « 32-28 » / « 27x9 » (suffixe « /18.13 » facultatif = pièces prises).
 // Retourne { ok, error, plies: [{ side, board (avant), notation, played, boardAfter }], final }.
 export function replayMoves(moves) {
@@ -22,7 +25,7 @@ export function replayMoves(moves) {
   const plies = [];
   for (let i = 0; i < moves.length; i++) {
     const m = /^(\d+)([-x])(\d+)(?:\/([\d.]+))?/.exec(String(moves[i]).replace(/[!?]+$/, ''));
-    if (!m) return { ok: false, error: `coup ${i + 1} : notation illisible « ${moves[i]} »`, plies };
+    if (!m) return { ok: false, error: `${where(i)} : notation illisible « ${moves[i]} »`, plies };
     const nums = moves[i].replace(/[!?]+$/, '').replace(/\/[\d.]+$/, '').split(/[-x]/).map(Number);
     const from = nums[0], to = nums[nums.length - 1], cap = m[2] === 'x';
     const wanted = m[4] ? m[4].split('.').map(Number).sort((a, b) => a - b) : null;
@@ -35,14 +38,14 @@ export function replayMoves(moves) {
       if (wanted) c = c.filter((s) => s.length === wanted.length && s.map((x) => x.capturedThisStep).sort((a, b) => a - b).every((v, j) => v === wanted[j]));
       if (c.length) {
         const after = c.map((s) => JSON.stringify(applyCaptureSequence(board, board[from], s).board));
-        if (new Set(after).size > 1) return { ok: false, error: `coup ${i + 1} (${moves[i]}) : rafle ambiguë`, plies };
+        if (new Set(after).size > 1) return { ok: false, error: `${where(i)} (${moves[i]}) : rafle ambiguë`, plies };
         played = { kind: 'capture', seq: c[0] };
       }
     } else if (captures.length === 0) {
       const s = simples.find((x) => x.from === from && x.to === to);
       if (s) played = { kind: 'simple', move: s };
     }
-    if (!played) return { ok: false, error: `coup ${i + 1} (${moves[i]}) illégal selon rules.js`, plies };
+    if (!played) return { ok: false, error: `${where(i)} (${moves[i]}) illégal selon rules.js`, plies };
     const piece = board[from];
     const boardAfter = played.kind === 'capture' ? applyCaptureSequence(board, piece, played.seq).board : applySimpleMove(board, piece, played.move).board;
     plies.push({ side, board, notation: moves[i].replace(/\/[\d.]+$/, ''), played, boardAfter });
